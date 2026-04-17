@@ -81,9 +81,9 @@ class EvalTracer:
         """
         Context manager that wraps a single scenario execution.
 
-        If Langfuse is configured and the dataset item exists, opens an
-        item.run() span — the scenario trace is automatically linked to the
-        dataset item and the experiment run in the Langfuse UI.
+        Creates a root trace for the scenario (using a seed-stable trace_id so
+        repeated runs of the same scenario are always distinct) and links it to
+        the dataset item + experiment run via the v4 dataset_run_items API.
 
         If Langfuse is unavailable, yields None (no-op sentinel).
 
@@ -96,20 +96,35 @@ class EvalTracer:
             yield None
             return
 
-        item = self._dataset_items.get(scenario_id)
-        if item is None:
-            yield None
-            return
-
         try:
-            with item.run(
-                run_name=self._run_name,
-                run_description="Tier-1 deterministic eval run",
-                run_metadata={"eval_type": "tier1"},
+            from langfuse import Langfuse
+            # Unique trace per scenario+run combination
+            trace_id = Langfuse.create_trace_id()
+            item = self._dataset_items.get(scenario_id)
+
+            with self._client.start_as_current_observation(
+                trace_context={"trace_id": trace_id},
+                name=f"eval/{scenario_id}",
+                as_type="span",
+                metadata={
+                    "scenario_id": scenario_id,
+                    "run_name": self._run_name,
+                    "eval_type": "tier1",
+                },
             ) as span:
+                # Link the trace to the dataset item + experiment run
+                if item is not None:
+                    try:
+                        self._client.api.dataset_run_items.create(
+                            run_name=self._run_name,
+                            dataset_item_id=item.id,
+                            trace_id=trace_id,
+                        )
+                    except Exception as link_err:
+                        print(f"  WARN: dataset_run_item link failed for {scenario_id}: {link_err}")
                 yield span
         except Exception as e:
-            print(f"  WARN: langfuse item.run() failed for {scenario_id}: {e}")
+            print(f"  WARN: langfuse scenario_run failed for {scenario_id}: {e}")
             yield None
 
     # ── Per-scenario scoring ───────────────────────────────────────────────────

@@ -26,44 +26,102 @@ from hiive_monitor import logging as log_module
 from hiive_monitor.config import get_settings
 
 
-def _langfuse_handler(call_name: str, tick_id: str, deal_id: str):
+class _LangfuseGenerationCallback:
     """
-    Return a Langfuse CallbackHandler scoped to the current tick's root trace.
+    Minimal langchain-core BaseCallbackHandler that creates a Langfuse v4 generation
+    span for each LLM call, nested under the shared tick root trace.
 
-    All LLM calls within one tick share a parent trace (keyed by tick_id) so the
-    Langfuse UI shows per-tick cost, latency, and token aggregates.  Each individual
-    LLM call becomes a nested generation span with its own model, tokens, and latency.
+    All LLM calls within one tick share a parent trace (trace_id=tick_id) so the
+    Langfuse UI shows per-tick token totals, cost, and latency breakdown by pipeline step.
+    """
 
-    The handler automatically captures:
-      - model name (from the ChatOpenRouter invocation)
-      - input / output token counts (from OpenRouter's OpenAI-compatible usage response)
-      - latency (start_time / end_time on the generation span)
-      - cost (inferred by Langfuse when the model is in its registry; otherwise set
-              cost_details manually — see _update_generation_cost())
+    def __init__(self, lf_client, call_name: str, tick_id: str, deal_id: str, model: str):
+        self._lf = lf_client
+        self._call_name = call_name
+        self._tick_id = tick_id
+        self._deal_id = deal_id
+        self._model = model
+        self._gen = None
 
-    Gracefully returns None when LANGFUSE_PUBLIC_KEY is not set.
+    def on_llm_start(self, serialized, messages, **kwargs):
+        try:
+            import json as _json
+            input_serialized = [
+                {"role": getattr(m, "type", "unknown"), "content": str(m.content)[:2000]}
+                for msg_list in messages
+                for m in (msg_list if isinstance(msg_list, list) else [msg_list])
+            ]
+            self._gen = self._lf.start_observation(
+                trace_context={"trace_id": self._tick_id},
+                name=self._call_name,
+                as_type="generation",
+                model=self._model,
+                input=input_serialized,
+                metadata={"deal_id": self._deal_id, "tick_id": self._tick_id},
+            )
+        except Exception:
+            self._gen = None
+
+    def on_llm_end(self, response, **kwargs):
+        if self._gen is None:
+            return
+        try:
+            usage = {}
+            if response.llm_output:
+                usage = response.llm_output.get("token_usage", {})
+            output_text = ""
+            if response.generations and response.generations[0]:
+                output_text = getattr(response.generations[0][0], "text", "")
+
+            self._gen.update(
+                output=output_text[:4000] if output_text else None,
+                usage_details={
+                    "input": usage.get("prompt_tokens", 0),
+                    "output": usage.get("completion_tokens", 0),
+                } if usage else None,
+            )
+            self._gen.end()
+        except Exception:
+            pass
+
+    def on_llm_error(self, error, **kwargs):
+        if self._gen is not None:
+            try:
+                self._gen.update(level="ERROR", status_message=str(error)[:500])
+                self._gen.end()
+            except Exception:
+                pass
+
+
+def _langfuse_handler(call_name: str, tick_id: str, deal_id: str, model: str = ""):
+    """
+    Return a langchain-core callback that creates a Langfuse v4 generation span.
+
+    Uses the direct Langfuse v4 SDK (no langchain package required — only
+    langchain-core's BaseCallbackHandler interface). Each LLM call becomes a
+    nested generation span under the shared tick root trace (trace_id=tick_id),
+    enabling per-tick cost, latency, and token aggregation in Langfuse.
+
+    Gracefully returns an empty list when LANGFUSE_PUBLIC_KEY is not set.
     """
     if not os.getenv("LANGFUSE_PUBLIC_KEY"):
-        return None
+        return []
     try:
-        from langfuse.callback import CallbackHandler
-        return CallbackHandler(
-            # Nest this call under the tick's root trace rather than creating a new root.
-            # All calls with the same trace_id share one parent trace in Langfuse.
-            trace_id=tick_id,
-            trace_name=f"tick/{tick_id}",
-            # The span name identifies which pipeline step this generation belongs to.
-            observation_name=call_name,
-            session_id=f"deal/{deal_id}",
-            metadata={
-                "deal_id": deal_id,
-                "tick_id": tick_id,
-                "call_name": call_name,
-            },
-            tags=["llm-call", call_name],
-        )
+        from langfuse import get_client
+        from langchain_core.callbacks import BaseCallbackHandler
+
+        lf = get_client()
+
+        class _Handler(BaseCallbackHandler, _LangfuseGenerationCallback):
+            def __init__(self):
+                BaseCallbackHandler.__init__(self)
+                _LangfuseGenerationCallback.__init__(
+                    self, lf, call_name, tick_id, deal_id, model
+                )
+
+        return [_Handler()]
     except Exception:
-        return None
+        return []
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -157,8 +215,8 @@ def _call_with_retry(
     structured_llm = llm.with_structured_output(output_model, method="json_schema", strict=True)
     last_error: Exception | None = None
 
-    lf_handler = _langfuse_handler(call_name, tick_id, deal_id)
-    invoke_cfg = {"callbacks": [lf_handler]} if lf_handler else {}
+    lf_callbacks = _langfuse_handler(call_name, tick_id, deal_id, model)
+    invoke_cfg = {"callbacks": lf_callbacks} if lf_callbacks else {}
 
     for attempt in range(1, _MAX_RETRIES + 1):
         t0 = time.monotonic()
