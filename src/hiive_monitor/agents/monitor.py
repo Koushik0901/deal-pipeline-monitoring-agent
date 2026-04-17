@@ -39,7 +39,7 @@ from hiive_monitor.llm.prompts.screening import (
     build_screening_prompt,
 )
 from hiive_monitor.models.snapshot import DealSnapshot, Blocker, EventRef
-from hiive_monitor.models.stages import DWELL_BASELINES, Stage
+from hiive_monitor.models.stages import DWELL_BASELINES, REQUIRED_DOCUMENTS_BY_STAGE, Stage
 
 import json
 from datetime import timezone
@@ -96,6 +96,17 @@ def _build_snapshot(deal: dict, conn) -> DealSnapshot:
     issuer = _dao.get_issuer(conn, deal["issuer_id"])
     issuer_name = issuer["name"] if issuer else deal["issuer_id"]
 
+    # TS06: compute missing documents when feature is enabled
+    missing_documents: list[str] = []
+    from hiive_monitor.config import get_settings as _gs
+    if _gs().enable_ts06_doc_tracking:
+        required = REQUIRED_DOCUMENTS_BY_STAGE.get(stage, [])
+        try:
+            received = set(json.loads(deal.get("documents_received") or "[]"))
+        except (ValueError, TypeError):
+            received = set()
+        missing_documents = [d for d in required if d not in received]
+
     return DealSnapshot(
         deal_id=deal["deal_id"],
         issuer_id=deal["issuer_id"],
@@ -110,6 +121,7 @@ def _build_snapshot(deal: dict, conn) -> DealSnapshot:
         risk_factors=risk_factors,
         recent_events=recent_events,
         days_since_last_comm=days_since_last_comm,
+        missing_documents=missing_documents,
     )
 
 

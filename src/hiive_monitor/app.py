@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from hiive_monitor import logging as log_module
 from hiive_monitor.config import get_settings
 from hiive_monitor.db.init import init_checkpoint_db, init_domain_db
+from hiive_monitor.db.migrations import stretch_migrations
 
 _TEMPLATES_DIR = pathlib.Path(__file__).parent / "web" / "templates"
 _STATIC_DIR = pathlib.Path(__file__).parent / "web" / "static"
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         init_domain_db()
         init_checkpoint_db()
+        stretch_migrations()
         logger.info("app.startup", db=get_settings().domain_db_path)
 
         from hiive_monitor.scheduler import start_scheduler

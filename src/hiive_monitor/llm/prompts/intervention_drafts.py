@@ -49,7 +49,7 @@ Stage: {stage} ({days_in_stage} days)
 {deadline_text}
 Responsible party: {responsible_party}
 Severity: {severity}
-Key risk signals: {trigger_text}{deadline_instruction}
+Key risk signals: {trigger_text}{missing_docs_instruction}{deadline_instruction}
 
 Draft a concise, actionable outreach email to the {responsible_party}.\
 """
@@ -79,6 +79,16 @@ def build_outbound_nudge_prompt(
     else:
         deadline_text = "No ROFR deadline"
         deadline_instruction = ""
+
+    if snapshot.missing_documents and snapshot.stage.value == "docs_pending":
+        doc_list = ", ".join(snapshot.missing_documents)
+        missing_docs_instruction = (
+            f"\nMISSING DOCUMENTS: The following documents have not yet been received: {doc_list}. "
+            "Your email MUST name at least one of these exact document filenames and request its submission."
+        )
+    else:
+        missing_docs_instruction = ""
+
     return {
         "deal_id": snapshot.deal_id,
         "issuer_name": snapshot.issuer_name,
@@ -88,6 +98,7 @@ def build_outbound_nudge_prompt(
         "responsible_party": snapshot.responsible_party,
         "severity": severity.severity.value,
         "trigger_text": trigger_text or "none",
+        "missing_docs_instruction": missing_docs_instruction,
         "deadline_instruction": deadline_instruction,
     }
 

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     slm_model: str = "google/gemma-4-31b-it"
     llm_model: str = "qwen/qwen3.6-plus"
 
+    # Feature flags
+    enable_ts06_doc_tracking: bool = False  # TS06: document collection tracking
+
     # LLM limits
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 3
