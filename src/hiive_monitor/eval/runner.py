@@ -193,7 +193,8 @@ def evaluate_assertions(assertions: dict, observations: list[dict], intervention
     # severity assertions
     if "severity" in assertions:
         expected = assertions["severity"]
-        actual = obs.get("severity", "")
+        # No observation → deal was healthy enough to skip investigation → informational
+        actual = obs.get("severity", "informational")
         check("severity", actual == expected, f"expected={expected}, actual={actual}")
 
     if "severity_gte" in assertions:

@@ -185,13 +185,22 @@ async def advance_sim(request: Request, days: int = Form(...)):
     from hiive_monitor import clock as clk
     from hiive_monitor.agents.monitor import run_tick
 
-    clk.get_clock().advance(days)
+    try:
+        clk.get_clock().advance(days)
+    except RuntimeError:
+        return HTMLResponse(
+            '<div class="rounded border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-600">'
+            'Cannot advance clock in real-time mode — restart with CLOCK_MODE=simulated.'
+            '</div>',
+            status_code=400,
+        )
+
     tick_id = run_tick(mode="simulated")
 
     return HTMLResponse(
-        f'<div class="rounded border border-accent-200 bg-accent-50 px-4 py-3 text-sm">'
+        f'<div class="rounded border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">'
         f'Advanced {days} day(s). New tick: {tick_id[:8]}…'
-        f'<a href="/brief" class="ml-3 font-medium text-accent-700 underline">View Brief →</a>'
+        f'<a href="/brief" class="ml-3 font-medium text-neutral-700 underline">View Brief →</a>'
         f'</div>'
     )
 

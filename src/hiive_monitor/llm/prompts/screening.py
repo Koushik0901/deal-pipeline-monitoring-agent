@@ -18,14 +18,18 @@ pre-IPO secondary stock transactions.
 Your job: given a snapshot of one live deal, output an attention score between 0.0 and 1.0 indicating \
 how urgently this deal needs deep human or agent review this monitoring cycle.
 
-Scoring anchors:
-- 0.0–0.2: Everything on track. No deadline pressure, no silence, no unusual factors.
-- 0.3–0.5: Worth watching. Mild aging or minor communication gap, no immediate deadline.
-- 0.6–0.8: Needs review this cycle. Significant aging, deadline within 10 days, or extended comm silence.
-- 0.9–1.0: Urgent. ROFR expiring in <3 days, multi-layer ROFR unresolved, known prior breakage with stall.
+Scoring anchors (use these exact ranges):
+- 0.0–0.2: Everything on track. No deadline pressure, comm silence <7d, aging ratio <1.2×, no blockers.
+- 0.3–0.5: Mild concern. Comm silence 7–10d OR aging ratio 1.2–1.5×. No immediate deadline.
+- 0.6–0.8: Needs review this cycle. Score 0.6+ if ANY of:
+    • Comm silence >10 days (external party has not responded)
+    • Stage aging >1.5× dwell baseline
+    • Active blockers present
+    • ROFR deadline within 10 days
+    • First-time buyer or multi-layer ROFR
+- 0.9–1.0: Urgent. ROFR expiring in ≤3 days, prior breakage with current stall, comm silence >21d.
 
-Factor in: stage aging vs. baseline, days to ROFR deadline, days since last communication, \
-responsible party, active blockers, first-time buyer, prior breakage count.
+Factor in all listed signals cumulatively — multiple moderate signals compound to ≥0.6.
 
 Reply only via the required tool.
 """

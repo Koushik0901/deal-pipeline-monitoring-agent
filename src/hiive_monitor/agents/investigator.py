@@ -322,9 +322,9 @@ def score_severity(state: InvestigatorState) -> dict:
 
 
 def _severity_router(state: InvestigatorState) -> str:
-    """Route after severity scoring: draft only if act or escalate."""
+    """Route after severity scoring: draft for act/escalate (outbound/escalation) or watch (brief_entry)."""
     sev = state.get("severity")
-    if sev in (Severity.ACT, Severity.ESCALATE):
+    if sev in (Severity.ACT, Severity.ESCALATE, Severity.WATCH):
         return "draft_intervention"
     return "emit_observation"
 
@@ -347,8 +347,23 @@ def draft_intervention(state: InvestigatorState) -> dict:
 
     intervention: Intervention | None = None
 
-    if severity == Severity.ESCALATE:
-        # Internal escalation when Hiive TS needs to act internally
+    responsible = snap.responsible_party or "hiive_ts"
+
+    if severity == Severity.WATCH:
+        # watch → brief_entry only (awareness item, no outreach)
+        result = llm_client.call_structured(
+            prompt=build_brief_entry_prompt(snap, sev_decision, signals),
+            output_model=BRIEF_OUTPUT,
+            model=settings.sonnet_model,
+            tick_id=state["tick_id"],
+            deal_id=state["deal_id"],
+            call_name="draft_brief_entry",
+            system=BRIEF_SYSTEM,
+        )
+        if result:
+            intervention = Intervention.brief(result)
+    elif (responsible == "hiive_ts") and (severity == Severity.ESCALATE):
+        # hiive_ts responsible + escalate → internal escalation note
         result = llm_client.call_structured(
             prompt=build_escalation_prompt(snap, sev_decision, signals),
             output_model=ESCALATION_OUTPUT,
@@ -361,7 +376,7 @@ def draft_intervention(state: InvestigatorState) -> dict:
         if result:
             intervention = Intervention.escalation(result)
     else:
-        # Outbound nudge for act-level severity
+        # external responsible party → outbound nudge
         result = llm_client.call_structured(
             prompt=build_outbound_nudge_prompt(snap, sev_decision, signals),
             output_model=OUTBOUND_OUTPUT,

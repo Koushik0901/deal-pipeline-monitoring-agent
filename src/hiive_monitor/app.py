@@ -5,7 +5,9 @@ from __future__ import annotations
 import pathlib
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -56,6 +58,19 @@ def create_app() -> FastAPI:
 
     from hiive_monitor.web import routes
     app.include_router(routes.router)
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        if exc.status_code == 404:
+            return HTMLResponse(
+                '<html><body style="font-family:monospace;padding:2rem">'
+                f'<h2 style="color:#555">404 — Not found</h2>'
+                f'<p style="color:#888">{exc.detail}</p>'
+                '<p><a href="/brief" style="color:#333">← Back to brief</a></p>'
+                '</body></html>',
+                status_code=404,
+            )
+        raise exc
 
     return app
 

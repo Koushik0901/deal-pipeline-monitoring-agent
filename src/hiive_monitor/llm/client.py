@@ -1,5 +1,5 @@
 """
-LLM client — structured tool-use calls to Anthropic Claude.
+LLM client — structured tool-use calls via OpenRouter (OpenAI-compatible API).
 
 All calls go through call_structured(), which:
   - Forces tool-use output via Pydantic model_json_schema()
@@ -11,10 +11,11 @@ All calls go through call_structured(), which:
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Type, TypeVar
 
-import anthropic
+import openai
 from pydantic import BaseModel, ValidationError
 
 from hiive_monitor import logging as log_module
@@ -22,18 +23,19 @@ from hiive_monitor.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
 
-# In-memory idempotency cache keyed on (tick_id, deal_id, call_name).
-# Cleared on process restart — that's fine; restarts will re-execute the same
-# LLM call and the result should be semantically identical.
 _CALL_CACHE: dict[tuple[str, str, str], BaseModel] = {}
+_SCHEMA_CACHE: dict[type[BaseModel], dict[str, Any]] = {}
 
 _MAX_RETRIES = 3
-_RETRY_BASE_DELAY = 1.0  # seconds, doubled each attempt
+_RETRY_BASE_DELAY = 1.0
 
 
-def _get_client() -> anthropic.Anthropic:
+def _get_client() -> openai.OpenAI:
     settings = get_settings()
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    return openai.OpenAI(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+    )
 
 
 def call_structured(
@@ -59,20 +61,26 @@ def call_structured(
 
     logger = log_module.get_logger()
     tool_name = call_name.replace(".", "_")
-    tool_schema = output_model.model_json_schema()
-
-    # Remove $defs — Anthropic tool schema doesn't support references.
-    tool_schema = _inline_refs(tool_schema)
+    tool_schema = _SCHEMA_CACHE.get(output_model)
+    if tool_schema is None:
+        tool_schema = _inline_refs(output_model.model_json_schema())
+        _SCHEMA_CACHE[output_model] = tool_schema
 
     tools = [
         {
-            "name": tool_name,
-            "description": f"Output schema for {call_name}",
-            "input_schema": tool_schema,
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "description": f"Output schema for {call_name}",
+                "parameters": tool_schema,
+            },
         }
     ]
 
-    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+    messages: list[dict[str, Any]] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
 
     result = _call_with_retry(
         messages=messages,
@@ -80,7 +88,6 @@ def call_structured(
         tool_name=tool_name,
         output_model=output_model,
         model=model,
-        system=system,
         timeout=timeout,
         call_name=call_name,
         tick_id=tick_id,
@@ -100,7 +107,6 @@ def _call_with_retry(
     tool_name: str,
     output_model: Type[T],
     model: str,
-    system: str,
     timeout: float,
     call_name: str,
     tick_id: str,
@@ -114,28 +120,23 @@ def _call_with_retry(
     for attempt in range(1, _MAX_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "max_tokens": 2048,
-                "tools": tools,
-                "tool_choice": {"type": "tool", "name": tool_name},
-                "messages": messages,
-            }
-            if system:
-                kwargs["system"] = system
-
-            response = client.messages.create(**kwargs)
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=2048,
+                tools=tools,
+                tool_choice={"type": "function", "function": {"name": tool_name}},
+                messages=messages,
+                timeout=timeout,
+            )
             latency_ms = int((time.monotonic() - t0) * 1000)
 
-            # Extract tool-use block
-            tool_block = next(
-                (b for b in response.content if b.type == "tool_use"),
-                None,
-            )
-            if tool_block is None:
-                raise ValueError(f"No tool_use block in response for {call_name}")
+            choice = response.choices[0]
+            tool_calls = choice.message.tool_calls
+            if not tool_calls:
+                raise ValueError(f"No tool_calls in response for {call_name}")
 
-            raw_input = tool_block.input  # dict
+            raw_json = tool_calls[0].function.arguments
+            raw_input = json.loads(raw_json)
 
             try:
                 parsed = output_model.model_validate(raw_input)
@@ -144,8 +145,8 @@ def _call_with_retry(
                     call_name=call_name,
                     model=model,
                     latency_ms=latency_ms,
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
+                    input_tokens=response.usage.prompt_tokens if response.usage else 0,
+                    output_tokens=response.usage.completion_tokens if response.usage else 0,
                     tick_id=tick_id,
                     deal_id=deal_id,
                     attempt=attempt,
@@ -166,19 +167,36 @@ def _call_with_retry(
                     error=str(ve),
                 )
                 if parse_failure_msg is None:
-                    # First parse failure — do one corrective reprompt (FR-025).
                     parse_failure_msg = str(ve)
-                    corrective = (
-                        f"Your previous response failed validation:\n{ve}\n\n"
-                        "Please correct the output and respond again using the same tool schema."
-                    )
-                    messages = messages + [
-                        {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": corrective},
-                    ]
-                    continue  # retry immediately without backoff
+                    assistant_msg: dict[str, Any] = {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": tool_calls[0].id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": raw_json,
+                                },
+                            }
+                        ],
+                    }
+                    tool_result_msg: dict[str, Any] = {
+                        "role": "tool",
+                        "tool_call_id": tool_calls[0].id,
+                        "content": f"Validation error: {ve}",
+                    }
+                    corrective_msg: dict[str, Any] = {
+                        "role": "user",
+                        "content": (
+                            f"Your previous response failed validation:\n{ve}\n\n"
+                            "Please correct the output and respond again using the same tool schema."
+                        ),
+                    }
+                    messages = messages + [assistant_msg, tool_result_msg, corrective_msg]
+                    continue
                 else:
-                    # Second parse failure — give up.
                     logger.error(
                         "llm.call.parse_failure_final",
                         call_name=call_name,
@@ -189,8 +207,7 @@ def _call_with_retry(
                     )
                     return None
 
-        except anthropic.BadRequestError as e:
-            # Non-retryable — malformed request.
+        except openai.BadRequestError as e:
             logger.error(
                 "llm.call.bad_request",
                 call_name=call_name,
@@ -201,7 +218,7 @@ def _call_with_retry(
             )
             return None
 
-        except (anthropic.APIError, anthropic.APIConnectionError, anthropic.RateLimitError) as e:
+        except (openai.APIError, openai.APIConnectionError, openai.RateLimitError) as e:
             latency_ms = int((time.monotonic() - t0) * 1000)
             last_error = e
             delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
@@ -234,9 +251,15 @@ def clear_cache() -> None:
     _CALL_CACHE.clear()
 
 
+def evict_tick(tick_id: str) -> None:
+    """Drop cache entries for a completed tick so memory doesn't grow across runs."""
+    for key in [k for k in _CALL_CACHE if k[0] == tick_id]:
+        del _CALL_CACHE[key]
+
+
 def _inline_refs(schema: dict) -> dict:
     """
-    Flatten $defs/$ref references in a JSON schema so Anthropic's tool API
+    Flatten $defs/$ref references in a JSON schema so the tool API
     can parse it. Handles one level of nesting — sufficient for our models.
     """
     import copy

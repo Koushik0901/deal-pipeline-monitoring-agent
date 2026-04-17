@@ -8,8 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # API
-    anthropic_api_key: str = ""
+    # API — OpenRouter
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # Clock
     clock_mode: str = "simulated"  # "real_time" | "simulated"
@@ -34,9 +35,9 @@ class Settings(BaseSettings):
     log_format: str = "human"  # "human" | "json"
     logs_path: str = "out/logs.jsonl"
 
-    # LLM models
-    haiku_model: str = "claude-haiku-4-5-20251001"
-    sonnet_model: str = "claude-sonnet-4-6"
+    # LLM models — OpenRouter format (provider/model)
+    haiku_model: str = "anthropic/claude-haiku-4.5"
+    sonnet_model: str = "anthropic/claude-sonnet-4.6"
 
     # LLM limits
     llm_timeout_seconds: float = 30.0

@@ -27,9 +27,11 @@ from hiive_monitor.agents.graph_state import (
     InvestigatorResult,
     MonitorState,
 )
+from hiive_monitor.agents.brief_composer import compose_daily_brief
 from hiive_monitor.config import get_settings
 from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.db import dao
+from hiive_monitor.llm import client as llm_client
 from hiive_monitor.llm.client import call_structured
 from hiive_monitor.llm.prompts.screening import (
     SCREENING_OUTPUT,
@@ -302,6 +304,16 @@ def close_tick(state: MonitorState) -> dict:
         investigated=len(results),
         errors=len(errors),
     )
+
+    try:
+        compose_daily_brief(state["tick_id"])
+    except Exception as exc:
+        # Swallow: a failed brief must not fail the tick that already persisted results.
+        log_module.get_logger().warning(
+            "monitor.brief_composition_error", tick_id=state["tick_id"], error=str(exc)
+        )
+
+    llm_client.evict_tick(state["tick_id"])
     return {}
 
 

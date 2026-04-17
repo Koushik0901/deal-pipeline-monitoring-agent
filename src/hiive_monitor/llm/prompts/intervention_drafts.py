@@ -30,12 +30,13 @@ def build_outbound_nudge_prompt(
 ) -> str:
     triggered = [s for s in signals if s.triggered]
     trigger_text = "; ".join(f"{s.dimension.value}: {s.evidence[:100]}" for s in triggered)
-    deadline_text = (
-        f"ROFR deadline: {snapshot.rofr_deadline.strftime('%Y-%m-%d')} "
-        f"({snapshot.days_to_rofr} days remaining)"
-        if snapshot.rofr_deadline and snapshot.days_to_rofr is not None
-        else "No ROFR deadline"
-    )
+    if snapshot.rofr_deadline and snapshot.days_to_rofr is not None:
+        deadline_date = snapshot.rofr_deadline.strftime("%Y-%m-%d")
+        deadline_text = f"ROFR deadline: {deadline_date} ({snapshot.days_to_rofr} days remaining)"
+        deadline_instruction = f"\nREQUIRED: Your email body MUST include the exact deadline date in ISO format: {deadline_date} — use this exact format, do not write it as a month name."
+    else:
+        deadline_text = "No ROFR deadline"
+        deadline_instruction = ""
     return f"""\
 Draft an outbound nudge for deal {snapshot.deal_id}:
 
@@ -44,7 +45,7 @@ Stage: {snapshot.stage.value} ({snapshot.days_in_stage} days)
 {deadline_text}
 Responsible party: {snapshot.responsible_party}
 Severity: {severity.severity.value}
-Key risk signals: {trigger_text or 'none'}
+Key risk signals: {trigger_text or 'none'}{deadline_instruction}
 
 Draft a concise, actionable outreach email to the {snapshot.responsible_party}."""
 
