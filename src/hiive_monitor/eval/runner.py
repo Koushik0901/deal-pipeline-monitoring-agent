@@ -26,6 +26,9 @@ from typing import Any
 import yaml
 
 from hiive_monitor import clock as clk
+from hiive_monitor.models.risk import Severity
+
+_SEVERITY_ORDER = [s.value for s in (Severity.INFORMATIONAL, Severity.WATCH, Severity.ACT, Severity.ESCALATE)]
 
 _FIXTURES_DIR = pathlib.Path(__file__).parent.parent.parent.parent.parent / "eval" / "fixtures"
 _RESULTS_DIR = pathlib.Path(__file__).parent.parent.parent.parent.parent / "eval_results"
@@ -194,17 +197,15 @@ def evaluate_assertions(assertions: dict, observations: list[dict], intervention
         check("severity", actual == expected, f"expected={expected}, actual={actual}")
 
     if "severity_gte" in assertions:
-        order = ["informational", "watch", "act", "escalate"]
         expected_min = assertions["severity_gte"]
         actual = obs.get("severity", "informational")
-        passed = order.index(actual) >= order.index(expected_min)
+        passed = _SEVERITY_ORDER.index(actual) >= _SEVERITY_ORDER.index(expected_min)
         check("severity_gte", passed, f"expected>={expected_min}, actual={actual}")
 
     if "severity_lte" in assertions:
-        order = ["informational", "watch", "act", "escalate"]
         expected_max = assertions["severity_lte"]
         actual = obs.get("severity", "informational")
-        passed = order.index(actual) <= order.index(expected_max)
+        passed = _SEVERITY_ORDER.index(actual) <= _SEVERITY_ORDER.index(expected_max)
         check("severity_lte", passed, f"expected<={expected_max}, actual={actual}")
 
     # dimensions triggered
@@ -248,24 +249,20 @@ def evaluate_assertions(assertions: dict, observations: list[dict], intervention
         check("enrichment_tool_called", expected_tool in tools_called, f"called={tools_called}")
 
     if "severity_after_enrichment_gte" in assertions:
-        order = ["informational", "watch", "act", "escalate"]
         expected_min = assertions["severity_after_enrichment_gte"]
         actual = obs.get("severity", "informational")
-        passed = order.index(actual) >= order.index(expected_min)
+        passed = _SEVERITY_ORDER.index(actual) >= _SEVERITY_ORDER.index(expected_min)
         check("severity_after_enrichment_gte", passed, f"expected>={expected_min}, actual={actual}")
 
     if "severity_after_enrichment_lte" in assertions:
-        order = ["informational", "watch", "act", "escalate"]
         expected_max = assertions["severity_after_enrichment_lte"]
         actual = obs.get("severity", "informational")
-        passed = order.index(actual) <= order.index(expected_max)
+        passed = _SEVERITY_ORDER.index(actual) <= _SEVERITY_ORDER.index(expected_max)
         check("severity_after_enrichment_lte", passed, f"expected<={expected_max}, actual={actual}")
 
-    # trigger_matched (semantic label for enrichment compound scenarios)
     if "trigger_matched" in assertions:
-        # Just verify enrichment happened as a proxy — the label is for human readability
         chain = reasoning.get("enrichment_chain", [])
-        check("trigger_matched", len(chain) >= 0, f"trigger label: {assertions['trigger_matched']}")
+        check("trigger_matched", len(chain) > 0, f"no enrichment triggered; label: {assertions['trigger_matched']}")
 
     return results
 

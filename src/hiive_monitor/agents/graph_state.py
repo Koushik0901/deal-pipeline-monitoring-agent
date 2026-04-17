@@ -44,7 +44,8 @@ class MonitorState(TypedDict):
     tick_id: str
     mode: Literal["real_time", "simulated"]
     tick_started_at: str  # ISO8601
-    candidate_deals: list[str]  # all live deal_ids
+    live_deals: list[dict]  # full deal rows, fetched once in load_live_deals
+    candidate_deals: list[str]  # all live deal_ids (derived from live_deals)
     attention_scores: dict[str, float]  # deal_id -> raw Haiku score [0,1]
     suppressed_scores: dict[str, float]  # deal_id -> post-suppression score
     investigation_queue: list[str]  # top-K selected deal_ids

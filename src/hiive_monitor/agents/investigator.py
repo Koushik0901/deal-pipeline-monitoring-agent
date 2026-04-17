@@ -415,8 +415,6 @@ def emit_observation(state: InvestigatorState) -> dict:
     intervention_id: str | None = None
     iv = state.get("intervention")
     if iv and oid:
-        # Persist intervention (only if observation inserted — not a dupe)
-        existing_obs = dao.get_tick(conn, state["tick_id"])
         if not dao.has_open_intervention(conn, state["deal_id"]):
             payload = iv.payload.model_dump()
             intervention_id = dao.insert_intervention(

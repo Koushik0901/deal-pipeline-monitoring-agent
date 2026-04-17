@@ -5,8 +5,6 @@ Covers: SimulatedClock injection, advance(), set_clock(), no datetime.now() in s
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from datetime import datetime, timezone, timedelta
 
 import pytest
@@ -75,15 +73,6 @@ class TestClockDiscipline:
     """FR-020: No source file may call datetime.now() directly."""
 
     def test_no_datetime_now_in_src(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "grep", "-rn", r"datetime\.now()", "src/"],
-            capture_output=True,
-            text=True,
-            cwd=sys.path[0] if sys.path[0] else ".",
-        )
-        # grep returns exit code 1 if no match (good), 0 if match found (bad)
-        # Use rg/grep via shell for cross-platform
-        import subprocess as sp
         import pathlib
 
         src_dir = pathlib.Path(__file__).parent.parent.parent / "src"

@@ -70,8 +70,7 @@ def _build_snapshot(deal: dict, conn) -> DealSnapshot:
 
     risk_factors = json.loads(deal.get("risk_factors") or "{}")
 
-    # Fetch recent events (last 5)
-    events_raw = _dao.get_events(conn, deal["deal_id"])[-5:]
+    events_raw = _dao.get_events(conn, deal["deal_id"], limit=5)
     recent_events = [
         EventRef(
             event_type=e["event_type"],
@@ -132,19 +131,17 @@ def load_live_deals(state: MonitorState) -> dict:
     conn = get_domain_conn()
     deals = dao.get_live_deals(conn)
     conn.close()
-    deal_ids = [d["deal_id"] for d in deals]
     log_module.get_logger().info(
-        "monitor.load_deals", tick_id=state["tick_id"], count=len(deal_ids)
+        "monitor.load_deals", tick_id=state["tick_id"], count=len(deals)
     )
-    return {"candidate_deals": deal_ids}
+    return {"live_deals": deals, "candidate_deals": [d["deal_id"] for d in deals]}
 
 
 def screen_with_haiku(state: MonitorState) -> dict:
-    """Score all live deals with Haiku. One LLM call per deal."""
+    """Score all live deals with Haiku. One LLM call per deal (sequential)."""
     settings = get_settings()
     conn = get_domain_conn()
-    all_deals = dao.get_live_deals(conn)
-    deal_map = {d["deal_id"]: d for d in all_deals}
+    deal_map = {d["deal_id"]: d for d in state["live_deals"]}
 
     scores: dict[str, float] = {}
     errors: list[ErrorRecord] = []
@@ -183,23 +180,23 @@ def apply_suppression(state: MonitorState) -> dict:
     """
     settings = get_settings()
     conn = get_domain_conn()
-    suppressed: dict[str, float] = {}
+    deal_ids = list(state["attention_scores"].keys())
+    suppress_set = dao.get_suppressed_deal_ids(
+        conn, deal_ids, within_ticks=settings.suppression_ticks
+    )
+    conn.close()
 
+    suppressed: dict[str, float] = {}
     for deal_id, raw_score in state["attention_scores"].items():
-        if dao.recent_agent_recommended_comm(
-            conn, deal_id, within_ticks=settings.suppression_ticks
-        ):
+        if deal_id in suppress_set:
             suppressed[deal_id] = raw_score * settings.suppression_multiplier
             log_module.get_logger().debug(
-                "monitor.suppressed",
-                deal_id=deal_id,
-                raw=raw_score,
+                "monitor.suppressed", deal_id=deal_id, raw=raw_score,
                 suppressed=suppressed[deal_id],
             )
         else:
             suppressed[deal_id] = raw_score
 
-    conn.close()
     return {"suppressed_scores": suppressed}
 
 
@@ -233,8 +230,7 @@ def fan_out_investigators(state: MonitorState) -> dict:
 
     graph = get_investigator_graph()
     conn = get_domain_conn()
-    all_deals = dao.get_live_deals(conn)
-    deal_map = {d["deal_id"]: d for d in all_deals}
+    deal_map = {d["deal_id"]: d for d in state["live_deals"]}
     results: list[InvestigatorResult] = []
     errors: list[ErrorRecord] = []
 
@@ -371,6 +367,7 @@ def run_tick(mode: str = "simulated", tick_id: str | None = None) -> str:
         "tick_id": tid,
         "mode": mode,
         "tick_started_at": clk.now().isoformat(),
+        "live_deals": [],
         "candidate_deals": [],
         "attention_scores": {},
         "suppressed_scores": {},

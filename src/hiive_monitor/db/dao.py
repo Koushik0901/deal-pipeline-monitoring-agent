@@ -38,7 +38,13 @@ def get_all_deals(conn: sqlite3.Connection) -> list[dict]:
 # ── Events ────────────────────────────────────────────────────────────────────
 
 
-def get_events(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
+def get_events(conn: sqlite3.Connection, deal_id: str, limit: int | None = None) -> list[dict]:
+    if limit:
+        rows = conn.execute(
+            "SELECT * FROM events WHERE deal_id = ? ORDER BY occurred_at DESC LIMIT ?",
+            (deal_id, limit),
+        ).fetchall()
+        return list(reversed([dict(r) for r in rows]))
     rows = conn.execute(
         "SELECT * FROM events WHERE deal_id = ? ORDER BY occurred_at", (deal_id,)
     ).fetchall()
@@ -319,40 +325,35 @@ def fetch_issuer_history(conn: sqlite3.Connection, issuer_id: str) -> list[dict]
 # ── Suppression query (FR-LOOP-02) ────────────────────────────────────────────
 
 
-def recent_agent_recommended_comm(
-    conn: sqlite3.Connection, deal_id: str, within_ticks: int
-) -> bool:
+def get_suppressed_deal_ids(
+    conn: sqlite3.Connection, deal_ids: list[str], within_ticks: int
+) -> set[str]:
     """
-    Returns True if a comm_sent_agent_recommended event exists for this deal
-    within the last `within_ticks` completed ticks.
-    Used by Monitor attention scoring suppression logic (FR-LOOP-02).
+    Return the subset of deal_ids that have a comm_sent_agent_recommended event
+    within the last `within_ticks` completed ticks. Single round-trip version.
     """
-    # Find the N most recent completed tick_ids
+    if not deal_ids:
+        return set()
     recent_ticks = conn.execute(
-        """SELECT tick_id FROM ticks
+        """SELECT tick_started_at FROM ticks
            WHERE tick_completed_at IS NOT NULL
            ORDER BY tick_started_at DESC
            LIMIT ?""",
         (within_ticks,),
     ).fetchall()
     if not recent_ticks:
-        return False
-    tick_ids = [r["tick_id"] for r in recent_ticks]
-    placeholders = ",".join("?" * len(tick_ids))
-    # Check for a comm_sent event in that window
-    row = conn.execute(
-        f"""SELECT 1 FROM events
-            WHERE deal_id = ?
+        return set()
+    # Oldest tick in the window defines the cutoff timestamp
+    cutoff = min(r["tick_started_at"] for r in recent_ticks)
+    placeholders = ",".join("?" * len(deal_ids))
+    rows = conn.execute(
+        f"""SELECT DISTINCT deal_id FROM events
+            WHERE deal_id IN ({placeholders})
               AND event_type = 'comm_sent_agent_recommended'
-              AND created_at >= (
-                  SELECT tick_started_at FROM ticks
-                  WHERE tick_id IN ({placeholders})
-                  ORDER BY tick_started_at ASC LIMIT 1
-              )
-            LIMIT 1""",
-        [deal_id, *tick_ids],
-    ).fetchone()
-    return row is not None
+              AND created_at >= ?""",
+        [*deal_ids, cutoff],
+    ).fetchall()
+    return {r["deal_id"] for r in rows}
 
 
 # ── Approval transaction (FR-LOOP-01, FR-LOOP-03) ────────────────────────────
@@ -380,8 +381,7 @@ def approve_intervention_atomic(
     event_id = str(uuid.uuid4())
     real_now = clk.now().isoformat()
 
-    conn.execute("BEGIN")
-    try:
+    with conn:
         conn.execute(
             """UPDATE interventions
                SET status = 'approved', final_text = ?, approved_at = ?
@@ -401,10 +401,6 @@ def approve_intervention_atomic(
                 json.dumps({"intervention_id": intervention_id}),
             ),
         )
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
 
     return event_id
 
@@ -427,8 +423,7 @@ def edit_intervention_atomic(
     event_id = str(uuid.uuid4())
     real_now = clk.now().isoformat()
 
-    conn.execute("BEGIN")
-    try:
+    with conn:
         conn.execute(
             """UPDATE interventions
                SET status = 'edited', final_text = ?, approved_at = ?
@@ -448,10 +443,6 @@ def edit_intervention_atomic(
                 json.dumps({"intervention_id": intervention_id, "edited": True}),
             ),
         )
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
 
     return event_id
 
