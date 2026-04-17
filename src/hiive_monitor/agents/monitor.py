@@ -2,12 +2,12 @@
 Pipeline Monitor — supervisor LangGraph graph.
 
 Runs on each scheduler tick:
-  1. load_live_deals  — fetch all live deal_ids from domain DB
-  2. screen_with_haiku — Haiku attention score per deal (parallelised)
-  3. apply_suppression — discount deals with recent agent-recommended comms (FR-LOOP-02)
+  1. load_live_deals          — fetch all live deal_ids from domain DB
+  2. screen_with_SLM          — SLM attention score per deal (parallel ThreadPoolExecutor)
+  3. apply_suppression        — discount deals with recent agent-recommended comms (FR-LOOP-02)
   4. select_investigation_queue — threshold 0.6, top-5 cap (FR-001a)
-  5. fan_out_investigators — Send API fan-out to Deal Investigator sub-graphs
-  6. close_tick — mark tick complete in DB
+  5. fan_out_investigators    — parallel ThreadPoolExecutor over queued deals
+  6. close_tick               — mark tick complete in DB
 
 Idempotency (FR-024): tick_id written atomically at start; re-entrant if graph
 interrupted mid-run because UNIQUE(tick_id, deal_id) prevents double-write.
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC
 
 from langgraph.graph import END, START, StateGraph
@@ -148,38 +149,53 @@ def load_live_deals(state: MonitorState) -> dict:
     return {"live_deals": deals, "candidate_deals": [d["deal_id"] for d in deals]}
 
 
-def screen_with_haiku(state: MonitorState) -> dict:
-    """Score all live deals with Haiku. One LLM call per deal (sequential)."""
-    settings = get_settings()
+def _screen_one_deal(deal: dict, tick_id: str, model: str) -> tuple[str, float, ErrorRecord | None]:
+    """Screen a single deal. Runs in a thread — opens its own DB connection."""
+    deal_id = deal["deal_id"]
     conn = get_domain_conn()
+    try:
+        snapshot = _build_snapshot(deal, conn)
+        result = call_structured(
+            template=SCREENING_TEMPLATE,
+            template_vars=build_screening_prompt(snapshot),
+            output_model=SCREENING_OUTPUT,
+            model=model,
+            tick_id=tick_id,
+            deal_id=deal_id,
+            call_name="screen_deal",
+        )
+        return deal_id, result.score if result else 0.0, None
+    except Exception as e:
+        return deal_id, 0.0, ErrorRecord(deal_id=deal_id, error=str(e), node="screen_with_SLM")
+    finally:
+        conn.close()
+
+
+def screen_with_SLM(state: MonitorState) -> dict:
+    """Score all live deals with the SLM in parallel (ThreadPoolExecutor)."""
+    settings = get_settings()
     deal_map = {d["deal_id"]: d for d in state["live_deals"]}
+    tick_id = state["tick_id"]
+
+    deals_to_screen = [deal_map[did] for did in state["candidate_deals"] if did in deal_map]
+    max_workers = min(len(deals_to_screen), 8) or 1
 
     scores: dict[str, float] = {}
     errors: list[ErrorRecord] = []
 
-    for deal_id in state["candidate_deals"]:
-        deal = deal_map.get(deal_id)
-        if not deal:
-            continue
-        try:
-            snapshot = _build_snapshot(deal, conn)
-            result = call_structured(
-                template=SCREENING_TEMPLATE,
-                template_vars=build_screening_prompt(snapshot),
-                output_model=SCREENING_OUTPUT,
-                model=settings.slm_model,
-                tick_id=state["tick_id"],
-                deal_id=deal_id,
-                call_name="screen_deal",
-            )
-            scores[deal_id] = result.score if result else 0.0
-        except Exception as e:
-            errors.append(ErrorRecord(deal_id=deal_id, error=str(e), node="screen_with_haiku"))
-            scores[deal_id] = 0.0
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_screen_one_deal, deal, tick_id, settings.slm_model): deal["deal_id"]
+            for deal in deals_to_screen
+        }
+        for future in as_completed(futures):
+            deal_id, score, error = future.result()
+            scores[deal_id] = score
+            if error:
+                errors.append(error)
 
-    conn.close()
     log_module.get_logger().info(
-        "monitor.screened", tick_id=state["tick_id"], count=len(scores)
+        "monitor.screened", tick_id=tick_id, count=len(scores), workers=max_workers
     )
     return {"attention_scores": scores, "errors": errors}
 
@@ -235,62 +251,83 @@ def select_investigation_queue(state: MonitorState) -> dict:
     return {"investigation_queue": ranked}
 
 
+def _investigate_one_deal(
+    deal: dict, tick_id: str, graph
+) -> tuple[InvestigatorResult | None, ErrorRecord | None]:
+    """Run the full Investigator graph for one deal. Opens its own DB connection."""
+    deal_id = deal["deal_id"]
+    conn = get_domain_conn()
+    try:
+        snapshot = _build_snapshot(deal, conn)
+        initial: dict = {
+            "tick_id": tick_id,
+            "deal_id": deal_id,
+            "deal_snapshot": snapshot,
+            "risk_signals": [],
+            "severity": None,
+            "severity_reasoning": None,
+            "enrichment_count": 0,
+            "enrichment_chain": [],
+            "enrichment_context": {},
+            "intervention": None,
+            "observation_id": None,
+            "error": None,
+        }
+        config = {"configurable": {"thread_id": f"{tick_id}:{deal_id}"}}
+        final = graph.invoke(initial, config=config)
+        severity_val = final.get("severity")
+        return (
+            InvestigatorResult(
+                deal_id=deal_id,
+                severity=severity_val.value if severity_val else None,
+                observation_id=final.get("observation_id"),
+                intervention_id=None,
+                error=final.get("error"),
+            ),
+            None,
+        )
+    except Exception as e:
+        log_module.get_logger().error(
+            "investigator.invocation_error", deal_id=deal_id, error=str(e)
+        )
+        return None, ErrorRecord(deal_id=deal_id, error=str(e), node="fan_out_investigators")
+    finally:
+        conn.close()
+
+
 def fan_out_investigators(state: MonitorState) -> dict:
-    """Invoke Deal Investigator for each queued deal (sequential for reliability)."""
+    """Invoke Deal Investigator for each queued deal in parallel (ThreadPoolExecutor)."""
     from hiive_monitor.agents.investigator import get_investigator_graph
 
     graph = get_investigator_graph()
-    conn = get_domain_conn()
     deal_map = {d["deal_id"]: d for d in state["live_deals"]}
+    tick_id = state["tick_id"]
+
+    deals_to_investigate = [
+        deal_map[did] for did in state["investigation_queue"] if did in deal_map
+    ]
+    max_workers = min(len(deals_to_investigate), 5) or 1
+
     results: list[InvestigatorResult] = []
     errors: list[ErrorRecord] = []
 
-    for deal_id in state["investigation_queue"]:
-        deal = deal_map.get(deal_id)
-        if not deal:
-            continue
-        try:
-            snapshot = _build_snapshot(deal, conn)
-            initial: dict = {
-                "tick_id": state["tick_id"],
-                "deal_id": deal_id,
-                "deal_snapshot": snapshot,
-                "risk_signals": [],
-                "severity": None,
-                "severity_reasoning": None,
-                "enrichment_count": 0,
-                "enrichment_chain": [],
-                "enrichment_context": {},
-                "intervention": None,
-                "observation_id": None,
-                "error": None,
-            }
-            # thread_id scoped per (tick, deal) so checkpointer isolates runs
-            config = {"configurable": {"thread_id": f"{state['tick_id']}:{deal_id}"}}
-            final = graph.invoke(initial, config=config)
-            severity_val = final.get("severity")
-            results.append(
-                InvestigatorResult(
-                    deal_id=deal_id,
-                    severity=severity_val.value if severity_val else None,
-                    observation_id=final.get("observation_id"),
-                    intervention_id=None,
-                    error=final.get("error"),
-                )
-            )
-        except Exception as e:
-            errors.append(
-                ErrorRecord(deal_id=deal_id, error=str(e), node="fan_out_investigators")
-            )
-            log_module.get_logger().error(
-                "investigator.invocation_error", deal_id=deal_id, error=str(e)
-            )
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_investigate_one_deal, deal, tick_id, graph): deal["deal_id"]
+            for deal in deals_to_investigate
+        }
+        for future in as_completed(futures):
+            result, error = future.result()
+            if result:
+                results.append(result)
+            if error:
+                errors.append(error)
 
-    conn.close()
     log_module.get_logger().info(
         "monitor.investigators_complete",
-        tick_id=state["tick_id"],
+        tick_id=tick_id,
         count=len(results),
+        workers=max_workers,
     )
     return {"investigator_results": results, "errors": errors}
 
@@ -332,15 +369,15 @@ def close_tick(state: MonitorState) -> dict:
 def build_monitor_graph():
     g = StateGraph(MonitorState)
     g.add_node("load_live_deals", load_live_deals)
-    g.add_node("screen_with_haiku", screen_with_haiku)
+    g.add_node("screen_with_SLM", screen_with_SLM)
     g.add_node("apply_suppression", apply_suppression)
     g.add_node("select_investigation_queue", select_investigation_queue)
     g.add_node("fan_out_investigators", fan_out_investigators)
     g.add_node("close_tick", close_tick)
 
     g.add_edge(START, "load_live_deals")
-    g.add_edge("load_live_deals", "screen_with_haiku")
-    g.add_edge("screen_with_haiku", "apply_suppression")
+    g.add_edge("load_live_deals", "screen_with_SLM")
+    g.add_edge("screen_with_SLM", "apply_suppression")
     g.add_edge("apply_suppression", "select_investigation_queue")
     g.add_edge("select_investigation_queue", "fan_out_investigators")
     g.add_edge("fan_out_investigators", "close_tick")
