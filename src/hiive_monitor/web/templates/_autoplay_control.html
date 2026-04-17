@@ -1,0 +1,99 @@
+{% if clock_mode == "simulated" %}
+<div
+  x-data="{
+    running: false,
+    done: false,
+    error: null,
+    day: 0,
+    totalDays: 7,
+    currentDate: '',
+    dealsProcessed: 0,
+    flagsRaised: 0,
+    es: null,
+
+    start() {
+      if (this.running) return;
+      this.running = true;
+      this.done = false;
+      this.error = null;
+      this.day = 0;
+      this.currentDate = '';
+      this.dealsProcessed = 0;
+      this.flagsRaised = 0;
+
+      const url = '/api/simulation/autoplay?days=' + this.totalDays + '&speed=0.8';
+      this.es = new EventSource(url);
+
+      this.es.addEventListener('progress', (e) => {
+        const d = JSON.parse(e.data);
+        this.day = d.day;
+        this.currentDate = d.current_date;
+      });
+
+      this.es.addEventListener('tick_complete', (e) => {
+        const d = JSON.parse(e.data);
+        this.dealsProcessed = d.deals_processed;
+        this.flagsRaised = d.flags_raised;
+      });
+
+      this.es.addEventListener('done', (e) => {
+        this.running = false;
+        this.done = true;
+        this.es.close();
+        htmx.trigger(document.body, 'tickComplete');
+      });
+
+      this.es.addEventListener('error', (e) => {
+        this.running = false;
+        if (e.data) {
+          try { this.error = JSON.parse(e.data).message; } catch (_) { this.error = 'Stream error'; }
+        } else {
+          this.error = 'Connection lost';
+        }
+        this.es.close();
+      });
+    },
+
+    stop() {
+      if (this.es) { this.es.close(); this.es = null; }
+      this.running = false;
+    }
+  }"
+  class="flex items-center gap-2"
+>
+  <!-- Button -->
+  <button
+    @click="start()"
+    :disabled="running"
+    class="flex items-center gap-1.5 text-[0.6875rem] font-medium px-2 py-1 rounded-[4px]
+           border-[0.5px] border-outline-variant/50 hover:border-outline-variant
+           text-on-surface-variant hover:text-on-surface transition-colors
+           disabled:opacity-50 disabled:cursor-not-allowed"
+    :title="'Advance ' + totalDays + ' simulated days'"
+  >
+    <span x-show="!running">&#9654; Autoplay</span>
+    <span x-show="running" class="flex items-center gap-1">
+      <span class="animate-pulse">&#9679;</span>
+      <span x-text="'Day ' + day + '/' + totalDays"></span>
+    </span>
+  </button>
+
+  <!-- Inline progress / status -->
+  <span
+    x-show="running && currentDate"
+    x-text="currentDate"
+    class="text-[0.6875rem] font-mono text-on-surface-variant"
+  ></span>
+
+  <span
+    x-show="done"
+    class="text-[0.6875rem] text-on-surface-variant"
+  >Done &#10003;</span>
+
+  <span
+    x-show="error"
+    x-text="error"
+    class="text-[0.6875rem] text-error max-w-[16rem] truncate"
+  ></span>
+</div>
+{% endif %}

@@ -21,6 +21,13 @@ _STATIC_DIR = pathlib.Path(__file__).parent / "web" / "static"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 templates.env.filters["format_number"] = lambda v: f"{int(v):,}"
 
+# Expose clock_mode as a global so base.html can render sim-only controls
+# without requiring every route to pass it explicitly.
+def _clock_mode_global() -> str:
+    return get_settings().clock_mode
+
+templates.env.globals["clock_mode"] = _clock_mode_global()
+
 
 def create_app() -> FastAPI:
     _cfg = get_settings()

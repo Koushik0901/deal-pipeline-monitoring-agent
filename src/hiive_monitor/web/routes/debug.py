@@ -6,7 +6,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from hiive_monitor import logging as log_module
-from hiive_monitor.app import templates
+
+
+def _templates():
+    """Lazy import of Jinja2Templates to break the app ↔ routes circular import."""
+    from hiive_monitor.app import templates as _t
+    return _t
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -15,7 +20,7 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 async def debug_tick(request: Request, tick_id: str):
     records = log_module.get_log_records(tick_id=tick_id)
     call_names = sorted({r.get("call_name", "") for r in records if r.get("call_name")})
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request,
         "debug.html",
         {
@@ -32,7 +37,7 @@ async def debug_tick(request: Request, tick_id: str):
 async def debug_deal(request: Request, deal_id: str):
     records = log_module.get_log_records(deal_id=deal_id)
     call_names = sorted({r.get("call_name", "") for r in records if r.get("call_name")})
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request,
         "debug.html",
         {
