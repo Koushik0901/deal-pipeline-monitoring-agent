@@ -11,10 +11,15 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from hiive_monitor.app import templates
 from hiive_monitor.db import dao
 from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.logging import get_logger
+
+
+def _templates():
+    """Lazy import of Jinja2Templates to break the app ↔ routes circular import."""
+    from hiive_monitor.app import templates as _t
+    return _t
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -66,7 +71,7 @@ async def daily_brief(request: Request, debug: str = ""):
         })
     conn.close()
 
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request, "brief.html",
         {
             "items": items,
@@ -162,7 +167,7 @@ async def deal_detail(request: Request, deal_id: str, debug: str = ""):
         reasoning = json.loads(obs["reasoning"]) if obs.get("reasoning") else {}
         obs_enriched.append({**obs, "reasoning_parsed": reasoning})
 
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request, "deal_detail.html",
         {
             "deal": deal,
@@ -181,7 +186,7 @@ async def deal_detail(request: Request, deal_id: str, debug: str = ""):
 @router.get("/sim")
 async def sim_page(request: Request):
     from hiive_monitor import clock as clk
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request, "sim.html", {"now": clk.now().isoformat()}
     )
 
@@ -256,7 +261,7 @@ async def brief_stats(request: Request):
     open_ivs = dao.get_open_interventions(conn)
     conn.close()
     items = [{"severity": iv["severity"]} for iv in open_ivs]
-    return templates.TemplateResponse(
+    return _templates().TemplateResponse(
         request, "_brief_stats.html", {"items": items, "tick": tick}
     )
 
@@ -266,7 +271,7 @@ async def status_bar(request: Request):
     conn = get_domain_conn()
     tick = dao.get_last_completed_tick(conn)
     conn.close()
-    return templates.TemplateResponse(request, "_status_bar.html", {"tick": tick})
+    return _templates().TemplateResponse(request, "_status_bar.html", {"tick": tick})
 
 
 @router.get("/api/clock")
