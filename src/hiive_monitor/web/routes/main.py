@@ -140,30 +140,6 @@ async def confirm_edit(request: Request, intervention_id: str, final_text: str =
     )
 
 
-# ── Queue ─────────────────────────────────────────────────────────────────────
-
-
-@router.get("/queue")
-async def queue(request: Request, severity: str = "", stage: str = "", issuer: str = ""):
-    conn = get_domain_conn()
-    open_ivs = dao.get_open_interventions(conn)
-    items = []
-    for iv in open_ivs:
-        deal = dao.get_deal(conn, iv["deal_id"])
-        if severity and iv.get("severity") != severity:
-            continue
-        if stage and deal and deal.get("stage") != stage:
-            continue
-        if issuer and deal and deal.get("issuer_id") != issuer:
-            continue
-        items.append({**iv, "deal": deal})
-    conn.close()
-    return templates.TemplateResponse(
-        request, "queue.html",
-        {"items": items, "severity": severity, "stage": stage, "issuer": issuer},
-    )
-
-
 # ── Deal detail ───────────────────────────────────────────────────────────────
 
 
