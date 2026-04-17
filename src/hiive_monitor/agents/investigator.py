@@ -42,30 +42,10 @@ from hiive_monitor.llm.prompts.intervention_status_recommendation import (
     STATUS_REC_TEMPLATE,
     build_status_rec_prompt,
 )
-from hiive_monitor.llm.prompts.risk_communication_silence import (
-    COMMUNICATION_SILENCE_OUTPUT,
-    COMMUNICATION_SILENCE_TEMPLATE,
-    build_communication_silence_prompt,
-)
-from hiive_monitor.llm.prompts.risk_deadline_proximity import (
-    DEADLINE_PROXIMITY_OUTPUT,
-    DEADLINE_PROXIMITY_TEMPLATE,
-    build_deadline_proximity_prompt,
-)
-from hiive_monitor.llm.prompts.risk_missing_prerequisites import (
-    MISSING_PREREQUISITES_OUTPUT,
-    MISSING_PREREQUISITES_TEMPLATE,
-    build_missing_prerequisites_prompt,
-)
-from hiive_monitor.llm.prompts.risk_stage_aging import (
-    STAGE_AGING_OUTPUT,
-    STAGE_AGING_TEMPLATE,
-    build_stage_aging_prompt,
-)
-from hiive_monitor.llm.prompts.risk_unusual_characteristics import (
-    UNUSUAL_CHARACTERISTICS_OUTPUT,
-    UNUSUAL_CHARACTERISTICS_TEMPLATE,
-    build_unusual_characteristics_prompt,
+from hiive_monitor.llm.prompts.risk_all_dimensions import (
+    ALL_DIMENSIONS_OUTPUT,
+    ALL_DIMENSIONS_TEMPLATE,
+    build_all_dimensions_prompt,
 )
 from hiive_monitor.llm.prompts.severity import (
     SEVERITY_OUTPUT,
@@ -80,7 +60,13 @@ from hiive_monitor.llm.prompts.sufficiency import (
 from hiive_monitor.models.interventions import (
     Intervention,
 )
-from hiive_monitor.models.risk import RiskSignal, Severity, SeverityDecision
+from hiive_monitor.models.risk import (
+    AllRiskSignals,
+    RiskDimension,
+    RiskSignal,
+    Severity,
+    SeverityDecision,
+)
 
 INVESTIGATOR_GRAPH_NAME = "deal_investigator"
 _MAX_ENRICHMENT_ROUNDS = 2
@@ -105,87 +91,46 @@ def observe(state: InvestigatorState) -> dict:
 
 def evaluate_risks(state: InvestigatorState) -> dict:
     """
-    Run all 6 risk dimension evaluators. 5 LLM calls + 1 deterministic.
-    Results accumulate via the Annotated[list, operator.add] reducer.
+    Evaluate all 6 risk dimensions: 1 combined LLM call (5 dimensions) + 1 deterministic.
+    The combined call uses the larger llm_model for higher reasoning quality.
     """
     settings = get_settings()
     snap = state["deal_snapshot"]
     tick_id = state["tick_id"]
     deal_id = state["deal_id"]
+
+    # Single LLM call for all 5 assessed dimensions
+    all_signals: AllRiskSignals | None = llm_client.call_structured(
+        template=ALL_DIMENSIONS_TEMPLATE,
+        template_vars=build_all_dimensions_prompt(snap),
+        output_model=ALL_DIMENSIONS_OUTPUT,
+        model=settings.llm_model,
+        tick_id=tick_id,
+        deal_id=deal_id,
+        call_name="evaluate_all_risk_dimensions",
+    )
+
     signals: list[RiskSignal] = []
+    if all_signals:
+        # Force correct dimension values defensively, then collect
+        for field, dim in (
+            ("stage_aging", RiskDimension.STAGE_AGING),
+            ("deadline_proximity", RiskDimension.DEADLINE_PROXIMITY),
+            ("communication_silence", RiskDimension.COMMUNICATION_SILENCE),
+            ("missing_prerequisites", RiskDimension.MISSING_PREREQUISITES),
+            ("unusual_characteristics", RiskDimension.UNUSUAL_CHARACTERISTICS),
+        ):
+            sig: RiskSignal = getattr(all_signals, field)
+            if sig.dimension != dim:
+                sig = sig.model_copy(update={"dimension": dim})
+            signals.append(sig)
 
-    # Dimension 1: Stage aging
-    r1 = llm_client.call_structured(
-        template=STAGE_AGING_TEMPLATE,
-        template_vars=build_stage_aging_prompt(snap),
-        output_model=STAGE_AGING_OUTPUT,
-        model=settings.llm_model,
-        tick_id=tick_id,
-        deal_id=deal_id,
-        call_name="evaluate_risk_stage_aging",
-    )
-    if r1:
-        signals.append(r1)
-
-    # Dimension 2: Deadline proximity
-    r2 = llm_client.call_structured(
-        template=DEADLINE_PROXIMITY_TEMPLATE,
-        template_vars=build_deadline_proximity_prompt(snap),
-        output_model=DEADLINE_PROXIMITY_OUTPUT,
-        model=settings.llm_model,
-        tick_id=tick_id,
-        deal_id=deal_id,
-        call_name="evaluate_risk_deadline_proximity",
-    )
-    if r2:
-        signals.append(r2)
-
-    # Dimension 3: Communication silence
-    r3 = llm_client.call_structured(
-        template=COMMUNICATION_SILENCE_TEMPLATE,
-        template_vars=build_communication_silence_prompt(snap),
-        output_model=COMMUNICATION_SILENCE_OUTPUT,
-        model=settings.llm_model,
-        tick_id=tick_id,
-        deal_id=deal_id,
-        call_name="evaluate_risk_communication_silence",
-    )
-    if r3:
-        signals.append(r3)
-
-    # Dimension 4: Missing prerequisites
-    r4 = llm_client.call_structured(
-        template=MISSING_PREREQUISITES_TEMPLATE,
-        template_vars=build_missing_prerequisites_prompt(snap),
-        output_model=MISSING_PREREQUISITES_OUTPUT,
-        model=settings.llm_model,
-        tick_id=tick_id,
-        deal_id=deal_id,
-        call_name="evaluate_risk_missing_prerequisites",
-    )
-    if r4:
-        signals.append(r4)
-
-    # Dimension 5: Counterparty non-responsiveness (deterministic)
+    # Counterparty nonresponsiveness remains deterministic (no LLM call)
     conn = get_domain_conn()
     issuer = dao.get_issuer(conn, snap.issuer_id)
     conn.close()
     typical_days = issuer.get("typical_response_days", 7) if issuer else 7
-    r5 = evaluate_counterparty_responsiveness(snap, typical_days)
-    signals.append(r5)
-
-    # Dimension 6: Unusual characteristics
-    r6 = llm_client.call_structured(
-        template=UNUSUAL_CHARACTERISTICS_TEMPLATE,
-        template_vars=build_unusual_characteristics_prompt(snap),
-        output_model=UNUSUAL_CHARACTERISTICS_OUTPUT,
-        model=settings.llm_model,
-        tick_id=tick_id,
-        deal_id=deal_id,
-        call_name="evaluate_risk_unusual_characteristics",
-    )
-    if r6:
-        signals.append(r6)
+    signals.append(evaluate_counterparty_responsiveness(snap, typical_days))
 
     log_module.get_logger().info(
         "investigator.risks_evaluated",

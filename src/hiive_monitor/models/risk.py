@@ -32,6 +32,16 @@ class RiskSignal(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class AllRiskSignals(BaseModel):
+    """Combined output schema for the single all-dimensions risk evaluation call."""
+
+    stage_aging: RiskSignal
+    deadline_proximity: RiskSignal
+    communication_silence: RiskSignal
+    missing_prerequisites: RiskSignal
+    unusual_characteristics: RiskSignal
+
+
 class SeverityDecision(BaseModel):
     """Output schema for the decide_severity LLM call."""
 
