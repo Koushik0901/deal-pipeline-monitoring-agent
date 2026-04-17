@@ -181,12 +181,17 @@ def test_rofr_deadline_7d(db_path, monkeypatch):
                 body="Your ROFR deadline is in 7 days. Please confirm your decision.",
                 referenced_deadline="2026-04-24",
             )
-        # Risk signals: trigger deadline_proximity
-        if hasattr(output_model, "model_fields") and "triggered" in output_model.model_fields:
-            dim = "deadline_proximity" if "deadline" in call_name else "stage_aging"
-            triggered = dim == "deadline_proximity"
-            return output_model(
-                dimension=dim, triggered=triggered, evidence="7 days to ROFR deadline", confidence=0.9
+        # Risk signals: trigger deadline_proximity, all others clear
+        from hiive_monitor.models.risk import AllRiskSignals, RiskSignal
+        if output_model is AllRiskSignals:
+            def _sig(dim, triggered, evidence):
+                return RiskSignal(dimension=dim, triggered=triggered, evidence=evidence, confidence=0.9)
+            return AllRiskSignals(
+                stage_aging=_sig(RiskDimension.STAGE_AGING, False, "in baseline"),
+                deadline_proximity=_sig(RiskDimension.DEADLINE_PROXIMITY, True, "7 days to ROFR deadline"),
+                communication_silence=_sig(RiskDimension.COMMUNICATION_SILENCE, False, "recent comms"),
+                missing_prerequisites=_sig(RiskDimension.MISSING_PREREQUISITES, False, "no blockers"),
+                unusual_characteristics=_sig(RiskDimension.UNUSUAL_CHARACTERISTICS, False, "no flags"),
             )
         return None
 
@@ -241,9 +246,16 @@ def test_early_exit_informational(db_path, monkeypatch):
             return SeverityDecision(
                 severity=Severity.INFORMATIONAL, reasoning="deal on track", primary_dimensions=[]
             )
-        if hasattr(output_model, "model_fields") and "triggered" in output_model.model_fields:
-            return output_model(
-                dimension="stage_aging", triggered=False, evidence="all ok", confidence=0.05
+        from hiive_monitor.models.risk import AllRiskSignals, RiskDimension, RiskSignal
+        if output_model is AllRiskSignals:
+            def _sig(dim):
+                return RiskSignal(dimension=dim, triggered=False, evidence="all ok", confidence=0.05)
+            return AllRiskSignals(
+                stage_aging=_sig(RiskDimension.STAGE_AGING),
+                deadline_proximity=_sig(RiskDimension.DEADLINE_PROXIMITY),
+                communication_silence=_sig(RiskDimension.COMMUNICATION_SILENCE),
+                missing_prerequisites=_sig(RiskDimension.MISSING_PREREQUISITES),
+                unusual_characteristics=_sig(RiskDimension.UNUSUAL_CHARACTERISTICS),
             )
         return None
 

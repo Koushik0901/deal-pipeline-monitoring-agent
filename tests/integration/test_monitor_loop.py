@@ -12,12 +12,15 @@ from tests.integration.conftest import seed_deal, seed_issuer
 def _mock_call_structured(deal_score: float = 0.3):
     """Return a factory that yields a fixed AttentionScore for Haiku screening
     and a minimal SufficiencyDecision + SeverityDecision for the investigator."""
-    from hiive_monitor.models.risk import AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision
-    from hiive_monitor.models.risk import SufficiencyDecision
+    from hiive_monitor.models.risk import (
+        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
+        SufficiencyDecision,
+    )
 
     call_counts: dict[str, int] = {}
 
-    def _call(*, prompt, output_model, model, tick_id, deal_id, call_name, system="", timeout=30.0):
+    def _call(*, output_model, model, tick_id, deal_id, call_name,
+              prompt="", system="", timeout=30.0, template=None, template_vars=None):
         call_counts[call_name] = call_counts.get(call_name, 0) + 1
 
         if output_model is AttentionScore:
@@ -33,13 +36,15 @@ def _mock_call_structured(deal_score: float = 0.3):
                 primary_dimensions=[],
             )
 
-        # Risk dimension signals
-        if hasattr(output_model, "model_fields") and "triggered" in output_model.model_fields:
-            return output_model(
-                dimension=RiskDimension.STAGE_AGING,
-                triggered=False,
-                evidence="no issue (mock)",
-                confidence=0.1,
+        if output_model is AllRiskSignals:
+            def _sig(dim):
+                return RiskSignal(dimension=dim, triggered=False, evidence="no issue (mock)", confidence=0.1)
+            return AllRiskSignals(
+                stage_aging=_sig(RiskDimension.STAGE_AGING),
+                deadline_proximity=_sig(RiskDimension.DEADLINE_PROXIMITY),
+                communication_silence=_sig(RiskDimension.COMMUNICATION_SILENCE),
+                missing_prerequisites=_sig(RiskDimension.MISSING_PREREQUISITES),
+                unusual_characteristics=_sig(RiskDimension.UNUSUAL_CHARACTERISTICS),
             )
 
         return None
@@ -115,7 +120,10 @@ def test_crash_restart_no_duplicate_observations(db_path, monkeypatch):
     conn.commit()
 
     # Mock LLM to return above-threshold scores so all 5 deals are investigated
-    from hiive_monitor.models.risk import AttentionScore, Severity, SeverityDecision, SufficiencyDecision
+    from hiive_monitor.models.risk import (
+        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
+        SufficiencyDecision,
+    )
 
     def _high_score_mock(*, output_model, model, tick_id, deal_id, call_name,
                           prompt="", system="", timeout=30.0, template=None, template_vars=None):
@@ -125,9 +133,15 @@ def test_crash_restart_no_duplicate_observations(db_path, monkeypatch):
             return SufficiencyDecision(sufficient=True, rationale="ok", tool_to_call=None)
         if output_model is SeverityDecision:
             return SeverityDecision(severity=Severity.INFORMATIONAL, reasoning="ok", primary_dimensions=[])
-        if hasattr(output_model, "model_fields") and "triggered" in output_model.model_fields:
-            return output_model(
-                dimension="stage_aging", triggered=False, evidence="no issue", confidence=0.1
+        if output_model is AllRiskSignals:
+            def _sig(dim):
+                return RiskSignal(dimension=dim, triggered=False, evidence="no issue", confidence=0.1)
+            return AllRiskSignals(
+                stage_aging=_sig(RiskDimension.STAGE_AGING),
+                deadline_proximity=_sig(RiskDimension.DEADLINE_PROXIMITY),
+                communication_silence=_sig(RiskDimension.COMMUNICATION_SILENCE),
+                missing_prerequisites=_sig(RiskDimension.MISSING_PREREQUISITES),
+                unusual_characteristics=_sig(RiskDimension.UNUSUAL_CHARACTERISTICS),
             )
         return None
 
