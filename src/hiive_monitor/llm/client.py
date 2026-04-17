@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -45,7 +45,6 @@ class _LangfuseGenerationCallback:
 
     def on_llm_start(self, serialized, messages, **kwargs):
         try:
-            import json as _json
             input_serialized = [
                 {"role": getattr(m, "type", "unknown"), "content": str(m.content)[:2000]}
                 for msg_list in messages
@@ -107,8 +106,8 @@ def _langfuse_handler(call_name: str, tick_id: str, deal_id: str, model: str = "
     if not os.getenv("LANGFUSE_PUBLIC_KEY"):
         return []
     try:
-        from langfuse import get_client
         from langchain_core.callbacks import BaseCallbackHandler
+        from langfuse import get_client
 
         lf = get_client()
 
@@ -141,7 +140,7 @@ def _get_llm(model: str, timeout: float) -> ChatOpenRouter:
             model=model,
             openrouter_api_key=settings.openrouter_api_key,
             temperature=0,  # deterministic outputs for classification/scoring
-            timeout=timeout,
+            timeout=int(timeout * 1000),  # ChatOpenRouter expects milliseconds
             max_retries=0,  # retry logic is handled by _call_with_retry
         )
         if settings.llm_max_tokens is not None:
@@ -153,7 +152,7 @@ def _get_llm(model: str, timeout: float) -> ChatOpenRouter:
 def call_structured(
     *,
     prompt: str = "",
-    output_model: Type[T],
+    output_model: type[T],
     model: str,
     tick_id: str,
     deal_id: str,
@@ -203,7 +202,7 @@ def call_structured(
 def _call_with_retry(
     *,
     messages: list[BaseMessage],
-    output_model: Type[T],
+    output_model: type[T],
     model: str,
     timeout: float,
     call_name: str,
@@ -212,7 +211,7 @@ def _call_with_retry(
 ) -> T | None:
     logger = log_module.get_logger()
     llm = _get_llm(model, timeout)
-    structured_llm = llm.with_structured_output(output_model, method="json_schema", strict=True)
+    structured_llm = llm.with_structured_output(output_model, method="function_calling")
     last_error: Exception | None = None
 
     lf_callbacks = _langfuse_handler(call_name, tick_id, deal_id, model)

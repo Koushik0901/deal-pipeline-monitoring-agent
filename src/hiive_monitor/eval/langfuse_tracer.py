@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import contextlib
 import os
-from datetime import datetime, timezone
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 
 class EvalTracer:

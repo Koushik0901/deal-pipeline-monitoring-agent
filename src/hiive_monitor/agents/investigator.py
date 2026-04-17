@@ -15,13 +15,8 @@ What makes it agentic: N3→N4→N3 loop with branching based on LLM reasoning.
 
 from __future__ import annotations
 
-import json
-import uuid
-from typing import Any
-
 from langgraph.graph import END, START, StateGraph
 
-from hiive_monitor import clock as clk
 from hiive_monitor import logging as log_module
 from hiive_monitor.agents.graph_state import EnrichmentStep, InvestigatorState
 from hiive_monitor.config import get_settings
@@ -72,14 +67,20 @@ from hiive_monitor.llm.prompts.risk_unusual_characteristics import (
     UNUSUAL_CHARACTERISTICS_TEMPLATE,
     build_unusual_characteristics_prompt,
 )
-from hiive_monitor.llm.prompts.severity import SEVERITY_OUTPUT, SEVERITY_TEMPLATE, build_severity_prompt
+from hiive_monitor.llm.prompts.severity import (
+    SEVERITY_OUTPUT,
+    SEVERITY_TEMPLATE,
+    build_severity_prompt,
+)
 from hiive_monitor.llm.prompts.sufficiency import (
     SUFFICIENCY_OUTPUT,
     SUFFICIENCY_TEMPLATE,
     build_sufficiency_prompt,
 )
-from hiive_monitor.models.interventions import BriefEntry, InternalEscalation, Intervention, OutboundNudge
-from hiive_monitor.models.risk import RiskDimension, RiskSignal, Severity, SeverityDecision
+from hiive_monitor.models.interventions import (
+    Intervention,
+)
+from hiive_monitor.models.risk import RiskSignal, Severity, SeverityDecision
 
 INVESTIGATOR_GRAPH_NAME = "deal_investigator"
 _MAX_ENRICHMENT_ROUNDS = 2
@@ -519,7 +520,9 @@ def get_investigator_graph():
     global _investigator_graph, _checkpointer
     if _investigator_graph is None:
         import sqlite3 as _sqlite3
+
         from langgraph.checkpoint.sqlite import SqliteSaver
+
         from hiive_monitor.config import get_settings
 
         db_path = get_settings().checkpoint_db_path

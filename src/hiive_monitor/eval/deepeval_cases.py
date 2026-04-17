@@ -7,9 +7,6 @@ LLMTestCase suitable for all five metric evaluations.
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
 from deepeval.test_case import LLMTestCase, ToolCall
 
 
@@ -116,7 +113,7 @@ def _format_expected_output(scenario: dict) -> str:
     expected_tools = gt.get("expected_tools", [])
 
     lines = [
-        f"=== EXPECTED OUTPUT ===",
+        "=== EXPECTED OUTPUT ===",
         f"Correct severity: {severity}",
         f"Dimensions that SHOULD be triggered: {', '.join(dims_triggered) if dims_triggered else 'none'}",
     ]

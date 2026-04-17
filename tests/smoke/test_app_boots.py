@@ -52,7 +52,7 @@ def test_brief_returns_200(client):
 def test_queue_returns_200(client):
     resp = client.get("/queue")
     assert resp.status_code == 200
-    assert b"Open Items" in resp.content
+    assert b"Queue" in resp.content
 
 
 def test_sim_page_returns_200(client):
@@ -154,7 +154,7 @@ def test_deal_timeline_shows_agent_recommendation_badge(client):
     resp = client.get("/deals/D-T086A")
     assert resp.status_code == 200
     html = resp.text
-    # The template uses replace('_',' ') on event_type and applies purple classes
+    # The template uses replace('_',' ') on event_type and applies a distinct class
     # to comm_sent_agent_recommended — verify both indicators are present
     assert "comm sent agent recommended" in html
-    assert "bg-purple-50" in html  # distinct visual indicator (FR-LOOP-03)
+    assert "bg-primary-container" in html  # distinct visual indicator (FR-LOOP-03)

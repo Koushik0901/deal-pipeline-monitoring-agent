@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from deepeval.test_case import LLMTestCase
+    pass
 
 _ANSWER_CORRECTNESS_RUBRIC = """
 You are an expert evaluator assessing an AI monitoring agent that classifies risk in \
@@ -80,7 +80,7 @@ _TASK_DESCRIPTION = (
 )
 
 
-def build_metrics(judge: "OpenRouterJudge | None" = None):  # type: ignore[name-defined]
+def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-defined]
     """Return the five deepeval metric instances. Lazily imported."""
     from deepeval.metrics import (
         GEval,

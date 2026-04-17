@@ -28,9 +28,7 @@ import sqlite3
 import sys
 import tempfile
 import uuid
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 
 import yaml
 

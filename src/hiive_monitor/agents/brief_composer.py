@@ -6,16 +6,16 @@ import json
 
 from hiive_monitor import clock as clk
 from hiive_monitor import logging as log_module
+from hiive_monitor.config import get_settings
 from hiive_monitor.db import dao
 from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.llm import client as llm_client
-from hiive_monitor.config import get_settings
-from hiive_monitor.models.brief import DailyBrief
 from hiive_monitor.llm.prompts.daily_brief import (
     DAILY_BRIEF_OUTPUT,
     DAILY_BRIEF_TEMPLATE,
     build_daily_brief_prompt,
 )
+from hiive_monitor.models.brief import DailyBrief
 
 
 def compose_daily_brief(tick_id: str) -> DailyBrief | None:

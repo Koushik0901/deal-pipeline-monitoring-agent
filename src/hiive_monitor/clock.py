@@ -7,7 +7,7 @@ Enforced by tests/unit/test_no_datetime_now.py.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
 
@@ -20,7 +20,7 @@ class RealTimeClock:
     """Always returns wall-clock UTC. advance() is a no-op in real-time mode."""
 
     def now(self) -> datetime:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
     def advance(self, days: int) -> None:  # noqa: ARG002
         raise RuntimeError("Cannot advance a real-time clock.")
@@ -30,7 +30,7 @@ class SimulatedClock:
     """Deterministic injected clock. advance(days) increments the stored time."""
 
     def __init__(self, start: datetime | None = None) -> None:
-        self._current: datetime = start or datetime(2025, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+        self._current: datetime = start or datetime(2025, 1, 15, 9, 0, 0, tzinfo=UTC)
 
     def now(self) -> datetime:
         return self._current

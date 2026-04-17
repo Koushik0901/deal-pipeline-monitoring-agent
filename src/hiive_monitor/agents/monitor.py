@@ -15,22 +15,23 @@ interrupted mid-run because UNIQUE(tick_id, deal_id) prevents double-write.
 
 from __future__ import annotations
 
+import json
 import uuid
-from typing import Any
+from datetime import UTC
 
 from langgraph.graph import END, START, StateGraph
 
 from hiive_monitor import clock as clk
 from hiive_monitor import logging as log_module
+from hiive_monitor.agents.brief_composer import compose_daily_brief
 from hiive_monitor.agents.graph_state import (
     ErrorRecord,
     InvestigatorResult,
     MonitorState,
 )
-from hiive_monitor.agents.brief_composer import compose_daily_brief
 from hiive_monitor.config import get_settings
-from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.db import dao
+from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.llm import client as llm_client
 from hiive_monitor.llm.client import call_structured
 from hiive_monitor.llm.prompts.screening import (
@@ -38,12 +39,8 @@ from hiive_monitor.llm.prompts.screening import (
     SCREENING_TEMPLATE,
     build_screening_prompt,
 )
-from hiive_monitor.models.snapshot import DealSnapshot, Blocker, EventRef
-from hiive_monitor.models.stages import DWELL_BASELINES, REQUIRED_DOCUMENTS_BY_STAGE, Stage
-
-import json
-from datetime import timezone
-
+from hiive_monitor.models.snapshot import Blocker, DealSnapshot, EventRef
+from hiive_monitor.models.stages import REQUIRED_DOCUMENTS_BY_STAGE, Stage
 
 # ── Snapshot builder ──────────────────────────────────────────────────────────
 
@@ -132,7 +129,7 @@ def _parse_dt(value: str | None):
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except Exception:
         return clk.now()

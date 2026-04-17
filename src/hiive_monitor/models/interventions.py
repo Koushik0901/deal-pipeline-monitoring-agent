@@ -56,17 +56,17 @@ class Intervention(BaseModel):
     payload: OutboundNudge | InternalEscalation | BriefEntry | StatusRecommendation
 
     @classmethod
-    def outbound(cls, payload: OutboundNudge) -> "Intervention":
+    def outbound(cls, payload: OutboundNudge) -> Intervention:
         return cls(intervention_type="outbound_nudge", payload=payload)
 
     @classmethod
-    def escalation(cls, payload: InternalEscalation) -> "Intervention":
+    def escalation(cls, payload: InternalEscalation) -> Intervention:
         return cls(intervention_type="internal_escalation", payload=payload)
 
     @classmethod
-    def brief(cls, payload: BriefEntry) -> "Intervention":
+    def brief(cls, payload: BriefEntry) -> Intervention:
         return cls(intervention_type="brief_entry", payload=payload)
 
     @classmethod
-    def status_recommendation(cls, payload: StatusRecommendation) -> "Intervention":
+    def status_recommendation(cls, payload: StatusRecommendation) -> Intervention:
         return cls(intervention_type="status_recommendation", payload=payload)

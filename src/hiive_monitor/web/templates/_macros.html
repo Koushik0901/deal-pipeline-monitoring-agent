@@ -1,0 +1,143 @@
+{% macro intervention_row(item) %}
+<div id="iv-{{ item.intervention_id }}"
+     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }} }'
+     class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
+
+  <!-- Compact summary row — click/keyboard to expand -->
+  <div
+    role="button"
+    tabindex="0"
+    :aria-expanded="expanded"
+    aria-controls="detail-{{ item.intervention_id }}"
+    x-on:click="expanded = !expanded"
+    x-on:keydown.enter.prevent="expanded = !expanded"
+    x-on:keydown.space.prevent="expanded = !expanded"
+    class="grid grid-cols-12 gap-3 px-3 py-2.5 items-center hover:bg-surface-container-low transition-colors cursor-pointer select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-container"
+  >
+    <!-- Status badge -->
+    <div class="col-span-2">
+      {% if item.severity == 'escalate' %}
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10 whitespace-nowrap">ESCALATE</span>
+      {% elif item.severity == 'act' %}
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10 whitespace-nowrap">ACT</span>
+      {% else %}
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap">WATCH</span>
+      {% endif %}
+    </div>
+
+    <!-- Deal ID -->
+    <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium text-on-surface-variant font-mono">
+      <a href="/deals/{{ item.deal_id }}" x-on:click.stop class="hover:text-primary-container hover:underline transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">{{ item.deal_id }}</a>
+    </div>
+
+    <!-- Issuer + Stage -->
+    <div class="col-span-5 sm:col-span-3 min-w-0">
+      {% if item.deal %}
+        <div class="text-[0.8125rem] font-semibold text-on-surface truncate">{{ item.deal.issuer_id | upper }}</div>
+        <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ item.deal.stage | replace('_', ' ') }}</div>
+      {% else %}
+        <div class="text-[0.8125rem] font-semibold text-on-surface">{{ item.deal_id }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Risk summary -->
+    <div class="col-span-4 min-w-0">
+      <p class="text-[0.8125rem] text-on-surface truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
+    </div>
+
+    <!-- Expand toggle -->
+    <div class="col-span-1 text-right text-[0.6875rem] text-on-surface-variant font-mono" aria-hidden="true" x-text="expanded ? '↑' : '↓'"></div>
+  </div>
+
+  <!-- Expanded detail panel -->
+  <div id="detail-{{ item.intervention_id }}" x-show="expanded" x-cloak class="border-t-[0.5px] border-outline-variant/50 bg-surface-container-low/40 px-4 py-4 space-y-4">
+
+    <!-- Dimensions triggered -->
+    {% if item.dimensions_triggered %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for dim in item.dimensions_triggered %}
+        <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.6875rem] text-on-surface-variant">{{ dim | replace('_', ' ') }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Draft body -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">{{ item.intervention_type | replace('_', ' ') }}</span>
+        <button
+          type="button"
+          x-on:click.stop="editing = !editing"
+          :aria-expanded="editing"
+          :aria-label="editing ? 'Cancel editing draft' : 'Edit draft'"
+          class="text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
+          x-text="editing ? 'Cancel' : 'Edit'"
+        ></button>
+      </div>
+
+      <div x-show="!editing" class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface whitespace-pre-wrap leading-relaxed">{{ item.draft_body }}</div>
+
+      <div x-show="editing" x-cloak>
+        <textarea
+          x-model="editText" rows="8"
+          aria-label="Edit intervention draft"
+          class="w-full rounded-[4px] border-[0.5px] border-outline-variant px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface bg-surface focus:outline-none focus:border-primary-container transition-colors resize-y"
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Reasoning -->
+    {% if item.reasoning_summary %}
+    <div>
+      <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Agent reasoning</span>
+      <p class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Action buttons -->
+    <div class="flex items-center gap-2 pt-0.5">
+
+      <div x-show="!editing">
+        <button
+          type="button"
+          hx-post="/interventions/{{ item.intervention_id }}/approve"
+          hx-target="#iv-{{ item.intervention_id }}"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful) announceAction('Intervention approved and sent.')"
+          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Approve &amp; send</button>
+      </div>
+
+      <div x-show="editing" x-cloak>
+        <button
+          type="button"
+          hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
+          hx-vals='js:{"final_text": editText}'
+          hx-target="#iv-{{ item.intervention_id }}"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful) announceAction('Edited intervention sent.')"
+          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Confirm edit &amp; send</button>
+      </div>
+
+      <button
+        type="button"
+        hx-post="/interventions/{{ item.intervention_id }}/dismiss"
+        hx-target="#iv-{{ item.intervention_id }}"
+        hx-swap="outerHTML"
+        hx-confirm="Dismiss this intervention?"
+        hx-on::after-request="if(event.detail.successful) announceAction('Intervention dismissed.')"
+        class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >Dismiss</button>
+
+      <button
+        type="button"
+        x-on:click.stop="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
+        class="ml-auto rounded-[4px] border-[0.5px] border-outline-variant px-3 py-1.5 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >Copy</button>
+
+    </div>
+  </div>
+
+</div>
+{% endmacro %}

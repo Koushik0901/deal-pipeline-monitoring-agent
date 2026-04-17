@@ -12,7 +12,6 @@ Item ID scheme: "eval/<scenario_id>" — stable across runs, enabling upsert sem
 
 from __future__ import annotations
 
-import pathlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,7 +25,7 @@ def dataset_item_id(scenario_id: str) -> str:
     return f"eval/{scenario_id}"
 
 
-def ensure_dataset(lf: "Langfuse", scenarios: list[dict]) -> None:
+def ensure_dataset(lf: Langfuse, scenarios: list[dict]) -> None:
     """
     Create the eval dataset (if absent) and upsert all scenario items.
 
@@ -76,7 +75,7 @@ def ensure_dataset(lf: "Langfuse", scenarios: list[dict]) -> None:
         )
 
 
-def get_dataset_items_by_scenario(lf: "Langfuse") -> dict:
+def get_dataset_items_by_scenario(lf: Langfuse) -> dict:
     """
     Return a mapping of scenario_id → DatasetItem for all items in the dataset.
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pathlib
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def run_deep_eval(
@@ -30,6 +30,7 @@ def run_deep_eval(
 
     # Lazy imports — keep base runner free of these deps
     from deepeval import evaluate
+
     from hiive_monitor.eval.deepeval_adapter import OpenRouterJudge
     from hiive_monitor.eval.deepeval_cases import build_expected_tools, build_test_case
     from hiive_monitor.eval.deepeval_metrics import build_metrics

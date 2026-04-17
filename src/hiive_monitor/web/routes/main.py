@@ -242,7 +242,7 @@ async def tick_status(tick_id: str):
         resp.headers["HX-Trigger"] = "tickComplete"
         return resp
     dispatched_at = _tick_dispatch_times.get(tick_id)
-    if dispatched_at and (time.time() - dispatched_at) > 30.0:
+    if dispatched_at and (time.time() - dispatched_at) > 180.0:
         _tick_dispatch_times.pop(tick_id, None)
         return HTMLResponse(
             f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-error-container px-4 py-2 text-[0.75rem] text-error">'

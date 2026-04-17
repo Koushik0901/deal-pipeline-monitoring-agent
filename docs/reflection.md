@@ -1,3 +1,15 @@
 # Reflection
 
+## Agent design
+
 The most interesting design choice was the enrichment loop inside the Deal Investigator: rather than running all six risk dimensions and immediately scoring severity, the agent's `assess_sufficiency` node can pause, call a targeted tool (comm history, prior observations, issuer history), and loop back — up to two rounds before being forced to a verdict. This is what makes it genuinely agentic rather than a dressed-up pipeline: the number of steps, the tools called, and the context assembled all vary per deal and per tick based on LLM reasoning. The hardest part to get right was the LangGraph compiled-graph closure semantics — the graph captures function bindings at compile time, which meant integration tests had to call node functions directly rather than relying on post-compile monkeypatching. The second-hardest was the clock abstraction: threading a single simulated-time source through every timestamp read in the system (LangGraph state, DAO queries, scheduler ticks, seed data generation) without any `datetime.now()` leaking through — the static analysis test that scans source files for bare `datetime.now()` calls exists precisely because this kind of leak is invisible until a time-dependent test flakes.
+
+## Eval design
+
+The two-tier eval design ended up being the right call. Tier 1 (deterministic YAML assertions) gives fast, zero-cost, fully reproducible signal on detection and prioritization correctness — it runs in CI without any API cost and catches regressions immediately. Tier 2 (G-Eval LLM-as-judge) is gated behind `--deep` because it costs real money and is non-deterministic; running it only when validating intervention quality before shipping is the right tradeoff.
+
+The `ground_truth` block per fixture was a good investment. All 27 fixtures declare exact expected severity and per-dimension triggered/not_triggered labels, enabling genuine precision/recall computation rather than just pass/fail counts. The confusion matrix and P/R table make it immediately visible if the agent is systematically over-triggering a particular dimension or conflating act with escalate.
+
+One friction point: the `expected_tools` field in every fixture is currently empty because no scenario explicitly requires a specific enrichment tool — the agent decides which tool to call based on the signal profile. This means Tool Correctness currently shows n/a. Fixing this requires either (a) populating expected_tools in fixtures where the tool choice is deterministic, or (b) accepting that tool routing is an emergent agent behavior that is indirectly tested via the enrichment assertions.
+
+The decision to use `deepeval_adapter.py` wrapping `ChatOpenRouter` as a `DeepEvalBaseLLM` was correct — it keeps the judge model consistent with the rest of the project and avoids maintaining a separate OpenAI API key. Using `deepeval`'s env-var approach (OPENAI_BASE_URL trick) would have been simpler to set up but brittle across deepeval version upgrades.

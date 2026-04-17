@@ -1,4 +1,4 @@
-{% from "brief.html" import intervention_row %}
+{% from "_macros.html" import intervention_row %}
 <div x-data="{
   severity: '',
   severities: {{ items | map(attribute='severity') | list | tojson }},

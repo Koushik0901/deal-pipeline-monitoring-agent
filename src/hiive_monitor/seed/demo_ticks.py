@@ -8,9 +8,10 @@ Called by: make demo (after make seed)
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from hiive_monitor import clock as clk, logging as log_module
+from hiive_monitor import clock as clk
+from hiive_monitor import logging as log_module
 from hiive_monitor.clock import SimulatedClock
 from hiive_monitor.db.init import init_checkpoint_db, init_domain_db
 from hiive_monitor.llm.client import clear_cache
@@ -21,7 +22,7 @@ def run_demo_ticks(num_ticks: int = 3, start_days_offset: int = 0) -> None:
     logger = log_module.get_logger()
 
     # Start from the seed data's base date
-    base = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
     sim_clock = SimulatedClock(start=base + timedelta(days=start_days_offset))
     clk.set_clock(sim_clock)
 

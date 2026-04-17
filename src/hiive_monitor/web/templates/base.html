@@ -42,8 +42,8 @@
     <div class="flex items-center gap-6">
       <a href="/brief" class="text-[0.8125rem] font-semibold text-primary-container tracking-tight">Hiive</a>
       <nav class="flex gap-0.5">
-        <a href="/brief" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request.url.path.startswith('/brief') or request.url.path == '/' %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Daily Brief</a>
-        <a href="/queue" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request.url.path.startswith('/queue') %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Queue</a>
+        <a href="/brief" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request is defined and (request.url.path.startswith('/brief') or request.url.path == '/') %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Daily Brief</a>
+        <a href="/queue" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request is defined and request.url.path.startswith('/queue') %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Queue</a>
       </nav>
     </div>
     <div class="flex items-center gap-3">

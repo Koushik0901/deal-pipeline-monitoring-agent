@@ -2,8 +2,8 @@ from fastapi import APIRouter
 
 
 def _build_router() -> APIRouter:
-    from hiive_monitor.web.routes.main import router as _main_router
     from hiive_monitor.web.routes.debug import router as _debug_router
+    from hiive_monitor.web.routes.main import router as _main_router
     from hiive_monitor.web.routes.queue import router as _queue_router
     from hiive_monitor.web.routes.simulation import router as _simulation_router
 

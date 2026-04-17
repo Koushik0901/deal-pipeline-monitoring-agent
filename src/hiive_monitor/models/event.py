@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-
 EventType = Literal[
     "stage_transition",
     "doc_received",

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from hiive_monitor.db import dao
 from hiive_monitor.db.connection import get_domain_conn
@@ -59,7 +59,7 @@ def _iso(dt: datetime) -> str:
 
 def _now_base() -> datetime:
     """Fixed simulation base: 2026-04-16 09:00 UTC."""
-    return datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+    return datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
 
 
 def _ago(days: float, base: datetime | None = None) -> datetime:
@@ -598,6 +598,7 @@ def seed(reset: bool = False) -> None:
 
     if reset:
         import os
+
         from hiive_monitor.config import get_settings
         db_path = get_settings().domain_db_path
         if db_path != ":memory:" and os.path.exists(db_path):

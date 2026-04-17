@@ -79,3 +79,37 @@ decisions:
 
 In production, voice calibration would be derived from
 historical Transaction Services email samples.
+
+## Eval harness assumptions
+
+### Argument Correctness (metric)
+The eval runner measures Tool Correctness (was the right enrichment tool
+called?) but does not independently verify argument correctness (were the
+right arguments passed?). The assumption is that LangGraph state propagates
+`deal_id` and `issuer_id` deterministically from the fixture seed, so if the
+correct tool was called and produced non-empty output, the arguments were
+correct. A tool called with the wrong deal_id would return empty data, causing
+the scenario's enrichment assertions to fail — so Tool Correctness implicitly
+covers Argument Correctness for all cases that matter.
+
+### Factual Grounding (Tier 1.5, string-match)
+Share counts are checked in both plain (5000) and comma-formatted (5,000)
+variants. Prices are checked as 185.50 and $185.50. This covers the formats
+observed in LLM-drafted interventions but may miss unusual formatting (e.g.,
+$185.5 without trailing zero). Any miss is surfaced in the scorecard detail.
+The Tier 2 LLM-as-judge Factual Grounding metric provides a more semantic
+check.
+
+### deepeval judge model
+Tier 2 G-Eval uses `OpenRouterJudge` (EVAL_JUDGE_MODEL, defaulting to
+`qwen/qwen3-plus`) via `deepeval_adapter.py`. Scores are 0–1 and are not
+calibrated against human raters — they represent the judge model's rubric
+interpretation. A threshold of 0.7 is used as a passing bar; this is a
+starting point and should be adjusted after reviewing a sample of scored
+interventions.
+
+### Langfuse local deployment
+The `docker-compose.langfuse.yml` uses hardcoded local credentials
+(`NEXTAUTH_SECRET`, `SALT`). These are placeholders suitable for local
+development only. For any shared or persistent deployment, these must be
+replaced with strong random values.
