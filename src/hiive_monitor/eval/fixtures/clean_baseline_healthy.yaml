@@ -1,0 +1,61 @@
+id: clean_baseline_healthy
+category: stage_aging
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_005"
+    issuer_id: "ramp"
+    buyer_id: "buyer_03"
+    seller_id: "seller_02"
+    stage: "signing"
+    stage_entered_days_ago: 1
+    responsible_party: "buyer"
+    shares: 5000
+    price_per_share: 22.50
+    blockers: []
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      deal_size_usd: 112500
+    rofr_deadline_days_from_now: null
+    events:
+      - event_type: "stage_transition"
+        days_ago: 1
+        summary: "Entered signing"
+      - event_type: "comm_outbound"
+        days_ago: 1
+        summary: "Signature pages sent to buyer"
+        payload:
+          body: "Hi, the Ramp transfer signature pages are attached. Please review and countersign at your earliest convenience."
+  issuers:
+    - issuer_id: "ramp"
+      name: "Ramp"
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_03"
+      party_type: "buyer"
+      display_name: "Kairos Secondary LP"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_02"
+      party_type: "seller"
+      display_name: "Marcus Webb"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: informational
+  dimensions_triggered: []
+  dimensions_not_triggered:
+    - stage_aging
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+assertions:
+  severity_lte: watch
+  dimensions_not_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+    - unusual_characteristics
