@@ -499,8 +499,3 @@ Walking through the reviewer's 10 minutes with this plan in hand:
 **5:00–10:00** — Reviewer reads the README, the writeup, and pokes around `src/`. They see: the two genuine agent files, the dimension prompts, the intervention templates, the eval scenario YAML, the synthetic data generator. Every file has a clear purpose. Comments explain *why*, not *what*. The constitution is visible. The writeup explicitly names the tradeoffs that were made.
 
 That's the submission.
-
-
-<system-reminder>
-Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
-</system-reminder>

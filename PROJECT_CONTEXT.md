@@ -279,8 +279,3 @@ After this document, we will make three more passes before writing code:
 3. **The build itself.** With Claude Code, using this document as the source of truth and the milestone plan as the map.
 
 This document does not commit us to any of those decisions. It commits us to solving this problem, for this user, to this standard, under these constraints.
-
-
-<system-reminder>
-Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
-</system-reminder>
