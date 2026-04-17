@@ -1,0 +1,56 @@
+id: iq_03_nudge_references_stage
+category: intervention_quality
+description: >
+  Outbound nudge for a signing-stage deal must reference "signing" or "signature" in
+  the body (domain accuracy check). Validates the agent grounds its language in
+  deal-specific context, not generic business copy.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: stripe
+      name: Stripe
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_iq3
+      party_type: buyer
+      display_name: Kairos Secondary LP
+    - party_id: seller_iq3
+      party_type: seller
+      display_name: Alex Kowalski
+  deal:
+    deal_id: D-IQ-003
+    issuer_id: stripe
+    buyer_id: buyer_iq3
+    seller_id: seller_iq3
+    shares: 6000
+    price_per_share: 42.00
+    stage: signing
+    stage_entered_days_ago: 8
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    blockers:
+      - kind: pending_signature
+        description: Seller has not returned countersigned transfer agreement
+        since: "2026-04-10T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 8
+        summary: Signature pages sent to seller
+        payload:
+          body: "Hi Alex, the Stripe transfer signature pages are attached. Please countersign and return."
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: First reminder
+        payload:
+          body: "Following up on the signature pages. Please return at your earliest."
+
+assertions:
+  severity_gte: act
+  intervention_drafted: true
+  intervention_body_contains:
+    - "Stripe"

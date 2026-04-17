@@ -1,0 +1,60 @@
+id: det_03_stage_aging_severe
+category: detection
+description: >
+  Deal in docs_pending for 12 days (4x the 3-day baseline). First-time buyer hasn't
+  returned signed transfer agreement. Agent must flag stage_aging and unusual_characteristics
+  (first-time buyer). Severity should be act or escalate.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: anthropic
+      name: Anthropic
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer_c1
+      party_type: buyer
+      display_name: James Thornton
+      is_first_time: true
+      prior_breakage_count: 0
+    - party_id: seller_c1
+      party_type: seller
+      display_name: Priya Sharma
+  deal:
+    deal_id: D-TEST-003
+    issuer_id: anthropic
+    buyer_id: buyer_c1
+    seller_id: seller_c1
+    shares: 1500
+    price_per_share: 510.00
+    stage: docs_pending
+    stage_entered_days_ago: 12
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: true
+      prior_breakage_count: 0
+      multi_layer_rofr: true
+    blockers:
+      - kind: missing_doc
+        description: Signed transfer agreement not received from first-time buyer
+        since: "2026-04-10T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 10
+        summary: Sent docs package to first-time buyer
+        payload:
+          body: "Hi James, transfer docs attached. Please sign and return by EOW."
+      - event_type: comm_inbound
+        days_ago: 8
+        summary: Buyer requested extension to review with attorney
+        payload:
+          body: "Thank you, reviewing with my attorney. Can I have a few extra days?"
+
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - stage_aging
+    - unusual_characteristics
+  intervention_drafted: true

@@ -1,0 +1,49 @@
+id: det_04_communication_silence
+category: detection
+description: >
+  Deal in signing stage for 6 days (1.5x baseline) with 18 days of comm silence.
+  Responsible party is seller. Agent must flag communication_silence.
+  No deadline pressure, so severity should be watch or act.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: canva
+      name: Canva
+      typical_response_days: 5
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_d1
+      party_type: buyer
+      display_name: Nexus Ventures
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller_d1
+      party_type: seller
+      display_name: Alex Kowalski
+  deal:
+    deal_id: D-TEST-004
+    issuer_id: canva
+    buyer_id: buyer_d1
+    seller_id: seller_d1
+    shares: 4000
+    price_per_share: 34.50
+    stage: signing
+    stage_entered_days_ago: 6
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 18
+        summary: Signature pages sent to seller
+        payload:
+          body: "Hi Alex, attached are the signature pages. Please return ASAP."
+
+assertions:
+  severity_gte: watch
+  dimensions_triggered:
+    - communication_silence
+  intervention_drafted: true

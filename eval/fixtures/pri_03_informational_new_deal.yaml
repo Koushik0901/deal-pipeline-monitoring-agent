@@ -1,0 +1,38 @@
+id: pri_03_informational_new_deal
+category: prioritization
+description: >
+  Brand new deal in bid_accepted stage (entered today). No events, no deadline pressure,
+  no risk factors. Agent should score severity=informational with no intervention.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: perplexity
+      name: Perplexity AI
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_r1
+      party_type: buyer
+      display_name: Andromeda Capital Partners
+    - party_id: seller_r1
+      party_type: seller
+      display_name: Sarah Chen
+  deal:
+    deal_id: D-PRI-003
+    issuer_id: perplexity
+    buyer_id: buyer_r1
+    seller_id: seller_r1
+    shares: 2500
+    price_per_share: 65.00
+    stage: bid_accepted
+    stage_entered_days_ago: 0
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+
+assertions:
+  severity: informational
+  no_intervention: true

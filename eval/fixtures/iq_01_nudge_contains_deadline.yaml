@@ -1,0 +1,49 @@
+id: iq_01_nudge_contains_deadline
+category: intervention_quality
+description: >
+  Outbound nudge drafted for a ROFR-critical deal must contain: (1) the issuer name
+  "SpaceX", (2) the specific deadline date "2026-04-18". Validates FR-033 mandatory
+  content requirement.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: spacex
+      name: SpaceX
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_iq1
+      party_type: buyer
+      display_name: Andromeda Capital
+    - party_id: seller_iq1
+      party_type: seller
+      display_name: Sarah Chen
+  deal:
+    deal_id: D-IQ-001
+    issuer_id: spacex
+    buyer_id: buyer_iq1
+    seller_id: seller_iq1
+    shares: 5000
+    price_per_share: 185.50
+    stage: rofr_pending
+    stage_entered_days_ago: 28
+    rofr_deadline_days_from_now: 2
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 14
+        summary: Follow-up sent
+        payload:
+          body: "Following up on ROFR window closing April 18th."
+
+assertions:
+  severity: escalate
+  intervention_type: outbound_nudge
+  intervention_body_contains:
+    - "SpaceX"
+    - "2026-04-18"

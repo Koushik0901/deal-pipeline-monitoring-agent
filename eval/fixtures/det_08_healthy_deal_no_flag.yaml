@@ -1,0 +1,47 @@
+id: det_08_healthy_deal_no_flag
+category: detection
+description: >
+  Healthy deal: rofr_cleared stage, entered 1 day ago (well within 2-day baseline),
+  recent communication, no blockers, no risk factors. Agent should rate severity
+  informational or watch — no intervention drafted.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: ramp
+      name: Ramp
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_h1
+      party_type: buyer
+      display_name: Andromeda Capital Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller_h1
+      party_type: seller
+      display_name: Sarah Chen
+  deal:
+    deal_id: D-TEST-008
+    issuer_id: ramp
+    buyer_id: buyer_h1
+    seller_id: seller_h1
+    shares: 6000
+    price_per_share: 22.50
+    stage: rofr_cleared
+    stage_entered_days_ago: 1
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 1
+        summary: ROFR cleared — docs sent to buyer
+        payload:
+          body: "Great news — Ramp has waived its ROFR. Transfer docs attached for your review."
+
+assertions:
+  severity_lte: watch
+  no_intervention: true

@@ -1,0 +1,50 @@
+id: pri_04_funding_stage_healthy
+category: prioritization
+description: >
+  Deal in funding stage for 2 days (well within 3-day baseline). Recent communication.
+  Should score informational or watch — not act or escalate. Validates agent doesn't
+  over-flag healthy late-stage deals.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: canva
+      name: Canva
+      typical_response_days: 5
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_s1
+      party_type: buyer
+      display_name: Nexus Ventures Fund III
+    - party_id: seller_s1
+      party_type: seller
+      display_name: DataFlow Holdings LLC
+  deal:
+    deal_id: D-PRI-004
+    issuer_id: canva
+    buyer_id: buyer_s1
+    seller_id: seller_s1
+    shares: 8000
+    price_per_share: 34.50
+    stage: funding
+    stage_entered_days_ago: 2
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 2
+        summary: Funding wire instructions sent to buyer
+        payload:
+          body: "Hi, funding wire instructions attached. Please initiate transfer by EOD Friday."
+      - event_type: comm_inbound
+        days_ago: 1
+        summary: Buyer confirmed wire initiated
+        payload:
+          body: "Wire initiated this morning. Should settle tomorrow."
+
+assertions:
+  severity_lte: watch
+  no_intervention: true

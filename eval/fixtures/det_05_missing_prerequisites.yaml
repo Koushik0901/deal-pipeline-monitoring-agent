@@ -1,0 +1,56 @@
+id: det_05_missing_prerequisites
+category: detection
+description: >
+  Deal in issuer_notified for 10 days (5x the 2-day baseline) with two active blockers:
+  missing board approval docs and pending legal review. Agent must flag stage_aging and
+  missing_prerequisites.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: cerebras
+      name: Cerebras Systems
+      typical_response_days: 10
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer_e1
+      party_type: buyer
+      display_name: Kairos Secondary LP
+    - party_id: seller_e1
+      party_type: seller
+      display_name: DataFlow Holdings LLC
+  deal:
+    deal_id: D-TEST-005
+    issuer_id: cerebras
+    buyer_id: buyer_e1
+    seller_id: seller_e1
+    shares: 10000
+    price_per_share: 28.75
+    stage: issuer_notified
+    stage_entered_days_ago: 10
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      multi_layer_rofr: true
+    blockers:
+      - kind: missing_doc
+        description: Board approval documentation not yet provided by Cerebras
+        since: "2026-04-09T09:00:00Z"
+      - kind: awaiting_response
+        description: Legal review of transfer agreement pending from issuer counsel
+        since: "2026-04-10T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 10
+        summary: ROFR/transfer notice sent to Cerebras legal
+        payload:
+          body: "Dear Cerebras, notice of transfer attached. This requires board approval."
+
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+  intervention_drafted: true

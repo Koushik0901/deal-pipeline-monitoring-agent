@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+*.egg
+.eggs/
+
+# uv
+.uv/
+
+# Environment
+.env
+!.env.example
+
+# Databases (only checked-in seed DB is tracked)
+agent_checkpoints.db
+*.db-shm
+*.db-wal
+
+# Eval output (track latest.md only)
+eval_results/
+!eval_results/latest.md
+
+# Logs
+out/logs.jsonl
+*.log
+
+# Databases
+domain.db
+
+# Tailwind build output (built by make setup)
+src/hiive_monitor/web/static/app.css
+src/hiive_monitor/web/static/tailwind.css
+src/hiive_monitor/web/static/output.css
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# node (tailwind CLI only — no node_modules in src)
+node_modules/

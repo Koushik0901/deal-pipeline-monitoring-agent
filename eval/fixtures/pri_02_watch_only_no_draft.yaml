@@ -1,0 +1,44 @@
+id: pri_02_watch_only_no_draft
+category: prioritization
+description: >
+  Deal at watch severity: mild aging (1.5x baseline, docs_pending for 4.5 days),
+  communication recent. No deadline. Agent should flag severity=watch but NOT draft
+  an intervention (watch severity uses brief_entry, not outbound nudge).
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: rippling
+      name: Rippling
+      typical_response_days: 4
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_q1
+      party_type: buyer
+      display_name: Meridian Family Office
+    - party_id: seller_q1
+      party_type: seller
+      display_name: Priya Sharma
+  deal:
+    deal_id: D-PRI-002
+    issuer_id: rippling
+    buyer_id: buyer_q1
+    seller_id: seller_q1
+    shares: 2000
+    price_per_share: 48.00
+    stage: docs_pending
+    stage_entered_days_ago: 5
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 2
+        summary: Docs package sent to buyer
+        payload:
+          body: "Hi, transfer docs attached for the Rippling shares. Please sign and return."
+
+assertions:
+  severity_lte: watch

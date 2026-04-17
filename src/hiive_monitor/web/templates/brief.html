@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Daily Brief — Hiive Deal Monitor{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-semibold text-neutral-900">Daily Brief</h1>
+      {% if tick %}
+      <p class="text-xs text-neutral-400 mt-0.5">Tick {{ tick.tick_id[:8] }} · {{ tick.tick_completed_at[:16] if tick.tick_completed_at else 'in progress' }}</p>
+      {% else %}
+      <p class="text-xs text-neutral-400 mt-0.5">No tick run yet</p>
+      {% endif %}
+    </div>
+
+    <!-- Sim advance control -->
+    <div x-data="{ days: 1 }" class="flex items-center gap-2">
+      <span class="text-xs text-neutral-500">Advance sim:</span>
+      <input type="number" x-model="days" min="1" max="30" class="w-16 rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-700 text-center" />
+      <button
+        hx-post="/sim/advance"
+        hx-include="[name=days]"
+        hx-target="#sim-result"
+        hx-swap="innerHTML"
+        x-on:click="document.querySelector('[name=days]') || null"
+        hx-vals='js:{"days": days}'
+        class="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 transition-colors"
+      >
+        Run tick ↑
+      </button>
+      <div id="sim-result" class="text-xs text-neutral-500"></div>
+    </div>
+  </div>
+
+  <!-- Tab navigation -->
+  <div x-data="{ tab: 'brief' }" class="space-y-4">
+    <div class="flex gap-1 border-b border-neutral-200">
+      <button
+        x-on:click="tab = 'brief'"
+        :class="tab === 'brief' ? 'border-b-2 border-neutral-900 text-neutral-900' : 'text-neutral-500'"
+        class="px-4 py-2 text-sm font-medium transition-colors"
+      >
+        Top Priority ({{ items|selectattr('severity', 'in', ['act', 'escalate'])|list|length }})
+      </button>
+      <button
+        x-on:click="tab = 'all'"
+        :class="tab === 'all' ? 'border-b-2 border-neutral-900 text-neutral-900' : 'text-neutral-500'"
+        class="px-4 py-2 text-sm font-medium transition-colors"
+      >
+        All Open Items ({{ items|length }})
+      </button>
+    </div>
+
+    <!-- Brief tab -->
+    <div x-show="tab === 'brief'" class="space-y-3">
+      {% set priority_items = items|selectattr('severity', 'in', ['act', 'escalate'])|list %}
+      {% if priority_items %}
+        {% for item in priority_items[:7] %}
+          {{ intervention_card(item, loop.index) }}
+        {% endfor %}
+      {% else %}
+        <div class="rounded border border-neutral-100 bg-white px-6 py-12 text-center">
+          <p class="text-sm text-neutral-500">No act/escalate items. Pipeline looks healthy.</p>
+          {% if not tick %}
+          <p class="mt-2 text-xs text-neutral-400">Run a tick to populate the brief.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- All open items tab -->
+    <div x-show="tab === 'all'" class="space-y-3">
+      {% if items %}
+        {% for item in items %}
+          {{ intervention_card(item, loop.index) }}
+        {% endfor %}
+      {% else %}
+        <div class="rounded border border-neutral-100 bg-white px-6 py-8 text-center">
+          <p class="text-sm text-neutral-500">No pending interventions.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% macro intervention_card(item, rank) %}
+<div id="iv-{{ item.intervention_id }}" x-data="{ expanded: false, editing: false, editText: {{ item.draft_body | tojson }} }" class="rounded border border-neutral-200 bg-white">
+
+  <!-- Card header -->
+  <div class="flex items-start gap-4 px-5 py-4">
+
+    <!-- Severity badge -->
+    <div class="mt-0.5 flex-shrink-0">
+      {% if item.severity == 'escalate' %}
+        <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">ESCALATE</span>
+      {% elif item.severity == 'act' %}
+        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">ACT</span>
+      {% else %}
+        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600">WATCH</span>
+      {% endif %}
+    </div>
+
+    <!-- Deal info -->
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <a href="/deals/{{ item.deal_id }}" class="text-sm font-semibold text-neutral-900 hover:text-neutral-600 hover:underline">
+          {{ item.deal_id }}
+        </a>
+        {% if item.deal %}
+        <span class="text-xs text-neutral-400">{{ item.deal.issuer_id | upper }} · {{ item.deal.stage | replace('_', ' ') }}</span>
+        {% endif %}
+      </div>
+
+      <!-- Draft subject / headline -->
+      <p class="mt-1 text-sm text-neutral-700 leading-snug">
+        {{ item.draft_subject or item.draft_body[:100] }}…
+      </p>
+
+      <!-- Dimensions triggered -->
+      {% if item.dimensions_triggered %}
+      <div class="mt-2 flex flex-wrap gap-1">
+        {% for dim in item.dimensions_triggered %}
+        <span class="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">{{ dim | replace('_', ' ') }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Actions -->
+    <div class="flex-shrink-0 flex items-center gap-2">
+      <button
+        x-on:click="expanded = !expanded"
+        class="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1 rounded hover:bg-neutral-50"
+        x-text="expanded ? 'Hide ↑' : 'View draft ↓'"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Expanded: draft body + reasoning -->
+  <div x-show="expanded" x-cloak class="border-t border-neutral-100 px-5 py-4 space-y-4">
+
+    <!-- Draft body (editable) -->
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-xs font-medium text-neutral-500 uppercase tracking-wide">Draft {{ item.intervention_type | replace('_', ' ') }}</span>
+        <button x-on:click="editing = !editing" class="text-xs text-neutral-400 hover:text-neutral-600" x-text="editing ? 'Cancel edit' : 'Edit'"></button>
+      </div>
+
+      <!-- Read-only view -->
+      <div x-show="!editing" class="rounded bg-neutral-50 border border-neutral-100 px-4 py-3 text-sm text-neutral-700 whitespace-pre-wrap leading-relaxed font-mono text-xs">{{ item.draft_body }}</div>
+
+      <!-- Edit mode -->
+      <div x-show="editing" class="space-y-2">
+        <textarea
+          x-model="editText"
+          rows="8"
+          class="w-full rounded border border-neutral-200 px-3 py-2 text-xs font-mono text-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- Reasoning -->
+    {% if item.reasoning_summary %}
+    <div>
+      <span class="text-xs font-medium text-neutral-400 uppercase tracking-wide">Agent reasoning</span>
+      <p class="mt-1 text-xs text-neutral-500 leading-relaxed">{{ item.reasoning_summary }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Action buttons -->
+    <div class="flex items-center gap-2 pt-1" id="actions-{{ item.intervention_id }}">
+
+      <!-- Approve (or confirm edit) -->
+      <div x-show="!editing">
+        <button
+          hx-post="/interventions/{{ item.intervention_id }}/approve"
+          hx-target="#iv-{{ item.intervention_id }}"
+          hx-swap="outerHTML"
+          class="rounded bg-neutral-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 transition-colors"
+        >
+          Approve &amp; send
+        </button>
+      </div>
+
+      <div x-show="editing">
+        <button
+          hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
+          hx-vals='js:{"final_text": editText}'
+          hx-target="#iv-{{ item.intervention_id }}"
+          hx-swap="outerHTML"
+          class="rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
+        >
+          Confirm edit &amp; send
+        </button>
+      </div>
+
+      <!-- Dismiss -->
+      <button
+        hx-post="/interventions/{{ item.intervention_id }}/dismiss"
+        hx-target="#iv-{{ item.intervention_id }}"
+        hx-swap="outerHTML"
+        hx-confirm="Dismiss this intervention?"
+        class="rounded border border-neutral-200 px-4 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-700 hover:border-neutral-300 transition-colors"
+      >
+        Dismiss
+      </button>
+
+      <!-- Copy to clipboard -->
+      <button
+        x-on:click="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
+        class="ml-auto rounded border border-neutral-200 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
+      >
+        Copy
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endmacro %}

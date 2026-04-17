@@ -1,0 +1,58 @@
+id: detection_enrichment_issuer_breakage
+category: detection
+description: >
+  Stage aging on a deal where the buyer has prior breakage history.
+  Verifies the agent recognises the elevated risk pattern and escalates
+  above what aging alone would warrant. Seeded with a prior act-level
+  observation to test enrichment via fetch_prior_observations.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: databricks-enrich
+      name: Databricks
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-enrich-02
+      party_type: buyer
+      display_name: Repeat Buyer with Breakage
+      is_first_time: false
+      prior_breakage_count: 1
+    - party_id: seller-enrich-02
+      party_type: seller
+      display_name: Employee Seller B
+  deal:
+    deal_id: D-ENRICH-002
+    issuer_id: databricks-enrich
+    buyer_id: buyer-enrich-02
+    seller_id: seller-enrich-02
+    shares: 3500
+    price_per_share: 48.00
+    stage: docs_pending
+    stage_entered_days_ago: 8
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 1
+    events:
+      - event_type: comm_outbound
+        days_ago: 8
+        summary: Transfer docs sent
+        payload:
+          body: "Hi, please review and sign the Databricks transfer documents attached."
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: Follow-up after silence
+        payload:
+          body: "Following up on the transfer docs. Your prior deal at this stage required extra attention — please confirm receipt."
+      - event_type: comm_inbound
+        days_ago: 3
+        summary: Buyer acknowledged, requesting extension
+        payload:
+          body: "Got the docs. We may need a few more days."
+
+assertions:
+  severity_gte: act
+

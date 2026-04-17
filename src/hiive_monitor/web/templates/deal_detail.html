@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ deal.deal_id }} — Hiive Deal Monitor{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-semibold text-neutral-900">{{ deal.deal_id }}</h1>
+        <span class="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
+          {{ deal.stage | replace('_', ' ') | title }}
+        </span>
+      </div>
+      {% if issuer %}
+      <p class="mt-0.5 text-sm text-neutral-500">{{ issuer.name }} · {{ deal.shares | int | format_number }} shares @ ${{ "%.2f"|format(deal.price_per_share) }}</p>
+      {% endif %}
+    </div>
+    <a href="/brief" class="text-sm text-neutral-400 hover:text-neutral-600">← Brief</a>
+  </div>
+
+  <!-- Deal facts -->
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {% macro fact(label, value) %}
+    <div class="rounded border border-neutral-100 bg-white px-4 py-3">
+      <p class="text-xs text-neutral-400 uppercase tracking-wide">{{ label }}</p>
+      <p class="mt-1 text-sm font-medium text-neutral-800">{{ value or '—' }}</p>
+    </div>
+    {% endmacro %}
+    {{ fact("Stage entered", deal.stage_entered_at[:10] if deal.stage_entered_at else '—') }}
+    {{ fact("Responsible", deal.responsible_party | replace('_', ' ') if deal.responsible_party else '—') }}
+    {{ fact("ROFR deadline", deal.rofr_deadline[:10] if deal.rofr_deadline else 'None') }}
+    {{ fact("Buyer", deal.buyer_id) }}
+  </div>
+
+  <!-- Event timeline -->
+  <div>
+    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Event Timeline</h2>
+    {% if events %}
+    <div class="space-y-1">
+      {% for ev in events | sort(attribute='occurred_at', reverse=True) %}
+      <div class="flex items-start gap-3 text-xs">
+        <span class="flex-shrink-0 text-neutral-400 font-mono">{{ ev.occurred_at[:10] }}</span>
+        <span class="rounded px-1.5 py-0.5
+          {% if ev.event_type == 'comm_outbound' %}bg-blue-50 text-blue-700
+          {% elif ev.event_type == 'comm_inbound' %}bg-green-50 text-green-700
+          {% elif ev.event_type == 'stage_transition' %}bg-neutral-100 text-neutral-600
+          {% elif ev.event_type == 'comm_sent_agent_recommended' %}bg-purple-50 text-purple-700
+          {% else %}bg-neutral-50 text-neutral-500{% endif %}
+        ">{{ ev.event_type | replace('_', ' ') }}</span>
+        <span class="text-neutral-600">{{ ev.summary }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-neutral-400">No events yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Agent observations -->
+  <div>
+    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Agent Observations ({{ observations | length }})</h2>
+    {% if observations %}
+    <div class="space-y-3">
+      {% for obs in observations | sort(attribute='observed_at', reverse=True) %}
+      <div class="rounded border border-neutral-100 bg-white px-4 py-3 text-xs" x-data="{ show: false }">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-neutral-400">{{ obs.observed_at[:16] }}</span>
+            {% if obs.severity == 'escalate' %}
+              <span class="rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-700">ESCALATE</span>
+            {% elif obs.severity == 'act' %}
+              <span class="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">ACT</span>
+            {% elif obs.severity == 'watch' %}
+              <span class="rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-600">WATCH</span>
+            {% else %}
+              <span class="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500">INFO</span>
+            {% endif %}
+            {% for dim in obs.reasoning_parsed.get('dimensions_triggered', []) %}
+            <span class="bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-500">{{ dim | replace('_', ' ') }}</span>
+            {% endfor %}
+          </div>
+          <button x-on:click="show = !show" class="text-neutral-400 hover:text-neutral-600"
+            x-text="show ? 'Hide reasoning' : 'Show reasoning'"></button>
+        </div>
+
+        <div x-show="show" x-cloak class="mt-3 space-y-2">
+          <p class="text-neutral-600 leading-relaxed">{{ obs.reasoning_parsed.get('severity_rationale', '') }}</p>
+          {% if debug %}
+          <pre class="rounded bg-neutral-50 p-3 text-xs text-neutral-500 overflow-auto max-h-64">{{ obs.reasoning_parsed | tojson(indent=2) }}</pre>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-neutral-400">No observations yet — run a tick to analyze this deal.</p>
+    {% endif %}
+  </div>
+
+  <!-- Interventions -->
+  <div>
+    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Interventions ({{ interventions | length }})</h2>
+    {% if interventions %}
+    <div class="space-y-2">
+      {% for iv in interventions | sort(attribute='created_at', reverse=True) %}
+      <div class="rounded border border-neutral-100 bg-white px-4 py-3 text-xs">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-mono text-neutral-400">{{ iv.created_at[:16] }}</span>
+          <span class="bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-600">{{ iv.intervention_type | replace('_', ' ') }}</span>
+          <span class="{% if iv.status == 'pending' %}text-amber-600{% elif iv.status in ['approved','edited'] %}text-green-600{% else %}text-neutral-400{% endif %} font-medium">
+            {{ iv.status }}
+          </span>
+        </div>
+        <p class="text-neutral-600">{{ iv.draft_subject or (iv.draft_body[:120] + '…') }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-neutral-400">No interventions drafted yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+id: det_02_rofr_deadline_elevated
+category: detection
+description: >
+  Deal in rofr_pending with 7 days to ROFR deadline. Agent must flag deadline_proximity
+  (elevated band, <10 days) and draft an outbound nudge. Communication is recent so
+  communication_silence should NOT trigger.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: stripe
+      name: Stripe
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_b1
+      party_type: buyer
+      display_name: Meridian Family Office
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller_b1
+      party_type: seller
+      display_name: Marcus Webb
+  deal:
+    deal_id: D-TEST-002
+    issuer_id: stripe
+    buyer_id: buyer_b1
+    seller_id: seller_b1
+    shares: 8000
+    price_per_share: 42.00
+    stage: rofr_pending
+    stage_entered_days_ago: 23
+    rofr_deadline_days_from_now: 7
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 3
+        summary: Sent ROFR status check to Stripe legal
+        payload:
+          body: "Hi, checking in on the ROFR status for the 8,000 share transfer. 7 days remain."
+
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - deadline_proximity
+  dimensions_not_triggered:
+    - communication_silence
+  intervention_drafted: true

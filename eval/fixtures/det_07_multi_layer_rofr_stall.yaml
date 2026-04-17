@@ -1,0 +1,56 @@
+id: det_07_multi_layer_rofr_stall
+category: detection
+description: >
+  Deal in rofr_pending with multi-layer ROFR (board + legal approval), 5 days to deadline.
+  Communication silence for 18 days. Buyer has prior breakage. Agent must flag
+  deadline_proximity + communication_silence + unusual_characteristics. Severity=escalate.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: cerebras
+      name: Cerebras Systems
+      typical_response_days: 10
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer_g1
+      party_type: buyer
+      display_name: Pinnacle Asset Management
+      is_first_time: false
+      prior_breakage_count: 2
+    - party_id: seller_g1
+      party_type: seller
+      display_name: Alex Kowalski
+  deal:
+    deal_id: D-TEST-007
+    issuer_id: cerebras
+    buyer_id: buyer_g1
+    seller_id: seller_g1
+    shares: 10000
+    price_per_share: 28.75
+    stage: rofr_pending
+    stage_entered_days_ago: 25
+    rofr_deadline_days_from_now: 5
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 2
+      multi_layer_rofr: true
+    events:
+      - event_type: comm_outbound
+        days_ago: 25
+        summary: ROFR notice sent with multi-layer note
+        payload:
+          body: "Dear Cerebras, ROFR notice attached. Board + legal approval required."
+      - event_type: comm_inbound
+        days_ago: 18
+        summary: Cerebras scheduled board meeting for April 5
+        payload:
+          body: "Board meeting scheduled for April 5th to address pending transfers."
+
+assertions:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+  intervention_drafted: true

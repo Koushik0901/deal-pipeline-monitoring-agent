@@ -1,0 +1,53 @@
+id: detection_enrichment_compounding_watch
+category: detection
+description: >
+  Three simultaneous watch-level signals that individually might not
+  cross the act threshold but together warrant act-level severity.
+  Verifies the agent enriches context and elevates severity on compounding signals.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: cerebras-enrich
+      name: Cerebras
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-enrich-01
+      party_type: buyer
+      display_name: First-Time LP Fund
+      is_first_time: true
+      prior_breakage_count: 0
+    - party_id: seller-enrich-01
+      party_type: seller
+      display_name: Employee Seller A
+  deal:
+    deal_id: D-ENRICH-001
+    issuer_id: cerebras-enrich
+    buyer_id: buyer-enrich-01
+    seller_id: seller-enrich-01
+    shares: 4000
+    price_per_share: 65.00
+    stage: docs_pending
+    stage_entered_days_ago: 6
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: true
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 6
+        summary: Transfer docs sent to buyer
+        payload:
+          body: "Hi, please review and sign the Cerebras transfer documents attached."
+      - event_type: comm_outbound
+        days_ago: 4
+        summary: Follow-up to first-time buyer
+        payload:
+          body: "Following up on the docs — let me know if you have any questions."
+
+assertions:
+  severity_gte: watch
+  intervention_drafted: true
+

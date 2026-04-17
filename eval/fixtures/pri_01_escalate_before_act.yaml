@@ -1,0 +1,47 @@
+id: pri_01_escalate_before_act
+category: prioritization
+description: >
+  Two deals: one with ROFR expiring in 1 day (escalate), one with 7-day comm silence (act).
+  The escalate deal must receive severity=escalate. Validates severity ordering.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: databricks
+      name: Databricks
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_p1
+      party_type: buyer
+      display_name: Kairos Secondary LP
+    - party_id: seller_p1
+      party_type: seller
+      display_name: Marcus Webb
+  deal:
+    deal_id: D-PRI-001
+    issuer_id: databricks
+    buyer_id: buyer_p1
+    seller_id: seller_p1
+    shares: 4000
+    price_per_share: 95.00
+    stage: rofr_pending
+    stage_entered_days_ago: 29
+    rofr_deadline_days_from_now: 1
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 16
+        summary: ROFR notice sent
+        payload:
+          body: "Dear Databricks, ROFR notice for 4,000 shares at $95."
+
+assertions:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+  intervention_drafted: true

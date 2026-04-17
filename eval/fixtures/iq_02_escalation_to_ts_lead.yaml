@@ -1,0 +1,57 @@
+id: iq_02_escalation_to_ts_lead
+category: intervention_quality
+description: >
+  Escalate-severity deal with multi-layer ROFR + prior breakage should produce an
+  internal_escalation intervention type (not outbound nudge) when the responsible
+  party is internal (hiive_ts). Validates routing logic.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: anthropic
+      name: Anthropic
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer_iq2
+      party_type: buyer
+      display_name: Nexus Ventures
+      is_first_time: false
+      prior_breakage_count: 1
+    - party_id: seller_iq2
+      party_type: seller
+      display_name: Marcus Webb
+  deal:
+    deal_id: D-IQ-002
+    issuer_id: anthropic
+    buyer_id: buyer_iq2
+    seller_id: seller_iq2
+    shares: 3000
+    price_per_share: 510.00
+    stage: issuer_notified
+    stage_entered_days_ago: 14
+    responsible_party: hiive_ts
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 1
+      multi_layer_rofr: true
+    blockers:
+      - kind: awaiting_response
+        description: Anthropic board approval outstanding for 12 days
+        since: "2026-04-04T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 14
+        summary: ROFR notice sent
+        payload:
+          body: "Dear Anthropic, transfer notice attached. Multi-layer board approval required."
+      - event_type: comm_inbound
+        days_ago: 12
+        summary: Anthropic acknowledged, board review ongoing
+        payload:
+          body: "Received. Board review in progress."
+
+assertions:
+  severity: escalate
+  intervention_drafted: true

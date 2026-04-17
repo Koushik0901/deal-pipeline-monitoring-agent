@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Queue — Hiive Deal Monitor{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-lg font-semibold text-neutral-900">All Open Items</h1>
+    <a href="/brief" class="text-sm text-neutral-500 hover:text-neutral-700 underline">← Daily Brief</a>
+  </div>
+
+  <!-- Filters -->
+  <form method="get" class="flex gap-3 items-end">
+    <div>
+      <label class="block text-xs text-neutral-500 mb-1">Severity</label>
+      <select name="severity" class="rounded border border-neutral-200 px-2 py-1.5 text-sm text-neutral-700">
+        <option value="">All</option>
+        <option value="escalate" {% if severity == 'escalate' %}selected{% endif %}>Escalate</option>
+        <option value="act" {% if severity == 'act' %}selected{% endif %}>Act</option>
+        <option value="watch" {% if severity == 'watch' %}selected{% endif %}>Watch</option>
+      </select>
+    </div>
+    <button type="submit" class="rounded border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50">Filter</button>
+    {% if severity or stage or issuer %}
+    <a href="/queue" class="text-sm text-neutral-400 hover:text-neutral-600">Clear</a>
+    {% endif %}
+  </form>
+
+  <!-- Items -->
+  {% if items %}
+  <div class="space-y-2">
+    {% for item in items %}
+    <div class="flex items-center gap-4 rounded border border-neutral-200 bg-white px-4 py-3">
+      {% if item.severity == 'escalate' %}
+        <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">ESCALATE</span>
+      {% elif item.severity == 'act' %}
+        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">ACT</span>
+      {% else %}
+        <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600">WATCH</span>
+      {% endif %}
+
+      <div class="flex-1 min-w-0">
+        <span class="text-sm font-medium text-neutral-900">{{ item.deal_id }}</span>
+        {% if item.deal %}
+        <span class="ml-2 text-xs text-neutral-400">{{ item.deal.issuer_id }} · {{ item.deal.stage | replace('_', ' ') }}</span>
+        {% endif %}
+        <p class="text-xs text-neutral-500 truncate mt-0.5">{{ item.draft_subject or (item.draft_body[:80] + '…') }}</p>
+      </div>
+
+      <a href="/deals/{{ item.deal_id }}" class="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-600 underline">View deal →</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="rounded border border-neutral-100 bg-white px-6 py-12 text-center">
+    <p class="text-sm text-neutral-500">No pending items{% if severity %} with severity "{{ severity }}"{% endif %}.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

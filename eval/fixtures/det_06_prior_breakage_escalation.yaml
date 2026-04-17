@@ -1,0 +1,59 @@
+id: det_06_prior_breakage_escalation
+category: detection
+description: >
+  Deal in docs_pending for 11 days (3.7x baseline) with buyer who has 2 prior broken deals.
+  Same stage as prior breakages. Agent must flag unusual_characteristics (prior_breakage_count=2)
+  and stage_aging. Severity should be escalate due to prior breakage + act-level aging.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: groq
+      name: Groq
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_f1
+      party_type: buyer
+      display_name: Pinnacle Asset Management
+      is_first_time: false
+      prior_breakage_count: 2
+    - party_id: seller_f1
+      party_type: seller
+      display_name: Vertex Employee Trust
+  deal:
+    deal_id: D-TEST-006
+    issuer_id: groq
+    buyer_id: buyer_f1
+    seller_id: seller_f1
+    shares: 7500
+    price_per_share: 14.20
+    stage: docs_pending
+    stage_entered_days_ago: 11
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 2
+    blockers:
+      - kind: pending_signature
+        description: Buyer hasn't returned executed docs — prior deal also broke at this stage
+        since: "2026-04-09T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 11
+        summary: Transfer docs sent to buyer
+        payload:
+          body: "Hi, transfer docs attached. Please sign and return within 5 business days."
+      - event_type: comm_inbound
+        days_ago: 9
+        summary: Buyer acknowledged receipt
+        payload:
+          body: "Got it, reviewing now."
+
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - stage_aging
+    - unusual_characteristics
+  intervention_drafted: true

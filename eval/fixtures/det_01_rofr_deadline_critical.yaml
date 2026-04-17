@@ -1,0 +1,57 @@
+id: det_01_rofr_deadline_critical
+category: detection
+description: >
+  Deal in rofr_pending with ROFR expiring in 2 days and no communication for 14 days.
+  Agent must flag deadline_proximity (critical band) + communication_silence, severity=escalate,
+  and draft an outbound nudge referencing the specific deadline date.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: spacex
+      name: SpaceX
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer_a1
+      party_type: buyer
+      display_name: Andromeda Capital
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller_s1
+      party_type: seller
+      display_name: Sarah Chen
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-TEST-001
+    issuer_id: spacex
+    buyer_id: buyer_a1
+    seller_id: seller_s1
+    shares: 5000
+    price_per_share: 185.50
+    stage: rofr_pending
+    stage_entered_days_ago: 28
+    rofr_deadline_days_from_now: 2
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 14
+        summary: Follow-up on ROFR status sent to SpaceX legal
+        payload:
+          body: "Following up on the ROFR notice sent April 2nd. Window expires April 18th. Please advise on SpaceX's election."
+
+assertions:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  intervention_drafted: true
+  intervention_type: outbound_nudge
+  intervention_body_contains:
+    - "SpaceX"
+    - "2026-04-18"

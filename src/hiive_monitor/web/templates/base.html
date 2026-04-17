@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Hiive Deal Monitor{% endblock %}</title>
+
+  <!-- Tailwind CSS (built output) -->
+  <link rel="stylesheet" href="/static/output.css" />
+
+  <!-- HTMX 2.0.4 (pinned) -->
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" crossorigin="anonymous"></script>
+
+  <!-- Alpine.js 3.14 (pinned) -->
+  <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" crossorigin="anonymous"></script>
+</head>
+<body class="h-full bg-neutral-50 text-neutral-900 font-inter antialiased">
+
+  <!-- Navigation bar -->
+  <nav class="border-b border-neutral-200 bg-white px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <a href="/brief" class="text-sm font-semibold text-neutral-900 hover:text-accent-600">
+        Deal Monitor
+      </a>
+      <a href="/brief" class="text-sm text-neutral-500 hover:text-neutral-700">Daily Brief</a>
+      <a href="/queue" class="text-sm text-neutral-500 hover:text-neutral-700">Queue</a>
+    </div>
+    <div class="flex items-center gap-3 text-xs text-neutral-400" id="clock-display"
+         hx-get="/api/clock" hx-trigger="every 5s" hx-swap="innerHTML">
+      {% block clock %}{% endblock %}
+    </div>
+  </nav>
+
+  <!-- Flash / toast area -->
+  <div id="toast-area" class="fixed top-4 right-4 z-50 flex flex-col gap-2" aria-live="polite"></div>
+
+  <!-- Main content -->
+  <main class="mx-auto max-w-5xl px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
