@@ -34,8 +34,17 @@ class BriefEntry(BaseModel):
     recommended_action: str = Field(max_length=200)
 
 
+class StatusRecommendation(BaseModel):
+    """Internal recommendation for what the TS analyst should proactively do to advance the deal."""
+
+    headline: str = Field(max_length=100)
+    current_status_summary: str = Field(max_length=200)
+    recommended_actions: list[str] = Field(min_length=1, max_length=5, description="1–3 concrete next steps")
+    priority: Literal["low", "medium", "high"]
+
+
 InterventionPayload = Annotated[
-    OutboundNudge | InternalEscalation | BriefEntry,
+    OutboundNudge | InternalEscalation | BriefEntry | StatusRecommendation,
     Field(discriminator=None),
 ]
 
@@ -43,8 +52,8 @@ InterventionPayload = Annotated[
 class Intervention(BaseModel):
     """Discriminated union wrapping any intervention type."""
 
-    intervention_type: Literal["outbound_nudge", "internal_escalation", "brief_entry"]
-    payload: OutboundNudge | InternalEscalation | BriefEntry
+    intervention_type: Literal["outbound_nudge", "internal_escalation", "brief_entry", "status_recommendation"]
+    payload: OutboundNudge | InternalEscalation | BriefEntry | StatusRecommendation
 
     @classmethod
     def outbound(cls, payload: OutboundNudge) -> "Intervention":
@@ -57,3 +66,7 @@ class Intervention(BaseModel):
     @classmethod
     def brief(cls, payload: BriefEntry) -> "Intervention":
         return cls(intervention_type="brief_entry", payload=payload)
+
+    @classmethod
+    def status_recommendation(cls, payload: StatusRecommendation) -> "Intervention":
+        return cls(intervention_type="status_recommendation", payload=payload)

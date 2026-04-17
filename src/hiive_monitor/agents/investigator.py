@@ -42,6 +42,11 @@ from hiive_monitor.llm.prompts.intervention_drafts import (
     build_escalation_prompt,
     build_outbound_nudge_prompt,
 )
+from hiive_monitor.llm.prompts.intervention_status_recommendation import (
+    STATUS_REC_OUTPUT,
+    STATUS_REC_TEMPLATE,
+    build_status_rec_prompt,
+)
 from hiive_monitor.llm.prompts.risk_communication_silence import (
     COMMUNICATION_SILENCE_OUTPUT,
     COMMUNICATION_SILENCE_TEMPLATE,
@@ -349,8 +354,21 @@ def draft_intervention(state: InvestigatorState) -> dict:
 
     responsible = snap.responsible_party or "hiive_ts"
 
-    if severity == Severity.WATCH:
-        # watch → brief_entry only (awareness item, no outreach)
+    if severity == Severity.WATCH and responsible == "hiive_ts":
+        # watch + hiive_ts responsible → status recommendation (proactive deal health check)
+        result = llm_client.call_structured(
+            template=STATUS_REC_TEMPLATE,
+            template_vars=build_status_rec_prompt(snap, sev_decision, signals),
+            output_model=STATUS_REC_OUTPUT,
+            model=settings.llm_model,
+            tick_id=state["tick_id"],
+            deal_id=state["deal_id"],
+            call_name="draft_status_recommendation",
+        )
+        if result:
+            intervention = Intervention.status_recommendation(result)
+    elif severity == Severity.WATCH:
+        # watch + external responsible → brief_entry (awareness item, no outreach)
         result = llm_client.call_structured(
             template=BRIEF_TEMPLATE,
             template_vars=build_brief_entry_prompt(snap, sev_decision, signals),
