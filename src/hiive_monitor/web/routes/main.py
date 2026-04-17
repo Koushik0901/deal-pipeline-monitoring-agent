@@ -23,7 +23,7 @@ async def root():
 
 
 @router.get("/brief")
-async def daily_brief(request: Request):
+async def daily_brief(request: Request, debug: str = ""):
     from hiive_monitor import clock as clk
 
     conn = get_domain_conn()
@@ -47,7 +47,7 @@ async def daily_brief(request: Request):
 
     return templates.TemplateResponse(
         request, "brief.html",
-        {"items": items, "tick": tick, "now": clk.now().isoformat()},
+        {"items": items, "tick": tick, "now": clk.now().isoformat(), "debug": debug == "1"},
     )
 
 
