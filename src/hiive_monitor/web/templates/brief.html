@@ -9,7 +9,14 @@
     <div>
       <h1 class="text-lg font-semibold text-neutral-900">Daily Brief</h1>
       {% if tick %}
-      <p class="text-xs text-neutral-400 mt-0.5">Tick {{ tick.tick_id[:8] }} · {{ tick.tick_completed_at[:16] if tick.tick_completed_at else 'in progress' }}</p>
+      <p class="text-xs text-neutral-400 mt-0.5">
+        Tick {{ tick.tick_id[:8] }} · {{ tick.tick_completed_at[:16] if tick.tick_completed_at else 'in progress' }}
+        {% if debug %}
+        · <a href="/debug/tick/{{ tick.tick_id }}" class="text-purple-500 hover:text-purple-700 font-mono">⟩ debug view</a>
+        {% else %}
+        · <a href="?debug=1" class="text-neutral-300 hover:text-neutral-500">debug</a>
+        {% endif %}
+      </p>
       {% else %}
       <p class="text-xs text-neutral-400 mt-0.5">No tick run yet</p>
       {% endif %}

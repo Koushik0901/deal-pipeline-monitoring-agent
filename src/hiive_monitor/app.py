@@ -21,7 +21,8 @@ templates.env.filters["format_number"] = lambda v: f"{int(v):,}"
 
 
 def create_app() -> FastAPI:
-    log_module.configure_logging(get_settings().log_format)
+    _cfg = get_settings()
+    log_module.configure_logging(log_format=_cfg.log_format, logs_path=_cfg.logs_path)
     logger = log_module.get_logger()
 
     @asynccontextmanager

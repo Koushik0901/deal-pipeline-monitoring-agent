@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_format: str = "human"  # "human" | "json"
+    logs_path: str = "out/logs.jsonl"
 
     # LLM models
     haiku_model: str = "claude-haiku-4-5-20251001"

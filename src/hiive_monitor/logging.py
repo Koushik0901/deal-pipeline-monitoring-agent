@@ -7,8 +7,11 @@ Provides correlation-ID contextvars for tick_id and deal_id (FR-026, FR-027).
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
+import pathlib
 import sys
+import threading
 
 import structlog
 
@@ -18,6 +21,22 @@ _tick_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _deal_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "deal_id", default=None
 )
+
+_jsonl_path: pathlib.Path | None = None
+_jsonl_lock = threading.Lock()
+
+
+def _jsonl_tee(logger, method_name, event_dict):  # noqa: ARG001
+    if _jsonl_path is not None:
+        record = {"level": method_name, **event_dict}
+        try:
+            with _jsonl_lock:
+                _jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+                with _jsonl_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+        except OSError:
+            pass
+    return event_dict
 
 
 def _add_correlation_ids(logger, method_name, event_dict):  # noqa: ARG001
@@ -30,12 +49,16 @@ def _add_correlation_ids(logger, method_name, event_dict):  # noqa: ARG001
     return event_dict
 
 
-def configure_logging(log_format: str = "human") -> None:
+def configure_logging(log_format: str = "human", logs_path: str | None = None) -> None:
+    global _jsonl_path
+    _jsonl_path = pathlib.Path(logs_path) if logs_path else None
+
     shared_processors = [
         structlog.contextvars.merge_contextvars,
         _add_correlation_ids,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
+        _jsonl_tee,
     ]
 
     if log_format == "json":
@@ -67,3 +90,27 @@ def bind_deal(deal_id: str) -> None:
 def clear_correlation_ids() -> None:
     _tick_id_var.set(None)
     _deal_id_var.set(None)
+
+
+def get_log_records(tick_id: str | None = None, deal_id: str | None = None) -> list[dict]:
+    """Read JSONL log file, optionally filtered by tick_id or deal_id."""
+    if _jsonl_path is None or not _jsonl_path.exists():
+        return []
+    records: list[dict] = []
+    with _jsonl_lock:
+        with _jsonl_path.open("r", encoding="utf-8") as f:
+            lines = f.readlines()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if tick_id and record.get("tick_id") != tick_id:
+            continue
+        if deal_id and record.get("deal_id") != deal_id:
+            continue
+        records.append(record)
+    return records
