@@ -1,0 +1,80 @@
+id: first_time_buyer_stall
+category: stage_aging
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_002"
+    issuer_id: "groq"
+    buyer_id: "buyer_04"
+    seller_id: "seller_03"
+    stage: "docs_pending"
+    stage_entered_days_ago: 42
+    responsible_party: "buyer"
+    shares: 2000
+    price_per_share: 14.20
+    blockers:
+      - kind: "missing_doc"
+        description: "Accreditation docs and signed transfer agreement not returned by first-time buyer"
+        since: "2026-03-05T09:00:00Z"
+    risk_factors:
+      is_first_time_buyer: true
+      prior_breakage_count: 0
+      deal_size_usd: 28400
+    rofr_deadline_days_from_now: null
+    events:
+      - event_type: "stage_transition"
+        days_ago: 42
+        summary: "Entered docs_pending"
+      - event_type: "comm_outbound"
+        days_ago: 42
+        summary: "Transfer docs sent to first-time buyer"
+        payload:
+          body: "Hi James, the Groq transfer documents are attached. Please review the accreditation form and transfer agreement and return signed copies."
+      - event_type: "comm_inbound"
+        days_ago: 35
+        summary: "Buyer: reviewing with attorney"
+        payload:
+          body: "Thank you. My attorney is reviewing. Will get back shortly."
+      - event_type: "comm_outbound"
+        days_ago: 28
+        summary: "Follow-up — no docs received"
+        payload:
+          body: "Following up on the Groq docs sent March 5th. We need the signed transfer agreement and accreditation form to proceed."
+      - event_type: "comm_outbound"
+        days_ago: 14
+        summary: "Second follow-up"
+        payload:
+          body: "Second follow-up: the deal cannot advance without your signed documents. Please return them today or advise on timeline."
+  issuers:
+    - issuer_id: "groq"
+      name: "Groq"
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_04"
+      party_type: "buyer"
+      display_name: "James Thornton (Individual)"
+      is_first_time: true
+      prior_breakage_count: 0
+    - party_id: "seller_03"
+      party_type: "seller"
+      display_name: "Priya Sharma"
+      is_first_time: true
+      prior_breakage_count: 0
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - stage_aging
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity

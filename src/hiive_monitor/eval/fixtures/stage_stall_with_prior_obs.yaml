@@ -1,0 +1,121 @@
+id: stage_stall_with_prior_obs
+category: stage_aging
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_008"
+    issuer_id: "anthropic"
+    buyer_id: "buyer_02"
+    seller_id: "seller_01"
+    stage: "docs_pending"
+    stage_entered_days_ago: 18
+    responsible_party: "buyer"
+    shares: 3000
+    price_per_share: 510.00
+    blockers:
+      - kind: "awaiting_response"
+        description: "Buyer's legal team has not returned transfer docs despite two prior warnings"
+        since: "2026-04-02T09:00:00Z"
+      - kind: "missing_doc"
+        description: "Board approval form for buyer entity still outstanding"
+        since: "2026-04-05T09:00:00Z"
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 1
+      multi_layer_rofr: true
+      deal_size_usd: 1530000
+    rofr_deadline_days_from_now: null
+    events:
+      - event_type: "stage_transition"
+        days_ago: 18
+        summary: "Entered docs_pending"
+      - event_type: "comm_outbound"
+        days_ago: 18
+        summary: "Transfer docs sent to buyer"
+        payload:
+          body: "Dear Nexus Ventures, the Anthropic transfer documents are attached. Please return by April 4th."
+      - event_type: "comm_inbound"
+        days_ago: 14
+        summary: "Buyer: reviewing, will return by April 4th"
+        payload:
+          body: "Received. Our legal team is reviewing. Will return by April 4th as requested."
+      - event_type: "comm_outbound"
+        days_ago: 10
+        summary: "Follow-up — docs not received by deadline"
+        payload:
+          body: "The April 4th deadline has passed without receipt of docs. Please provide the signed transfer agreement and board approval form immediately."
+      - event_type: "comm_outbound"
+        days_ago: 5
+        summary: "Second follow-up — 3 weeks stalled"
+        payload:
+          body: "Third outreach attempt. The deal has been stalled for 18 days at docs_pending. This is your second deal with us — we need docs returned today to avoid escalation."
+  prior_observations_to_seed:
+    - observation_id: "obs_prior_1"
+      tick_id: "tick_prior_1"
+      severity: "watch"
+      dimensions_evaluated:
+        - name: "stage_aging"
+          triggered: true
+          confidence: 0.72
+          evidence: "Anthropic: 10 days in docs_pending (baseline 3d, ratio 3.3x)"
+        - name: "missing_prerequisites"
+          triggered: true
+          confidence: 0.70
+          evidence: "Anthropic: awaiting_response open 4 days"
+      reasoning:
+        dimensions_triggered: ["stage_aging", "missing_prerequisites"]
+        primary_drivers: ["stage_aging", "missing_prerequisites"]
+    - observation_id: "obs_prior_2"
+      tick_id: "tick_prior_2"
+      severity: "act"
+      dimensions_evaluated:
+        - name: "stage_aging"
+          triggered: true
+          confidence: 0.85
+          evidence: "Anthropic: 14 days in docs_pending (baseline 3d, ratio 4.7x)"
+        - name: "missing_prerequisites"
+          triggered: true
+          confidence: 0.82
+          evidence: "Anthropic: awaiting_response open 8 days, missing_doc open 5 days"
+        - name: "communication_silence"
+          triggered: true
+          confidence: 0.78
+          evidence: "Anthropic: 10 days since last comm in docs_pending"
+      reasoning:
+        dimensions_triggered: ["stage_aging", "missing_prerequisites", "communication_silence"]
+        primary_drivers: ["stage_aging", "missing_prerequisites"]
+  issuers:
+    - issuer_id: "anthropic"
+      name: "Anthropic"
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: "buyer_02"
+      party_type: "buyer"
+      display_name: "Nexus Ventures Fund III"
+      is_first_time: false
+      prior_breakage_count: 1
+    - party_id: "seller_01"
+      party_type: "seller"
+      display_name: "Sarah Chen"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - communication_silence
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+  expected_tools:
+    - "fetch_prior_observations"
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - deadline_proximity

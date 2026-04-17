@@ -1,0 +1,70 @@
+id: combined_rofr_silence
+category: deadline_proximity
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_001"
+    issuer_id: "ramp"
+    buyer_id: "buyer_01"
+    seller_id: "seller_01"
+    stage: "rofr_pending"
+    stage_entered_days_ago: 19
+    responsible_party: "issuer"
+    shares: 6000
+    price_per_share: 22.50
+    blockers: []
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      deal_size_usd: 135000
+    rofr_deadline_days_from_now: 2
+    events:
+      - event_type: "stage_transition"
+        days_ago: 19
+        summary: "Entered rofr_pending"
+      - event_type: "comm_outbound"
+        days_ago: 19
+        summary: "ROFR notice sent to Ramp legal"
+        payload:
+          body: "Dear Ramp Legal, ROFR notice attached for 6,000 shares at $22.50. The 21-day window begins today. Please confirm receipt and advise on election."
+      - event_type: "comm_inbound"
+        days_ago: 13
+        summary: "Ramp acknowledged receipt"
+        payload:
+          body: "Received. We will review and respond before the window closes."
+      - event_type: "comm_outbound"
+        days_ago: 8
+        summary: "Follow-up on election status"
+        payload:
+          body: "Following up on the ROFR notice. The window closes in approximately 2 weeks. Please advise on Ramp's election."
+  issuers:
+    - issuer_id: "ramp"
+      name: "Ramp"
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_01"
+      party_type: "buyer"
+      display_name: "Andromeda Capital Partners"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_01"
+      party_type: "seller"
+      display_name: "Sarah Chen"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  dimensions_not_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence

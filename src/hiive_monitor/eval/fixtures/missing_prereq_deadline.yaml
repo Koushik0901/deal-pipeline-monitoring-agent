@@ -1,0 +1,83 @@
+id: missing_prereq_deadline
+category: missing_prerequisites
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_004"
+    issuer_id: "spacex"
+    buyer_id: "buyer_03"
+    seller_id: "seller_05"
+    stage: "rofr_pending"
+    stage_entered_days_ago: 26
+    responsible_party: "issuer"
+    shares: 3000
+    price_per_share: 185.50
+    blockers:
+      - kind: "awaiting_response"
+        description: "SpaceX board has not provided ROFR election — board meeting postponed twice"
+        since: "2026-04-04T09:00:00Z"
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      deal_size_usd: 556500
+    rofr_deadline_days_from_now: 4
+    events:
+      - event_type: "stage_transition"
+        days_ago: 26
+        summary: "Entered rofr_pending"
+      - event_type: "comm_outbound"
+        days_ago: 26
+        summary: "ROFR notice sent to SpaceX"
+        payload:
+          body: "Dear SpaceX Legal, ROFR notice for 3,000 shares at $185.50. 30-day window starts today. Please confirm receipt."
+      - event_type: "comm_inbound"
+        days_ago: 22
+        summary: "SpaceX: board meeting scheduled April 5th"
+        payload:
+          body: "Received. The board will address this at our April 5th meeting and respond promptly after."
+      - event_type: "comm_outbound"
+        days_ago: 10
+        summary: "Follow-up — post April 5th board meeting"
+        payload:
+          body: "The April 5th board meeting has passed. Please advise on SpaceX's ROFR election."
+      - event_type: "comm_inbound"
+        days_ago: 8
+        summary: "SpaceX: meeting postponed again to April 10th"
+        payload:
+          body: "Apologies, the meeting was postponed to April 10th due to a scheduling conflict."
+      - event_type: "comm_outbound"
+        days_ago: 4
+        summary: "Critical follow-up — window closing in 4 days"
+        payload:
+          body: "The ROFR window closes April 20th — 4 days away. Board consent form still outstanding. SpaceX must provide election notice or the ROFR will be treated as waived."
+  issuers:
+    - issuer_id: "spacex"
+      name: "SpaceX"
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_03"
+      party_type: "buyer"
+      display_name: "Kairos Secondary LP"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_05"
+      party_type: "seller"
+      display_name: "Alex Kowalski"
+      is_first_time: false
+      prior_breakage_count: 1
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - stage_aging
+    - unusual_characteristics
+    - communication_silence
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - deadline_proximity
+    - missing_prerequisites

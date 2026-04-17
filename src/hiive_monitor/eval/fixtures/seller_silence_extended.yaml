@@ -1,0 +1,81 @@
+id: seller_silence_extended
+category: communication_silence
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_006"
+    issuer_id: "canva"
+    buyer_id: "buyer_05"
+    seller_id: "seller_06"
+    stage: "signing"
+    stage_entered_days_ago: 21
+    responsible_party: "seller"
+    shares: 6000
+    price_per_share: 34.50
+    blockers:
+      - kind: "pending_signature"
+        description: "Seller has not returned countersigned transfer agreement or acknowledged follow-ups"
+        since: "2026-03-28T09:00:00Z"
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      deal_size_usd: 207000
+    rofr_deadline_days_from_now: null
+    events:
+      - event_type: "stage_transition"
+        days_ago: 21
+        summary: "Entered signing"
+      - event_type: "comm_outbound"
+        days_ago: 21
+        summary: "Transfer agreement sent to seller"
+        payload:
+          body: "Hi, the Canva transfer agreement is attached for your countersignature. Please return at your earliest convenience."
+      - event_type: "comm_inbound"
+        days_ago: 18
+        summary: "Seller acknowledged"
+        payload:
+          body: "Got it, will review and return this week."
+      - event_type: "comm_outbound"
+        days_ago: 14
+        summary: "Follow-up — no docs received"
+        payload:
+          body: "Following up on the Canva transfer docs sent March 26th. Please return the countersigned agreement."
+      - event_type: "comm_outbound"
+        days_ago: 7
+        summary: "Second follow-up — urgent"
+        payload:
+          body: "Second follow-up on Canva transfer docs. We need the countersigned agreement to proceed to funding. Please respond today."
+  issuers:
+    - issuer_id: "canva"
+      name: "Canva"
+      typical_response_days: 5
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_05"
+      party_type: "buyer"
+      display_name: "Meridian Family Office"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_06"
+      party_type: "seller"
+      display_name: "Vertex Employee Trust"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - communication_silence
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - communication_silence
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics

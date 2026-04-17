@@ -1,0 +1,78 @@
+id: multi_rofr_near_deadline
+category: deadline_proximity
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_007"
+    issuer_id: "cerebras"
+    buyer_id: "buyer_01"
+    seller_id: "seller_02"
+    stage: "rofr_pending"
+    stage_entered_days_ago: 25
+    responsible_party: "issuer"
+    shares: 8000
+    price_per_share: 28.75
+    blockers: []
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      multi_layer_rofr: true
+      deal_size_usd: 230000
+    rofr_deadline_days_from_now: 5
+    events:
+      - event_type: "stage_transition"
+        days_ago: 25
+        summary: "Entered rofr_pending"
+      - event_type: "comm_outbound"
+        days_ago: 25
+        summary: "ROFR notice sent to Cerebras"
+        payload:
+          body: "Dear Cerebras Legal, ROFR notice for 8,000 shares at $28.75. Per the shareholders' agreement, this requires board-level approval in addition to standard review. 30-day window starts today."
+      - event_type: "comm_inbound"
+        days_ago: 20
+        summary: "Cerebras: board meeting scheduled April 10th"
+        payload:
+          body: "Received. Our board will convene on April 10th to review this and other pending transfers."
+      - event_type: "comm_inbound"
+        days_ago: 6
+        summary: "Cerebras: board approved, preparing election notice"
+        payload:
+          body: "The board has approved the ROFR waiver. We are preparing the formal election notice and will send it within the week."
+      - event_type: "comm_outbound"
+        days_ago: 3
+        summary: "Follow-up — election notice not yet received"
+        payload:
+          body: "Following up on the Cerebras board approval notice. The ROFR window closes in 5 days. Please send the formal election notice today."
+  issuers:
+    - issuer_id: "cerebras"
+      name: "Cerebras Systems"
+      typical_response_days: 10
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: "buyer_01"
+      party_type: "buyer"
+      display_name: "Andromeda Capital Partners"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_02"
+      party_type: "seller"
+      display_name: "Marcus Webb"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - communication_silence
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - deadline_proximity
+  dimensions_not_triggered:
+    - missing_prerequisites
+    - communication_silence

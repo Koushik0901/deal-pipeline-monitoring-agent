@@ -1,0 +1,69 @@
+id: high_breakage_critical_stage
+category: unusual_characteristics
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_003"
+    issuer_id: "perplexity"
+    buyer_id: "buyer_06"
+    seller_id: "seller_04"
+    stage: "rofr_pending"
+    stage_entered_days_ago: 8
+    responsible_party: "issuer"
+    shares: 5000
+    price_per_share: 65.00
+    blockers: []
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 3
+      deal_size_usd: 325000
+    rofr_deadline_days_from_now: 13
+    events:
+      - event_type: "stage_transition"
+        days_ago: 8
+        summary: "Entered rofr_review"
+      - event_type: "comm_outbound"
+        days_ago: 8
+        summary: "ROFR notice sent to Perplexity"
+        payload:
+          body: "Dear Perplexity Legal, ROFR notice for 5,000 shares at $65.00. 21-day window starts today."
+      - event_type: "comm_inbound"
+        days_ago: 5
+        summary: "Perplexity: acknowledged"
+        payload:
+          body: "Received. We will review and respond within the window."
+      - event_type: "comm_outbound"
+        days_ago: 3
+        summary: "Internal risk flag — buyer history"
+        payload:
+          body: "Note: Buyer Pinnacle Asset Management has 3 prior deal breakages on Hiive. Monitoring closely per risk policy."
+  issuers:
+    - issuer_id: "perplexity"
+      name: "Perplexity AI"
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_06"
+      party_type: "buyer"
+      display_name: "Pinnacle Asset Management"
+      is_first_time: false
+      prior_breakage_count: 3
+    - party_id: "seller_04"
+      party_type: "seller"
+      display_name: "DataFlow Holdings LLC"
+      is_first_time: false
+      prior_breakage_count: 0
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - stage_aging
+    - missing_prerequisites
+    - communication_silence
+assertions:
+  severity_gte: act
+  dimensions_triggered:
+    - unusual_characteristics
