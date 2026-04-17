@@ -2,16 +2,36 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
+import traceback
+import uuid
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from hiive_monitor.app import templates
 from hiive_monitor.db import dao
 from hiive_monitor.db.connection import get_domain_conn
+from hiive_monitor.logging import get_logger
 
 router = APIRouter()
+log = get_logger(__name__)
+
+# Tracks real wall-clock dispatch time for in-flight ticks (used for timeout detection).
+_tick_dispatch_times: dict[str, float] = {}
+
+
+def _tick_polling_div(tick_id: str) -> str:
+    """Return the HTMX polling fragment for an in-flight tick (self-replaces via outerHTML swap)."""
+    short = tick_id[:8]
+    return (
+        f'<div id="tick-{short}" class="rounded-[4px] border-[0.5px] border-outline-variant bg-surface-container-low px-4 py-2 text-[0.75rem] text-on-surface-variant"'
+        f' hx-get="/api/tick/{tick_id}/status" hx-trigger="every 2s" hx-swap="outerHTML">'
+        f'Tick {short}&hellip; running <span class="animate-pulse">●</span>'
+        f"</div>"
+    )
 
 
 @router.get("/")
@@ -25,6 +45,7 @@ async def root():
 @router.get("/brief")
 async def daily_brief(request: Request, debug: str = ""):
     from hiive_monitor import clock as clk
+    from hiive_monitor.config import get_settings
 
     conn = get_domain_conn()
     tick = dao.get_last_completed_tick(conn)
@@ -47,7 +68,13 @@ async def daily_brief(request: Request, debug: str = ""):
 
     return templates.TemplateResponse(
         request, "brief.html",
-        {"items": items, "tick": tick, "now": clk.now().isoformat(), "debug": debug == "1"},
+        {
+            "items": items,
+            "tick": tick,
+            "now": clk.now().isoformat(),
+            "debug": debug == "1",
+            "clock_mode": get_settings().clock_mode,
+        },
     )
 
 
@@ -64,12 +91,13 @@ async def approve_intervention(request: Request, intervention_id: str):
     dao.approve_intervention_atomic(conn, intervention_id, simulated_timestamp=clk.now())
     conn.close()
 
-    # Return HTMX partial — replace the card with "sent" state
-    return HTMLResponse(
-        f'<div class="rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">'
-        f'✓ Approved and marked sent for deal {iv["deal_id"]}'
+    resp = HTMLResponse(
+        f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-primary-fixed px-4 py-3 text-[0.8125rem] text-primary-container">'
+        f'Approved and sent \u2014 {iv["deal_id"]}'
         f'</div>'
     )
+    resp.headers["HX-Trigger"] = "refreshStats"
+    return resp
 
 
 @router.post("/interventions/{intervention_id}/dismiss")
@@ -83,9 +111,11 @@ async def dismiss_intervention(request: Request, intervention_id: str):
     dao.update_intervention_status(conn, intervention_id, status="dismissed")
     conn.close()
 
-    return HTMLResponse(
-        f'<div class="text-xs text-neutral-400 px-4 py-2">Dismissed — {iv["deal_id"]}</div>'
+    resp = HTMLResponse(
+        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">Dismissed \u2014 {iv["deal_id"]}</div>'
     )
+    resp.headers["HX-Trigger"] = "refreshStats"
+    return resp
 
 
 @router.post("/interventions/{intervention_id}/confirm-edit")
@@ -104,8 +134,8 @@ async def confirm_edit(request: Request, intervention_id: str, final_text: str =
     conn.close()
 
     return HTMLResponse(
-        f'<div class="rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">'
-        f'✓ Edited draft sent for deal {iv["deal_id"]}'
+        f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-primary-fixed px-4 py-3 text-[0.8125rem] text-primary-container">'
+        f'Edited draft sent \u2014 {iv["deal_id"]}'
         f'</div>'
     )
 
@@ -181,7 +211,11 @@ async def sim_page(request: Request):
 
 
 @router.post("/sim/advance")
-async def advance_sim(request: Request, days: int = Form(...)):
+async def advance_sim(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    days: int = Form(...),
+):
     from hiive_monitor import clock as clk
     from hiive_monitor.agents.monitor import run_tick
 
@@ -189,23 +223,74 @@ async def advance_sim(request: Request, days: int = Form(...)):
         clk.get_clock().advance(days)
     except RuntimeError:
         return HTMLResponse(
-            '<div class="rounded border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-600">'
-            'Cannot advance clock in real-time mode — restart with CLOCK_MODE=simulated.'
-            '</div>',
+            '<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-error-container px-4 py-2 text-[0.75rem] text-error">'
+            "Cannot advance clock in real-time mode \u2014 restart with CLOCK_MODE=simulated."
+            "</div>",
             status_code=400,
         )
 
-    tick_id = run_tick(mode="simulated")
+    tick_id = str(uuid.uuid4())
+    _tick_dispatch_times[tick_id] = time.time()
 
-    return HTMLResponse(
-        f'<div class="rounded border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">'
-        f'Advanced {days} day(s). New tick: {tick_id[:8]}…'
-        f'<a href="/brief" class="ml-3 font-medium text-neutral-700 underline">View Brief →</a>'
-        f'</div>'
-    )
+    async def _run():
+        try:
+            await asyncio.to_thread(run_tick, mode="simulated", tick_id=tick_id)
+        except Exception as e:
+            log.error("sim.tick_failed", tick_id=tick_id, error=str(e), traceback=traceback.format_exc())
+        finally:
+            _tick_dispatch_times.pop(tick_id, None)
+
+    background_tasks.add_task(_run)
+
+    return HTMLResponse(_tick_polling_div(tick_id))
+
+
+@router.get("/api/tick/{tick_id}/status")
+async def tick_status(tick_id: str):
+    conn = get_domain_conn()
+    tick = dao.get_tick(conn, tick_id)
+    conn.close()
+    short = tick_id[:8]
+    if tick and tick.get("tick_completed_at"):
+        _tick_dispatch_times.pop(tick_id, None)
+        resp = HTMLResponse(
+            f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-primary-fixed px-4 py-2 text-[0.75rem] text-primary-container">'
+            f'Tick {short} complete. <a href="/brief" class="ml-3 font-medium underline">View Brief \u2192</a>'
+            f"</div>"
+        )
+        resp.headers["HX-Trigger"] = "tickComplete"
+        return resp
+    dispatched_at = _tick_dispatch_times.get(tick_id)
+    if dispatched_at and (time.time() - dispatched_at) > 30.0:
+        _tick_dispatch_times.pop(tick_id, None)
+        return HTMLResponse(
+            f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-error-container px-4 py-2 text-[0.75rem] text-error">'
+            f"Tick {short} timed out \u2014 check logs for errors.</div>"
+        )
+    return HTMLResponse(_tick_polling_div(tick_id))
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/brief-stats")
+async def brief_stats(request: Request):
+    conn = get_domain_conn()
+    tick = dao.get_last_completed_tick(conn)
+    open_ivs = dao.get_open_interventions(conn)
+    conn.close()
+    items = [{"severity": iv["severity"]} for iv in open_ivs]
+    return templates.TemplateResponse(
+        request, "_brief_stats.html", {"items": items, "tick": tick}
+    )
+
+
+@router.get("/api/status-bar")
+async def status_bar(request: Request):
+    conn = get_domain_conn()
+    tick = dao.get_last_completed_tick(conn)
+    conn.close()
+    return templates.TemplateResponse(request, "_status_bar.html", {"tick": tick})
 
 
 @router.get("/api/clock")
@@ -214,11 +299,13 @@ async def clock_api():
     conn = get_domain_conn()
     tick = dao.get_last_completed_tick(conn)
     conn.close()
-    return {
-        "now": clk.now().isoformat(),
-        "last_tick": tick["tick_id"] if tick else None,
-        "last_tick_at": tick["tick_completed_at"] if tick else None,
-    }
+    now_str = clk.now().strftime("%Y-%m-%d %H:%M")
+    tick_str = tick["tick_completed_at"][:16] if tick else "—"
+    return HTMLResponse(
+        f'<span>{now_str}</span>'
+        f'<span class="mx-1 text-neutral-300">·</span>'
+        f'<span>last tick {tick_str}</span>'
+    )
 
 
 @router.post("/api/tick")

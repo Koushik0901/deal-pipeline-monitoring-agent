@@ -1,0 +1,17 @@
+<div id="status-bar"
+     hx-get="/api/status-bar"
+     hx-trigger="tickComplete from:body"
+     hx-swap="outerHTML"
+     class="flex items-center gap-3 text-[0.6875rem] text-on-surface-variant">
+  {% if tick and tick.tick_completed_at %}
+    <span class="font-mono">{{ tick.tick_completed_at[:16] }}</span>
+    <span class="text-outline-variant">·</span>
+    <span>{{ tick.deals_screened or 0 }} screened</span>
+    {% if tick.deals_investigated %}
+      <span class="text-outline-variant">·</span>
+      <span>{{ tick.deals_investigated }} investigated</span>
+    {% endif %}
+  {% else %}
+    <span>No tick yet</span>
+  {% endif %}
+</div>

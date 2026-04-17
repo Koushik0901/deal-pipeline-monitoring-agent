@@ -2,58 +2,294 @@
 {% block title %}Queue — Hiive Deal Monitor{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-  <div class="flex items-center justify-between">
-    <h1 class="text-lg font-semibold text-neutral-900">All Open Items</h1>
-    <a href="/brief" class="text-sm text-neutral-500 hover:text-neutral-700 underline">← Daily Brief</a>
-  </div>
+<div
+  x-data="{
+    activeIndex: -1,
+    rowCount: {{ items|length }},
+    editing: {},
+    editText: {
+      {% for item in items %}
+      {{ item.intervention_id | tojson }}: {{ item.draft_body | tojson }}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    },
+    isEditing(id) { return !!this.editing[id] },
+    toggleEdit(id) { this.editing[id] = !this.editing[id] },
+    getRow(n) { return this.$el.querySelectorAll('[data-queue-row]')[n] },
+    focusNext(e) {
+      if (e.target.matches('input,textarea,select,button')) return;
+      this.activeIndex = Math.min(this.activeIndex + 1, this.rowCount - 1);
+    },
+    focusPrev(e) {
+      if (e.target.matches('input,textarea,select,button')) return;
+      this.activeIndex = Math.max(this.activeIndex - 1, 0);
+    },
+    approveActive(e) {
+      if (e.target.matches('input,textarea,select')) return;
+      if (this.activeIndex < 0) return;
+      const btn = this.getRow(this.activeIndex)?.querySelector('.approve-btn');
+      if (btn) htmx.trigger(btn, 'click');
+    },
+    dismissActive(e) {
+      if (e.target.matches('input,textarea,select')) return;
+      if (this.activeIndex < 0) return;
+      const btn = this.getRow(this.activeIndex)?.querySelector('.dismiss-btn');
+      if (btn) htmx.trigger(btn, 'click');
+    },
+    editActive(e) {
+      if (e.target.matches('input,textarea,select')) return;
+      if (this.activeIndex < 0) return;
+      const btn = this.getRow(this.activeIndex)?.querySelector('.edit-btn');
+      if (btn) btn.click();
+    },
+    init() {
+      window.addEventListener('htmx:afterSwap', () => {
+        this.rowCount = this.$el.querySelectorAll('[data-queue-row]').length;
+        if (this.activeIndex >= this.rowCount) this.activeIndex = Math.max(this.rowCount - 1, -1);
+      });
+    }
+  }"
+  @keydown.j.window="focusNext($event)"
+  @keydown.k.window="focusPrev($event)"
+  @keydown.a.window="approveActive($event)"
+  @keydown.e.window="editActive($event)"
+  @keydown.d.window="dismissActive($event)"
+  @keydown.escape.window="activeIndex = -1"
+  class="space-y-4 {% if items %}pb-14{% endif %}"
+>
 
-  <!-- Filters -->
-  <form method="get" class="flex gap-3 items-end">
+  <!-- Page header + filters -->
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
     <div>
-      <label class="block text-xs text-neutral-500 mb-1">Severity</label>
-      <select name="severity" class="rounded border border-neutral-200 px-2 py-1.5 text-sm text-neutral-700">
-        <option value="">All</option>
+      <h1 class="text-[1.5rem] font-semibold text-on-surface tracking-tight leading-none">Queue</h1>
+      <p class="text-[0.8125rem] text-on-surface-variant mt-1">
+        {% if items %}
+          {{ items|length }} pending intervention{{ 's' if items|length != 1 else '' }}
+          {%- if severity %} &middot; filtered by <span class="text-on-surface font-medium">{{ severity }}</span>{% endif %}
+        {% else %}
+          No pending items{% if severity %} matching "{{ severity }}"{% endif %}
+        {% endif %}
+      </p>
+    </div>
+
+    <form method="get" class="flex items-center gap-2 flex-shrink-0">
+      <label for="severity-filter" class="sr-only">Filter by severity</label>
+      <select id="severity-filter" name="severity"
+              class="h-7 px-2 text-[0.8125rem] text-on-surface bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-[4px] focus:border-primary-container focus:outline-none appearance-none cursor-pointer">
+        <option value="">All severities</option>
         <option value="escalate" {% if severity == 'escalate' %}selected{% endif %}>Escalate</option>
         <option value="act" {% if severity == 'act' %}selected{% endif %}>Act</option>
         <option value="watch" {% if severity == 'watch' %}selected{% endif %}>Watch</option>
+        <option value="informational" {% if severity == 'informational' %}selected{% endif %}>Informational</option>
       </select>
-    </div>
-    <button type="submit" class="rounded border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50">Filter</button>
-    {% if severity or stage or issuer %}
-    <a href="/queue" class="text-sm text-neutral-400 hover:text-neutral-600">Clear</a>
-    {% endif %}
-  </form>
-
-  <!-- Items -->
-  {% if items %}
-  <div class="space-y-2">
-    {% for item in items %}
-    <div class="flex items-center gap-4 rounded border border-neutral-200 bg-white px-4 py-3">
-      {% if item.severity == 'escalate' %}
-        <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">ESCALATE</span>
-      {% elif item.severity == 'act' %}
-        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">ACT</span>
-      {% else %}
-        <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600">WATCH</span>
+      <button type="submit"
+              class="h-7 px-3 bg-surface-container-lowest border-[0.5px] border-outline-variant/50 text-[0.8125rem] text-on-surface rounded-[4px] hover:bg-surface-container-low transition-colors">
+        Filter
+      </button>
+      {% if severity or stage or issuer %}
+      <a href="/queue" class="text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors">Clear</a>
       {% endif %}
+    </form>
+  </div>
 
-      <div class="flex-1 min-w-0">
-        <span class="text-sm font-medium text-neutral-900">{{ item.deal_id }}</span>
-        {% if item.deal %}
-        <span class="ml-2 text-xs text-neutral-400">{{ item.deal.issuer_id }} · {{ item.deal.stage | replace('_', ' ') }}</span>
-        {% endif %}
-        <p class="text-xs text-neutral-500 truncate mt-0.5">{{ item.draft_subject or (item.draft_body[:80] + '…') }}</p>
+  {% if items %}
+  <!-- Table with ARIA roles for screen reader navigation -->
+  <div role="table" aria-label="Pending interventions"
+       class="bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-lg overflow-hidden">
+
+    <!-- Column headers -->
+    <div role="rowgroup">
+      <div role="row"
+           class="grid grid-cols-[1fr_auto_auto] lg:grid-cols-[1.5fr_0.75fr_1.5fr_3fr_1.5fr] gap-2 lg:gap-4 px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">
+        <div role="columnheader">Deal</div>
+        <div role="columnheader">Severity</div>
+        <div role="columnheader" class="hidden lg:block">Stage</div>
+        <div role="columnheader" class="hidden lg:block">Draft</div>
+        <div role="columnheader" class="text-right">Actions</div>
+      </div>
+    </div>
+
+    <!-- Data rows -->
+    <div role="rowgroup">
+    {% for item in items %}
+    <div id="row-{{ item.intervention_id }}"
+         data-queue-row
+         data-row-index="{{ loop.index0 }}"
+         :class="{ 'bg-surface-container-low/50': activeIndex === {{ loop.index0 }} }"
+         class="border-b-[0.5px] border-outline-variant/50 last:border-b-0 group transition-colors duration-100">
+
+      <!-- Data row -->
+      <div role="row"
+           class="grid grid-cols-[1fr_auto_auto] lg:grid-cols-[1.5fr_0.75fr_1.5fr_3fr_1.5fr] gap-2 lg:gap-4 px-4 py-3 items-center hover:bg-surface-container-low/60 transition-colors duration-100 cursor-default"
+           @click="activeIndex = {{ loop.index0 }}">
+
+        <!-- Deal -->
+        <div role="cell" class="flex flex-col min-w-0">
+          <a href="/deals/{{ item.deal_id }}"
+             class="text-[0.8125rem] font-semibold text-on-surface hover:text-primary-container transition-colors truncate"
+             @click.stop>
+            {{ item.deal.issuer_id if item.deal else item.deal_id }}
+          </a>
+          <span class="text-[0.6875rem] text-on-surface-variant font-mono">{{ item.deal_id }}</span>
+        </div>
+
+        <!-- Severity badge -->
+        <div role="cell">
+          {% if item.severity == 'escalate' %}
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+          {% elif item.severity == 'act' %}
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+          {% elif item.severity == 'watch' %}
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+          {% else %}
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-on-surface-variant/10">INFO</span>
+          {% endif %}
+        </div>
+
+        <!-- Stage -->
+        <div role="cell" class="hidden lg:flex flex-col min-w-0">
+          {% if item.deal %}
+          <span class="text-[0.8125rem] text-on-surface truncate">{{ item.deal.stage | replace('_', ' ') | title }}</span>
+          {% endif %}
+          {% if item.created_at %}
+          <span class="text-[0.6875rem] text-on-surface-variant tabular-nums">{{ item.created_at[:10] }}</span>
+          {% endif %}
+        </div>
+
+        <!-- Draft preview -->
+        <div role="cell" class="hidden lg:block min-w-0 pr-2">
+          <p class="text-[0.8125rem] text-on-surface-variant leading-snug line-clamp-2">
+            {% if item.draft_subject %}<span class="text-on-surface font-medium">{{ item.draft_subject }}</span> &mdash; {% endif %}{{ item.draft_body or '&mdash;' }}
+          </p>
+        </div>
+
+        <!-- Actions: hover-reveal + keyboard-active reveal -->
+        <div role="cell" class="flex items-center justify-end gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 lg:transition-opacity lg:duration-150"
+             :class="activeIndex === {{ loop.index0 }} ? 'lg:!opacity-100' : ''">
+
+          <!-- Edit toggle -->
+          <button type="button" class="edit-btn h-8 w-8 flex items-center justify-center rounded-[4px] border-[0.5px] border-outline-variant/50 text-on-surface-variant hover:text-primary-container hover:bg-surface-container-low transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+                  aria-label="Edit draft"
+                  :aria-expanded="isEditing('{{ item.intervention_id }}')"
+                  aria-controls="edit-panel-{{ item.intervention_id }}"
+                  @click.stop="toggleEdit('{{ item.intervention_id }}')">
+            <svg class="w-3.5 h-3.5" aria-hidden="true" fill="none" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.25">
+              <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Z"/>
+            </svg>
+          </button>
+
+          <!-- Dismiss -->
+          <button type="button" class="dismiss-btn h-8 w-8 flex items-center justify-center rounded-[4px] border-[0.5px] border-outline-variant/50 text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+                  aria-label="Dismiss intervention"
+                  hx-post="/interventions/{{ item.intervention_id }}/dismiss"
+                  hx-target="#row-{{ item.intervention_id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Dismiss this intervention?"
+                  hx-on::after-request="if(event.detail.successful) announceAction('Intervention dismissed.')"
+                  @click.stop>
+            <svg class="w-3.5 h-3.5" aria-hidden="true" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+            </svg>
+          </button>
+
+          <!-- Approve -->
+          <button type="button" class="approve-btn h-8 w-8 lg:w-auto lg:px-3 bg-primary-container text-on-primary rounded-[4px] hover:bg-secondary transition-colors flex items-center justify-center lg:gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+                  aria-label="Approve and send"
+                  hx-post="/interventions/{{ item.intervention_id }}/approve"
+                  hx-target="#row-{{ item.intervention_id }}"
+                  hx-swap="outerHTML"
+                  hx-on::after-request="if(event.detail.successful) announceAction('Intervention approved and sent.')"
+                  @click.stop>
+            <svg class="w-3.5 h-3.5" aria-hidden="true" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+            </svg>
+            <span class="hidden lg:inline text-[0.8125rem] font-medium">Approve</span>
+          </button>
+        </div>
       </div>
 
-      <a href="/deals/{{ item.deal_id }}" class="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-600 underline">View deal →</a>
+      <!-- Inline edit panel -->
+      <div id="edit-panel-{{ item.intervention_id }}"
+           x-show="isEditing('{{ item.intervention_id }}')"
+           x-cloak
+           :aria-hidden="!isEditing('{{ item.intervention_id }}')"
+           class="border-t-[0.5px] border-outline-variant/50 bg-surface-container-low/30 px-4 py-3">
+        <form hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
+              hx-target="#row-{{ item.intervention_id }}"
+              hx-swap="outerHTML">
+          <label for="edit-text-{{ item.intervention_id }}" class="sr-only">Draft message text</label>
+          <textarea id="edit-text-{{ item.intervention_id }}"
+                    name="final_text"
+                    x-model="editText[{{ item.intervention_id | tojson }}]"
+                    rows="5"
+                    class="w-full bg-surface-container-lowest border-[0.5px] border-outline-variant/50 focus:border-primary-container rounded-[4px] px-3 py-2 text-[0.8125rem] text-on-surface resize-none focus:outline-none transition-colors leading-relaxed"></textarea>
+          <div class="flex items-center justify-end gap-2 mt-2">
+            <button type="button" @click="toggleEdit('{{ item.intervention_id }}')"
+                    class="h-7 px-3 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors">
+              Cancel
+            </button>
+            <button type="submit"
+                    class="h-7 px-3 bg-primary-container text-on-primary rounded-[4px] text-[0.8125rem] font-medium hover:bg-secondary transition-colors">
+              Send edited
+            </button>
+          </div>
+        </form>
+      </div>
+
     </div>
     {% endfor %}
+    </div><!-- end rowgroup -->
+
   </div>
+
   {% else %}
-  <div class="rounded border border-neutral-100 bg-white px-6 py-12 text-center">
-    <p class="text-sm text-neutral-500">No pending items{% if severity %} with severity "{{ severity }}"{% endif %}.</p>
+  <!-- Empty state -->
+  <div class="bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-lg px-6 py-16 text-center">
+    <p class="text-[0.8125rem] text-on-surface font-medium">No pending items{% if severity %} matching "{{ severity }}"{% endif %}</p>
+    <p class="text-[0.8125rem] text-on-surface-variant mt-1">All interventions have been actioned or the queue is empty.</p>
+    {% if severity or stage or issuer %}
+    <a href="/queue" class="mt-3 inline-block text-[0.8125rem] text-on-surface-variant hover:text-on-surface underline transition-colors">
+      Clear filters
+    </a>
+    {% endif %}
   </div>
   {% endif %}
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if items %}
+<!-- Keyboard shortcuts footer — aria-hidden: purely visual chrome for sighted users -->
+<div aria-hidden="true"
+     class="fixed bottom-0 left-0 right-0 z-10 bg-surface-container-low border-t-[0.5px] border-outline-variant/50 py-2.5 flex justify-center items-center">
+  <div class="flex items-center gap-5 text-[0.6875rem] text-on-surface-variant">
+    <span class="flex items-center gap-1.5">
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">j</kbd>
+      <span>/</span>
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">k</kbd>
+      <span>navigate</span>
+    </span>
+    <span class="w-px h-3 bg-outline-variant/50"></span>
+    <span class="flex items-center gap-1.5">
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">a</kbd>
+      <span>approve</span>
+    </span>
+    <span class="w-px h-3 bg-outline-variant/50"></span>
+    <span class="flex items-center gap-1.5">
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">e</kbd>
+      <span>edit</span>
+    </span>
+    <span class="w-px h-3 bg-outline-variant/50"></span>
+    <span class="flex items-center gap-1.5">
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">d</kbd>
+      <span>dismiss</span>
+    </span>
+    <span class="w-px h-3 bg-outline-variant/50"></span>
+    <span class="flex items-center gap-1.5">
+      <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">esc</kbd>
+      <span>deselect</span>
+    </span>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

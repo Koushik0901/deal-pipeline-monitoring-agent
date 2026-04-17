@@ -10,7 +10,6 @@ class Settings(BaseSettings):
 
     # API — OpenRouter
     openrouter_api_key: str = ""
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # Clock
     clock_mode: str = "simulated"  # "real_time" | "simulated"
@@ -35,13 +34,14 @@ class Settings(BaseSettings):
     log_format: str = "human"  # "human" | "json"
     logs_path: str = "out/logs.jsonl"
 
-    # LLM models — OpenRouter format (provider/model)
-    haiku_model: str = "anthropic/claude-haiku-4.5"
-    sonnet_model: str = "anthropic/claude-sonnet-4.6"
+    # LLM models — OpenRouter format (provider/model); swap via SLM_MODEL / LLM_MODEL in .env
+    slm_model: str = "google/gemma-4-31b-it"
+    llm_model: str = "qwen/qwen3.6-plus"
 
     # LLM limits
     llm_timeout_seconds: float = 30.0
     llm_max_retries: int = 3
+    llm_max_tokens: int | None = None  # None = let the model decide
 
 
 _settings: Settings | None = None

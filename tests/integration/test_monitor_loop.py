@@ -117,7 +117,8 @@ def test_crash_restart_no_duplicate_observations(db_path, monkeypatch):
     # Mock LLM to return above-threshold scores so all 5 deals are investigated
     from hiive_monitor.models.risk import AttentionScore, Severity, SeverityDecision, SufficiencyDecision
 
-    def _high_score_mock(*, prompt, output_model, model, tick_id, deal_id, call_name, system="", timeout=30.0):
+    def _high_score_mock(*, output_model, model, tick_id, deal_id, call_name,
+                          prompt="", system="", timeout=30.0, template=None, template_vars=None):
         if output_model is AttentionScore:
             return AttentionScore(deal_id=deal_id, score=0.85, reason="mock high")
         if output_model is SufficiencyDecision:

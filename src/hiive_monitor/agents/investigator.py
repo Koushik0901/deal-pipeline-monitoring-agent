@@ -33,44 +33,44 @@ from hiive_monitor.llm.deterministic.counterparty_responsiveness import (
 )
 from hiive_monitor.llm.prompts.intervention_drafts import (
     BRIEF_OUTPUT,
-    BRIEF_SYSTEM,
+    BRIEF_TEMPLATE,
     ESCALATION_OUTPUT,
-    ESCALATION_SYSTEM,
+    ESCALATION_TEMPLATE,
     OUTBOUND_OUTPUT,
-    OUTBOUND_SYSTEM,
+    OUTBOUND_TEMPLATE,
     build_brief_entry_prompt,
     build_escalation_prompt,
     build_outbound_nudge_prompt,
 )
 from hiive_monitor.llm.prompts.risk_communication_silence import (
     COMMUNICATION_SILENCE_OUTPUT,
-    COMMUNICATION_SILENCE_SYSTEM,
+    COMMUNICATION_SILENCE_TEMPLATE,
     build_communication_silence_prompt,
 )
 from hiive_monitor.llm.prompts.risk_deadline_proximity import (
     DEADLINE_PROXIMITY_OUTPUT,
-    DEADLINE_PROXIMITY_SYSTEM,
+    DEADLINE_PROXIMITY_TEMPLATE,
     build_deadline_proximity_prompt,
 )
 from hiive_monitor.llm.prompts.risk_missing_prerequisites import (
     MISSING_PREREQUISITES_OUTPUT,
-    MISSING_PREREQUISITES_SYSTEM,
+    MISSING_PREREQUISITES_TEMPLATE,
     build_missing_prerequisites_prompt,
 )
 from hiive_monitor.llm.prompts.risk_stage_aging import (
     STAGE_AGING_OUTPUT,
-    STAGE_AGING_SYSTEM,
+    STAGE_AGING_TEMPLATE,
     build_stage_aging_prompt,
 )
 from hiive_monitor.llm.prompts.risk_unusual_characteristics import (
     UNUSUAL_CHARACTERISTICS_OUTPUT,
-    UNUSUAL_CHARACTERISTICS_SYSTEM,
+    UNUSUAL_CHARACTERISTICS_TEMPLATE,
     build_unusual_characteristics_prompt,
 )
-from hiive_monitor.llm.prompts.severity import SEVERITY_OUTPUT, SEVERITY_SYSTEM, build_severity_prompt
+from hiive_monitor.llm.prompts.severity import SEVERITY_OUTPUT, SEVERITY_TEMPLATE, build_severity_prompt
 from hiive_monitor.llm.prompts.sufficiency import (
     SUFFICIENCY_OUTPUT,
-    SUFFICIENCY_SYSTEM,
+    SUFFICIENCY_TEMPLATE,
     build_sufficiency_prompt,
 )
 from hiive_monitor.models.interventions import BriefEntry, InternalEscalation, Intervention, OutboundNudge
@@ -110,52 +110,52 @@ def evaluate_risks(state: InvestigatorState) -> dict:
 
     # Dimension 1: Stage aging
     r1 = llm_client.call_structured(
-        prompt=build_stage_aging_prompt(snap),
+        template=STAGE_AGING_TEMPLATE,
+        template_vars=build_stage_aging_prompt(snap),
         output_model=STAGE_AGING_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id=deal_id,
         call_name="evaluate_risk_stage_aging",
-        system=STAGE_AGING_SYSTEM,
     )
     if r1:
         signals.append(r1)
 
     # Dimension 2: Deadline proximity
     r2 = llm_client.call_structured(
-        prompt=build_deadline_proximity_prompt(snap),
+        template=DEADLINE_PROXIMITY_TEMPLATE,
+        template_vars=build_deadline_proximity_prompt(snap),
         output_model=DEADLINE_PROXIMITY_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id=deal_id,
         call_name="evaluate_risk_deadline_proximity",
-        system=DEADLINE_PROXIMITY_SYSTEM,
     )
     if r2:
         signals.append(r2)
 
     # Dimension 3: Communication silence
     r3 = llm_client.call_structured(
-        prompt=build_communication_silence_prompt(snap),
+        template=COMMUNICATION_SILENCE_TEMPLATE,
+        template_vars=build_communication_silence_prompt(snap),
         output_model=COMMUNICATION_SILENCE_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id=deal_id,
         call_name="evaluate_risk_communication_silence",
-        system=COMMUNICATION_SILENCE_SYSTEM,
     )
     if r3:
         signals.append(r3)
 
     # Dimension 4: Missing prerequisites
     r4 = llm_client.call_structured(
-        prompt=build_missing_prerequisites_prompt(snap),
+        template=MISSING_PREREQUISITES_TEMPLATE,
+        template_vars=build_missing_prerequisites_prompt(snap),
         output_model=MISSING_PREREQUISITES_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id=deal_id,
         call_name="evaluate_risk_missing_prerequisites",
-        system=MISSING_PREREQUISITES_SYSTEM,
     )
     if r4:
         signals.append(r4)
@@ -170,13 +170,13 @@ def evaluate_risks(state: InvestigatorState) -> dict:
 
     # Dimension 6: Unusual characteristics
     r6 = llm_client.call_structured(
-        prompt=build_unusual_characteristics_prompt(snap),
+        template=UNUSUAL_CHARACTERISTICS_TEMPLATE,
+        template_vars=build_unusual_characteristics_prompt(snap),
         output_model=UNUSUAL_CHARACTERISTICS_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id=deal_id,
         call_name="evaluate_risk_unusual_characteristics",
-        system=UNUSUAL_CHARACTERISTICS_SYSTEM,
     )
     if r6:
         signals.append(r6)
@@ -203,18 +203,18 @@ def assess_sufficiency(state: InvestigatorState) -> dict:
 
     settings = get_settings()
     decision = llm_client.call_structured(
-        prompt=build_sufficiency_prompt(
+        template=SUFFICIENCY_TEMPLATE,
+        template_vars=build_sufficiency_prompt(
             state["deal_snapshot"],
             state.get("risk_signals", []),
             state.get("enrichment_count", 0),
             state.get("enrichment_context", {}),
         ),
         output_model=SUFFICIENCY_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=state["tick_id"],
         deal_id=state["deal_id"],
         call_name=f"assess_sufficiency_r{state.get('enrichment_count', 0)}",
-        system=SUFFICIENCY_SYSTEM,
     )
 
     if decision is None or decision.sufficient:
@@ -301,13 +301,13 @@ def enrich_context(state: InvestigatorState) -> dict:
 def score_severity(state: InvestigatorState) -> dict:
     settings = get_settings()
     decision = llm_client.call_structured(
-        prompt=build_severity_prompt(state["deal_snapshot"], state.get("risk_signals", [])),
+        template=SEVERITY_TEMPLATE,
+        template_vars=build_severity_prompt(state["deal_snapshot"], state.get("risk_signals", [])),
         output_model=SEVERITY_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=state["tick_id"],
         deal_id=state["deal_id"],
         call_name="decide_severity",
-        system=SEVERITY_SYSTEM,
     )
 
     severity = decision.severity if decision else Severity.INFORMATIONAL
@@ -352,39 +352,39 @@ def draft_intervention(state: InvestigatorState) -> dict:
     if severity == Severity.WATCH:
         # watch → brief_entry only (awareness item, no outreach)
         result = llm_client.call_structured(
-            prompt=build_brief_entry_prompt(snap, sev_decision, signals),
+            template=BRIEF_TEMPLATE,
+            template_vars=build_brief_entry_prompt(snap, sev_decision, signals),
             output_model=BRIEF_OUTPUT,
-            model=settings.sonnet_model,
+            model=settings.llm_model,
             tick_id=state["tick_id"],
             deal_id=state["deal_id"],
             call_name="draft_brief_entry",
-            system=BRIEF_SYSTEM,
         )
         if result:
             intervention = Intervention.brief(result)
     elif (responsible == "hiive_ts") and (severity == Severity.ESCALATE):
         # hiive_ts responsible + escalate → internal escalation note
         result = llm_client.call_structured(
-            prompt=build_escalation_prompt(snap, sev_decision, signals),
+            template=ESCALATION_TEMPLATE,
+            template_vars=build_escalation_prompt(snap, sev_decision, signals),
             output_model=ESCALATION_OUTPUT,
-            model=settings.sonnet_model,
+            model=settings.llm_model,
             tick_id=state["tick_id"],
             deal_id=state["deal_id"],
             call_name="draft_internal_escalation",
-            system=ESCALATION_SYSTEM,
         )
         if result:
             intervention = Intervention.escalation(result)
     else:
         # external responsible party → outbound nudge
         result = llm_client.call_structured(
-            prompt=build_outbound_nudge_prompt(snap, sev_decision, signals),
+            template=OUTBOUND_TEMPLATE,
+            template_vars=build_outbound_nudge_prompt(snap, sev_decision, signals),
             output_model=OUTBOUND_OUTPUT,
-            model=settings.sonnet_model,
+            model=settings.llm_model,
             tick_id=state["tick_id"],
             deal_id=state["deal_id"],
             call_name="draft_outbound_nudge",
-            system=OUTBOUND_SYSTEM,
         )
         if result:
             intervention = Intervention.outbound(result)

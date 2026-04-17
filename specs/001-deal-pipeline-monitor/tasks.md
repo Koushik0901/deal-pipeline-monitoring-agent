@@ -123,12 +123,12 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 - [X] T036 [US3] Implement `src/hiive_monitor/agents/monitor.py` — LangGraph `StateGraph` with `MonitorState`; nodes: `load_live_deals`, `screen_with_haiku` (fan-out per deal), `apply_suppression` (see T036a), `select_investigation_queue` (threshold 0.6, top-5 cap per FR-001a), `fan_out_investigators` (LangGraph `Send` API), `close_tick`
 - [X] T036a [US3] Implement `apply_suppression(state)` node in `agents/monitor.py` — for each deal in `attention_scores`, query `events` for any row where `deal_id=?` AND `event_type='comm_sent_agent_recommended'` AND tick-distance ≤ `settings.SUPPRESSION_TICKS` (default 3); if found, multiply raw score × 0.2 (FR-LOOP-02). Use `dao.py::recent_agent_recommended_comm(deal_id, within_ticks)` — new DAO helper to add alongside existing queries in T017.
 - [X] T036b [US3] Add `SUPPRESSION_TICKS: int = 3` field to `src/hiive_monitor/config.py::Settings` (env var `SUPPRESSION_TICKS`)
-- [ ] T036c [US3] Write `tests/integration/test_monitor_suppression.py` — seed a deal with raw Haiku score 0.8; insert a `comm_sent_agent_recommended` event at current tick-1; run `run_tick`; assert deal's post-suppression score is 0.16 (0.8 × 0.2) and deal does NOT appear in `investigation_queue`. Also assert that 4 ticks later (past suppression window) the same deal WOULD be investigated. (FR-LOOP-02)
+- [X] T036c [US3] Write `tests/integration/test_monitor_suppression.py` — seed a deal with raw Haiku score 0.8; insert a `comm_sent_agent_recommended` event at current tick-1; run `run_tick`; assert deal's post-suppression score is 0.16 (0.8 × 0.2) and deal does NOT appear in `investigation_queue`. Also assert that 4 ticks later (past suppression window) the same deal WOULD be investigated. (FR-LOOP-02)
 - [X] T037 [US3] Wire Monitor graph compile with `SqliteSaver.from_conn_string(CHECKPOINT_DB_PATH)`, `check_same_thread=False`, `thread_id=tick_id`
 - [X] T038 [US3] Implement `run_tick(mode)` in `agents/monitor.py` — atomic `INSERT INTO ticks` at start (idempotency anchor FR-024); invoke graph; `UPDATE ticks SET tick_completed_at` at end
 - [X] T039 [US3] Register `run_tick` with `scheduler.py` for real-time mode (60s IntervalTrigger)
-- [ ] T040 [US3] Write `tests/integration/test_monitor_loop.py::test_single_tick_happy_path` — seeded DB, one tick, `ticks` has one row, no duplicate observations on re-run
-- [ ] T041 [US3] Write `tests/integration/test_monitor_loop.py::test_crash_restart` — kill mid-tick after 2 of 5 Investigators emit; restart; assert 5 unique `(tick_id, deal_id)` pairs (plan §risk #2 mitigation)
+- [X] T040 [US3] Write `tests/integration/test_monitor_loop.py::test_single_tick_happy_path` — seeded DB, one tick, `ticks` has one row, no duplicate observations on re-run
+- [X] T041 [US3] Write `tests/integration/test_monitor_loop.py::test_crash_restart` — kill mid-tick after 2 of 5 Investigators emit; restart; assert 5 unique `(tick_id, deal_id)` pairs (plan §risk #2 mitigation)
 
 **Checkpoint**: US3 standalone — Monitor ticks and is idempotent.
 
@@ -150,7 +150,7 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 - [X] T045 [P] [US4] Implement `src/hiive_monitor/llm/prompts/risk_communication_silence.py`
 - [X] T046 [P] [US4] Implement `src/hiive_monitor/llm/prompts/risk_missing_prerequisites.py`
 - [X] T047 [P] [US4] Implement `src/hiive_monitor/llm/prompts/risk_unusual_characteristics.py`
-- [ ] T048 [US4] Implement `src/hiive_monitor/llm/validators.py::assert_evidence_references_deal(signal, snapshot)` — post-parse validator enforcing FR-033: evidence must contain at least one of {issuer name, stage name, numeric days, deadline date, counterparty role, blocker description}; triggers corrective reprompt on failure
+- [X] T048 [US4] Implement `src/hiive_monitor/llm/validators.py::assert_evidence_references_deal(signal, snapshot)` — post-parse validator enforcing FR-033: evidence must contain at least one of {issuer name, stage name, numeric days, deadline date, counterparty role, blocker description}; triggers corrective reprompt on failure
 
 ### 4.2 Severity scoring
 
@@ -182,8 +182,8 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
   - Call `enrich_context.py` Sonnet prompt with tool output → get `EnrichmentStep`
   - Increment `enrichment_count` in state; append `EnrichmentStep` to `enrichment_chain`
   - Loop edge: → N3 `assess_sufficiency`
-- [ ] T054 [US4] Write `tests/integration/test_investigator.py::test_enrichment_loop_bounded` — state with `enrichment_count=2` at N3 entry; assert N3 routes to N5 without calling N4 (FR-AGENT-04)
-- [ ] T055 [US4] Write `tests/integration/test_investigator.py::test_enrichment_fires_on_comm_silence` — deal with 14-day silence + prior comm explaining legal hold; assert `fetch_communication_content` called, enrichment_chain non-empty in observation
+- [X] T054 [US4] Write `tests/integration/test_investigator.py::test_enrichment_loop_bounded` — state with `enrichment_count=2` at N3 entry; assert N3 routes to N5 without calling N4 (FR-AGENT-04)
+- [X] T055 [US4] Write `tests/integration/test_investigator.py::test_enrichment_fires_on_comm_silence` — deal with 14-day silence + prior comm explaining legal hold; assert `fetch_communication_content` called, enrichment_chain non-empty in observation
 
 ### 4.5 Intervention drafters (all parallel after T048)
 
@@ -205,8 +205,8 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 - [X] T060 [US4] Compile Investigator with `SqliteSaver`, `thread_id=tick_id`, `checkpoint_ns=deal_id` (per-deal isolation)
 - [X] T061 [US4] Wire suppression logic in N6 — skip draft when `has_open_intervention(deal_id)` is True; emit observation linking existing `intervention_id` (FR-024a)
 - [X] T062 [US4] Wire Monitor's `fan_out_investigators` node to invoke Investigator per queued deal via LangGraph `Send` API
-- [ ] T063 [US4] Write `tests/integration/test_investigator.py::test_rofr_deadline_7d` — matches `scenarios/detection_rofr_7d.yaml`; asserts dimensions + severity=act + outbound_nudge
-- [ ] T064 [US4] Write `tests/integration/test_investigator.py::test_early_exit_informational` — healthy deal; assert no intervention drafted, no enrichment triggered
+- [X] T063 [US4] Write `tests/integration/test_investigator.py::test_rofr_deadline_7d` — matches `scenarios/detection_rofr_7d.yaml`; asserts dimensions + severity=act + outbound_nudge
+- [X] T064 [US4] Write `tests/integration/test_investigator.py::test_early_exit_informational` — healthy deal; assert no intervention drafted, no enrichment triggered
 
 **Checkpoint**: US3 + US4 = complete agent. Observations, enrichment chains, and interventions land in DB with full reasoning. UI not yet wired.
 
@@ -221,15 +221,15 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 ### Brief composer
 
 - [X] T065 [US1] Implement `src/hiive_monitor/llm/prompts/daily_brief.py` — Sonnet ranking prompt per [contracts/llm-schemas.md#compose_daily_brief](./contracts/llm-schemas.md); post-validates ranking heuristic (escalate before act, nearer deadline first)
-- [ ] T066 [US1] Implement `src/hiive_monitor/agents/brief_composer.py::compose_daily_brief(tick_id) -> DailyBrief` — reads completed observations + carry-over open interventions; invokes Sonnet
-- [ ] T067 [US1] Wire `brief_composer` call into Monitor `close_tick` node
+- [X] T066 [US1] Implement `src/hiive_monitor/agents/brief_composer.py::compose_daily_brief(tick_id) -> DailyBrief` — reads completed observations + carry-over open interventions; invokes Sonnet
+- [X] T067 [US1] Wire `brief_composer` call into Monitor `close_tick` node
 
 ### Routes + templates
 
 - [X] T068 [US1] Implement `src/hiive_monitor/web/routes/brief.py` — GET `/` redirect; GET `/brief` full page or fragment (HX-Request header); GET `/brief/all-open` with severity/stage/issuer filter query params
 - [X] T069 [US1] Implement `src/hiive_monitor/web/routes/interventions.py` — POST `/interventions/{id}/approve|edit|dismiss` per [contracts/http-routes.md](./contracts/http-routes.md); returns `_brief_item.html` fragment + OOB status-bar swap. **Approve and edit-confirm handlers MUST execute a single atomic transaction** (per plan.md "Analyst approval side-effects"): (1) `UPDATE interventions SET status=?, approved_at=clock.now(), final_text=?`, (2) `INSERT INTO events (deal_id, event_type, occurred_at, payload) VALUES (?, 'comm_sent_agent_recommended', clock.now(), json('{"intervention_id": ?}'))` — both within `conn.execute("BEGIN") … conn.execute("COMMIT")`; event insert failure rolls back status update (FR-LOOP-01). Dismiss does NOT emit an event.
 - [X] T069a [US1] Add `dao.py::approve_intervention_atomic(intervention_id, final_text=None)` — implements the two-statement transaction used by T069; mirror helper for `edit_intervention_atomic`. Keeps route thin and makes the transactional invariant testable in isolation.
-- [ ] T069b [US1] Write `tests/integration/test_approval_loop_closure.py` — (1) seed a `pending` intervention for deal D-0042; POST approve; assert exactly one `events` row with `event_type='comm_sent_agent_recommended'`, `deal_id='D-0042'`, `payload` referencing the `intervention_id`, `occurred_at` equal to current simulated clock. (2) Simulate event-insert failure (monkey-patch); assert intervention status remains `pending` (transaction rollback). (3) Dismiss path emits zero events. (FR-LOOP-01)
+- [X] T069b [US1] Write `tests/integration/test_approval_loop_closure.py` — (1) seed a `pending` intervention for deal D-0042; POST approve; assert exactly one `events` row with `event_type='comm_sent_agent_recommended'`, `deal_id='D-0042'`, `payload` referencing the `intervention_id`, `occurred_at` equal to current simulated clock. (2) Simulate event-insert failure (monkey-patch); assert intervention status remains `pending` (transaction rollback). (3) Dismiss path emits zero events. (FR-LOOP-01)
 - [X] T070 [P] [US1] Create `src/hiive_monitor/web/templates/brief.html` — full page; sim-controls placeholder; includes `_brief_list.html`
 - [X] T071 [P] [US1] Create `src/hiive_monitor/web/templates/_brief_list.html` — ordered list of `_brief_item.html` partials
 - [X] T072 [P] [US1] Create `src/hiive_monitor/web/templates/_brief_item.html` — severity badge, issuer + size, one-line summary, `<details>` for reasoning (incl. enrichment chain section when `enrichment_chain` non-empty), intervention body, approve/edit/dismiss with `hx-post` + `hx-target` + `hx-swap="outerHTML"`
@@ -334,6 +334,15 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 - [X] T112 [P] [US7] Author `intervention_internal_has_next_step.yaml` — `suggested_next_step` non-empty and issuer-specific
 - [X] T113 [P] [US7] Author `intervention_brief_entry_has_action.yaml` — `recommended_action` present and deal-specific
 
+### Golden scenarios — adversarial calibration (4 scenarios)
+
+**Purpose**: Test the agent's handling of uncertainty, conflicting signals, and prior history. These don't test detection — they test *calibration*. The agent should hold a measured middle position, not collapse to either extreme.
+
+- [ ] T113a [P] [US7] Author `adversarial_strong_single_signal.yaml` — deal with strong `deadline_proximity` (2 days to ROFR) but four otherwise healthy signals (responsive issuer, on-stage, no blockers, no silence); assert `severity_lte: act` — one strong signal should not produce escalate when the surrounding picture is clean
+- [ ] T113b [P] [US7] Author `adversarial_conflicting_comm.yaml` — 14-day comm silence as the surface signal, but `fetch_communication_content` reveals an earlier message explicitly explaining a legal hold; assert `enrichment_tool_called: fetch_communication_content` and `severity_lte: watch` — enrichment context must suppress the raw silence signal
+- [ ] T113c [P] [US7] Author `adversarial_prior_breakage_healthy_now.yaml` — buyer party with `prior_breakage_count: 3` but deal is currently on-stage, within deadline, and recently responsive; assert `severity_lte: watch`, `no_intervention: true` — historical counterparty risk alone should not trigger an intervention when present signals are clean
+- [ ] T113d [P] [US7] Author `adversarial_balanced_opposing_signals.yaml` — `stage_aging` triggered (dwell at 2× baseline) but `deadline_proximity` fine, recent `comm_inbound` present; assert `severity_gte: watch` AND `severity_lte: act` — agent must hold a calibrated middle, not over-escalate on aging alone nor dismiss the signal entirely
+
 **Checkpoint**: US7 standalone — `make eval` runs ≥13/15 green; enrichment scenario (T105) is one of the 15.
 
 ---
@@ -358,13 +367,15 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 **Purpose**: Hour 48–55 polish. Design pass, README, writeup.
 
 - [X] T122 Tailwind CLI final build in `make setup`: `npx tailwindcss -i static/input.css -o static/app.css --minify`
-- [ ] T123 [P] Design pass — run `/impeccable teach` to establish design context in `.impeccable.md`, then apply `/layout` + `/typeset` + `/polish` to `brief.html` and `deal_detail.html`
-- [ ] T124 [P] Empty states: "no items in today's brief", "no observations yet for this deal", "no enrichment performed" (when enrichment_chain empty in observation row)
-- [ ] T125 [P] Error states: LLM-error observation rendering, 404 deal, 400 sim-advance in real_time mode toast
+- [X] T123 [P] Design pass — run `/impeccable teach` to establish design context in `.impeccable.md`, then apply `/layout` + `/typeset` + `/polish` to `brief.html` and `deal_detail.html`
+- [ ] T123a [P] Auto-expand escalate items in `brief.html` `intervention_row` macro — change Alpine `x-data` `expanded` initial value from `false` to `{{ 'true' if item.severity == 'escalate' else 'false' }}` so the analyst sees reasoning and action buttons immediately for the most urgent items without an extra click
+- [X] T124 [P] Empty states: "no items in today's brief", "no observations yet for this deal", "no enrichment performed" (when enrichment_chain empty in observation row)
+- [X] T125 [P] Error states: LLM-error observation rendering, 404 deal, 400 sim-advance in real_time mode toast
+- [X] T125a [US5] Timeout for crashed background ticks — `/api/tick/{tick_id}/status` in `web/routes/main.py` polls every 2s with no upper bound; if `run_tick` crashes before `dao.start_tick()` inserts the tick row (or during the graph run), the client polls forever because the status endpoint keeps returning the "running" fragment. Add server-side detection: track tick-dispatch time (in-memory dict or a `ticks.dispatched_at` column) and, after ~30s with no completion, return a terminal "tick failed — check logs" div with no `hx-trigger` so the HTMX polling loop terminates. Alternative: cap client polling via `hx-trigger="every 2s, count:30"` and render a timeout state on final swap.
 - [X] T126 README — what/why (Hiive language), 3-command quickstart, screenshot, architecture diagram (Mermaid), current scorecard snapshot
 - [X] T127 [P] `docs/architecture.md` — Mermaid source including Investigator 7-node graph with enrichment loop shown
 - [X] T128 [P] `docs/writeup.md` — 400-word submission writeup; must mention enrichment-loop design as the "genuinely agentic" property
-- [ ] T129 [P] `docs/reflection.md` — 1-paragraph reflection
+- [X] T129 [P] `docs/reflection.md` — 1-paragraph reflection
 - [X] T130 `make clean` target — removes `*.db`, `out/`, `__pycache__`
 - [ ] T131 Full end-to-end validation: `make setup && make eval && make demo` from clean clone; fix any breakage. Targets: SC-001 (setup+demo <3 min), SC-006 (≥13/15 eval including enrichment scenario T105).
 
@@ -379,6 +390,11 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 - [ ] TS05 [STRETCH] Simulated-mode autoplay (SSE stream advancing N days over M seconds). Cut-off: hour 52.
 - [ ] TS06 [STRETCH] Document collection tracking (BUILD_PLAN §9.2 #6) — add `required_documents_by_stage` map to `models/stages.py`; add `documents_received` column to `deals` via `ALTER TABLE deals ADD COLUMN documents_received TEXT DEFAULT '[]' NOT NULL` (SQLite errors on duplicate-column re-run, so wrap the `ALTER` in a try/except catching `sqlite3.OperationalError` and treating it as a no-op — idempotent migration). Add this `ALTER` to a `stretch_migrations()` function in `db/schema.py` that is called only when the TS06 feature flag is enabled. Enrich `DealSnapshot` with `missing_documents` derived field; specialize `intervention_outbound_nudge.py` prompt so drafts targeting a `docs_pending` deal name the exact missing document by filename from `missing_documents`. Estimated 3h. Cut-off: **hour 48**.
 - [ ] TS07 [STRETCH] ROFR outcome tracking (BUILD_PLAN §9.2 #7) — extend `Stage` enum with `rofr_exercised` (between `rofr_pending` and `signing`); add `models/rofr_exercise.py` (`RofrExercise` with `assignee_party_id`, `original_buyer_party_id`, `exercised_at`); new Investigator branch node `handle_rofr_exercised` that drafts two interventions in one tick — (a) outbound nudge to issuer-assignee coordinating substitute-buyer signing, (b) internal internal_escalation notifying TS of original-buyer fallout needing comms; log the exercise event to `issuers` history so `fetch_issuer_history` surfaces exercise rate for future deals. Add YAML fixture `detection_rofr_exercised.yaml` to golden set. Estimated 4h. Cut-off: **hour 45**.
+- [ ] TS08 [STRETCH] Intervention outcome tracking — close the learning loop: after an intervention is approved, track whether `stage_transition` or `comm_inbound` events followed on the same deal within 7 days; surface the outcome stats in `assess_sufficiency` reasoning as e.g. "of 8 prior outbound nudges on this issuer, 7 resulted in a response within 7 days." Implementation: new `dao.py` function `get_intervention_outcomes(issuer_id, intervention_type)` joining approved `interventions` to subsequent `events` within a time window; add a fourth enrichment tool `fetch_intervention_outcomes` alongside the existing three (update `SufficiencyDecision.suggested_tool` Literal); engineer 3–4 historical settled deals in `seed/deals.py` with prior approved interventions + follow-on events; add one eval scenario `detection_outcome_history.yaml` asserting `enrichment_tool_called: fetch_intervention_outcomes` and that the intervention body references the outcome stat. Attribution is correlation not causation — phrase as "following a nudge, X of Y cases saw response" not "nudge caused response." Estimated 4h. Cut-off: **hour 50**.
+- [ ] TS09 [STRETCH] Portfolio-level pattern detection — a tick-level pattern detector at portfolio scope, complementing the per-deal Investigator. Add `detect_portfolio_patterns(state)` node in `agents/monitor.py` running after `close_tick`; groups live deals by `(issuer_id, stage)`, compares cluster size to a 3-tick rolling average derived from prior `agent_observations` counts, flags any cluster where current count exceeds 2× rolling average; stores results as JSON in a new `signals` column on `ticks` (idempotent `ALTER TABLE` in `stretch_migrations()`); renders as a collapsible "Portfolio signals" section at the top of `brief.html` when `tick.signals` is non-empty. Detection is purely deterministic — no LLM call. This is intentionally agentic at a different scope than the per-deal Investigator: the per-deal agent sees deal-level risk; the portfolio detector sees systemic issuer-level stalls that no single deal observation can surface. Estimated 5h. Cut-off: **hour 52**.
+- [ ] TS10 [STRETCH] Deal snooze — analyst can suppress a deal from the monitoring loop for N hours with a required reason, acknowledging out-of-band knowledge the agent cannot see. Schema: add `snoozed_until TEXT, snooze_reason TEXT` columns to `deals` via idempotent `ALTER TABLE` in `stretch_migrations()`; add `'snooze_created'` to `events.event_type` CHECK constraint; update `get_live_deals()` to filter `AND (snoozed_until IS NULL OR snoozed_until < current_simulated_time)`. New route `POST /deals/{deal_id}/snooze` with `hours: int = Form(48)` and `reason: str = Form(...)` — inserts `snooze_created` event to `events` (audit trail). UI: snooze button with reason textarea in brief expanded panel and deal detail header; "Snoozed until X — {reason}" badge on compact brief row when active. Snooze is semantically distinct from dismiss: dismiss is permanent and reason-free; snooze is temporary and reason-required. Estimated 4h. Cut-off: **hour 51**.
+- [ ] TS11 [STRETCH] Eval failure mode analysis — extend `write_scorecard` in `eval/runner.py` with cross-scenario diagnostics so the harness explains *why* scenarios failed, not just that they did. Add: (1) per-`RiskDimension` precision/recall table — for each dimension, count scenarios where it was expected (appears in assertions) vs. correctly triggered (assertion passed); (2) 4×4 severity confusion matrix (expected row × actual column) across all scenarios; (3) per-failure root-cause hint — when a `severity` assertion fails, correlate with which dimension assertions also failed in the same scenario and emit e.g. "severity under-estimated; likely missed dimension: deadline_proximity (also failed)." All computed from the existing `assertion_results` tuples — no new API calls, no schema changes. Estimated 2.5h. Cut-off: **hour 53**.
+- [ ] TS12 [STRETCH] Batch approve Watch items — add "Approve all Watch" button in the All Open tab header of `_all_open_list.html`, rendered only when ≥1 pending watch-severity intervention exists; new route `POST /interventions/batch-approve` with `severity_filter: str = Form('watch')` that loops `approve_intervention_atomic` for each matching pending intervention and returns a refreshed list fragment; `hx-confirm` on the button shows the count of items that will be affected. Scope is strictly Watch-severity: act/escalate items require individual review. Estimated 2h. Cut-off: **hour 53**.
 
 ---
 

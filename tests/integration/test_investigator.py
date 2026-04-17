@@ -163,7 +163,8 @@ def test_rofr_deadline_7d(db_path, monkeypatch):
     )
     from hiive_monitor.models.interventions import OutboundNudge
 
-    def _mock_llm(*, prompt, output_model, model, tick_id, deal_id, call_name, system="", timeout=30.0):
+    def _mock_llm(*, output_model, model, tick_id, deal_id, call_name,
+                  prompt="", system="", timeout=30.0, template=None, template_vars=None):
         if output_model is SufficiencyDecision:
             return SufficiencyDecision(sufficient=True, rationale="ok", tool_to_call=None)
         if output_model is SeverityDecision:
@@ -232,7 +233,8 @@ def test_early_exit_informational(db_path, monkeypatch):
 
     from hiive_monitor.models.risk import Severity, SeverityDecision, SufficiencyDecision
 
-    def _mock_llm(*, prompt, output_model, model, tick_id, deal_id, call_name, system="", timeout=30.0):
+    def _mock_llm(*, output_model, model, tick_id, deal_id, call_name,
+                  prompt="", system="", timeout=30.0, template=None, template_vars=None):
         if output_model is SufficiencyDecision:
             return SufficiencyDecision(sufficient=True, rationale="all clear", tool_to_call=None)
         if output_model is SeverityDecision:
@@ -248,13 +250,13 @@ def test_early_exit_informational(db_path, monkeypatch):
     draft_called: list[str] = []
     original_mock = _mock_llm
 
-    def _mock_with_spy(*, prompt, output_model, model, tick_id, deal_id, call_name, system="", timeout=30.0):
+    def _mock_with_spy(*, output_model, model, tick_id, deal_id, call_name,
+                       prompt="", system="", timeout=30.0, template=None, template_vars=None):
         if "draft" in call_name or "nudge" in call_name or "escalation" in call_name:
             draft_called.append(call_name)
         return original_mock(
-            prompt=prompt, output_model=output_model, model=model,
+            output_model=output_model, model=model,
             tick_id=tick_id, deal_id=deal_id, call_name=call_name,
-            system=system, timeout=timeout
         )
 
     import hiive_monitor.agents.investigator as _inv_mod

@@ -1,3 +1,121 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  [x-cloak] { display: none !important; }
+
+  /* ── Light mode token values ──────────────────────────────────────────────
+     All values are space-separated RGB triplets so Tailwind's opacity modifier
+     syntax (bg-surface/50, border-outline-variant/50, etc.) works correctly.
+     Neutrals are tinted toward Hiive forest green (hue ≈ 152°, chroma 0.008).
+  ── */
+  :root {
+    /* Surface hierarchy */
+    --c-surface:                    248 249 250;  /* #f8f9fa */
+    --c-surface-bright:             248 249 250;  /* #f8f9fa */
+    --c-surface-dim:                217 218 219;  /* #d9dadb */
+    --c-surface-container-lowest:   255 255 255;  /* #ffffff */
+    --c-surface-container-low:      243 244 245;  /* #f3f4f5 */
+    --c-surface-container:          237 238 239;  /* #edeeef */
+    --c-surface-container-high:     231 232 233;  /* #e7e8e9 */
+    --c-surface-container-highest:  225 227 228;  /* #e1e3e4 */
+    --c-surface-variant:            225 227 228;  /* #e1e3e4 */
+    --c-surface-tint:                63 102  83;  /* #3f6653 */
+    /* Text */
+    --c-on-surface:                  25  28  29;  /* #191c1d */
+    --c-on-surface-variant:          65  72  68;  /* #414844 */
+    --c-inverse-surface:             46  49  50;  /* #2e3132 */
+    --c-inverse-on-surface:         240 241 242;  /* #f0f1f2 */
+    /* Page canvas */
+    --c-background:                 248 249 250;  /* #f8f9fa */
+    --c-on-background:               25  28  29;  /* #191c1d */
+    /* Borders */
+    --c-outline:                    113 121 115;  /* #717973 */
+    --c-outline-variant:            193 200 194;  /* #c1c8c2 */
+    /* Primary — Hiive Forest Green */
+    --c-primary:                      1  45  29;  /* #012d1d */
+    --c-primary-container:           27  67  50;  /* #1b4332 */
+    --c-on-primary:                 255 255 255;  /* #ffffff */
+    --c-on-primary-container:       134 175 153;  /* #86af99 */
+    --c-primary-fixed:              193 236 212;  /* #c1ecd4 — ACT badge bg */
+    --c-primary-fixed-dim:          165 208 185;  /* #a5d0b9 */
+    --c-inverse-primary:            165 208 185;  /* #a5d0b9 */
+    /* Secondary */
+    --c-secondary:                   44 105  78;  /* #2c694e */
+    --c-secondary-container:        174 238 203;  /* #aeeecb */
+    --c-on-secondary:               255 255 255;  /* #ffffff */
+    --c-on-secondary-container:      49 110  82;  /* #316e52 */
+    --c-secondary-fixed:            177 240 206;  /* #b1f0ce */
+    --c-secondary-fixed-dim:        149 212 179;  /* #95d4b3 */
+    /* Tertiary — warm terra (WATCH severity) */
+    --c-tertiary:                    64  27  27;  /* #401b1b */
+    --c-tertiary-container:          90  48  47;  /* #5a302f */
+    --c-on-tertiary:                255 255 255;  /* #ffffff */
+    --c-on-tertiary-fixed:           51  17  17;  /* #331111 */
+    --c-tertiary-fixed:             255 218 216;  /* #ffdad8 — WATCH badge bg */
+    --c-tertiary-fixed-dim:         245 183 180;  /* #f5b7b4 */
+    /* Error — red (ESCALATE severity) */
+    --c-error:                      186  26  26;  /* #ba1a1a */
+    --c-error-container:            255 218 214;  /* #ffdad6 — ESCALATE badge bg */
+    --c-on-error:                   255 255 255;  /* #ffffff */
+    --c-on-error-container:         147   0  10;  /* #93000a */
+  }
+
+  /* ── Dark mode token overrides ───────────────────────────────────────────
+     Applied when .dark is on <html>. Surface hierarchy inverts: lower elevation
+     = darker; higher elevation = lighter. Primary button inverts to a light
+     green with dark text for contrast against the dark canvas.
+  ── */
+  .dark {
+    /* Surface hierarchy — elevated surfaces get lighter */
+    --c-surface:                     21  26  23;  /* #151a17 */
+    --c-surface-bright:              43  48  44;  /* #2b302c */
+    --c-surface-dim:                 13  17  15;  /* #0d110f */
+    --c-surface-container-lowest:    26  31  28;  /* #1a1f1c */
+    --c-surface-container-low:       31  37  33;  /* #1f2521 */
+    --c-surface-container:           37  43  39;  /* #252b27 */
+    --c-surface-container-high:      43  50  46;  /* #2b322e */
+    --c-surface-container-highest:   51  58  53;  /* #333a35 */
+    --c-surface-variant:             49  55  50;  /* #313732 */
+    --c-surface-tint:                61 140  98;  /* #3d8c62 */
+    /* Text */
+    --c-on-surface:                 220 229 222;  /* #dce5de */
+    --c-on-surface-variant:         138 153 144;  /* #8a9990 */
+    --c-inverse-surface:            220 229 222;  /* #dce5de */
+    --c-inverse-on-surface:          46  51  48;  /* #2e3330 */
+    /* Page canvas */
+    --c-background:                  14  18  16;  /* #0e1210 */
+    --c-on-background:              220 229 222;  /* #dce5de */
+    /* Borders */
+    --c-outline:                    109 119 111;  /* #6d776f */
+    --c-outline-variant:             61  68  64;  /* #3d4440 */
+    /* Primary — inverted in dark mode: button becomes light green w/ dark text */
+    --c-primary:                    134 201 158;  /* #86c99e */
+    --c-primary-container:          165 208 185;  /* #a5d0b9 — light green button bg */
+    --c-on-primary:                  27  67  50;  /* #1b4332 — dark green button text */
+    --c-on-primary-container:        27  67  50;  /* #1b4332 */
+    --c-primary-fixed:               30  58  41;  /* #1e3a29 — ACT badge bg (dark) */
+    --c-primary-fixed-dim:           24  46  33;  /* #182e21 */
+    --c-inverse-primary:             45 106  76;  /* #2d6a4c */
+    /* Secondary — hover state (slightly lighter than primary-container) */
+    --c-secondary:                  149 212 179;  /* #95d4b3 */
+    --c-secondary-container:         23  62  43;  /* #173e2b */
+    --c-on-secondary:                27  67  50;  /* #1b4332 */
+    --c-on-secondary-container:     142 203 168;  /* #8ecba8 */
+    --c-secondary-fixed:             31  77  56;  /* #1f4d38 */
+    --c-secondary-fixed-dim:         22  56  39;  /* #163827 */
+    /* Tertiary — WATCH severity (light warm text on dark warm bg) */
+    --c-tertiary:                   242 184 176;  /* #f2b8b0 */
+    --c-tertiary-container:          91  42  40;  /* #5b2a28 */
+    --c-on-tertiary:                 64  27  27;  /* #401b1b */
+    --c-on-tertiary-fixed:           45  16  16;  /* #2d1010 */
+    --c-tertiary-fixed:              58  20  20;  /* #3a1414 — WATCH badge bg (dark) */
+    --c-tertiary-fixed-dim:          78  30  30;  /* #4e1e1e */
+    /* Error — ESCALATE severity (light red text on dark red bg) */
+    --c-error:                      255 180 171;  /* #ffb4ab */
+    --c-error-container:             92  15  16;  /* #5c0f10 — ESCALATE badge bg (dark) */
+    --c-on-error:                    70   0   4;  /* #460004 */
+    --c-on-error-container:         255 180 171;  /* #ffb4ab */
+  }
+}

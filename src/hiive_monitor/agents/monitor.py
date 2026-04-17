@@ -35,7 +35,7 @@ from hiive_monitor.llm import client as llm_client
 from hiive_monitor.llm.client import call_structured
 from hiive_monitor.llm.prompts.screening import (
     SCREENING_OUTPUT,
-    SCREENING_SYSTEM,
+    SCREENING_TEMPLATE,
     build_screening_prompt,
 )
 from hiive_monitor.models.snapshot import DealSnapshot, Blocker, EventRef
@@ -155,13 +155,13 @@ def screen_with_haiku(state: MonitorState) -> dict:
         try:
             snapshot = _build_snapshot(deal, conn)
             result = call_structured(
-                prompt=build_screening_prompt(snapshot),
+                template=SCREENING_TEMPLATE,
+                template_vars=build_screening_prompt(snapshot),
                 output_model=SCREENING_OUTPUT,
-                model=settings.haiku_model,
+                model=settings.slm_model,
                 tick_id=state["tick_id"],
                 deal_id=deal_id,
                 call_name="screen_deal",
-                system=SCREENING_SYSTEM,
             )
             scores[deal_id] = result.score if result else 0.0
         except Exception as e:

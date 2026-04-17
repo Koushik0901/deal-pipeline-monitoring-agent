@@ -1,0 +1,54 @@
+{% set esc_count = items|selectattr('severity', 'equalto', 'escalate')|list|length %}
+{% set act_count = items|selectattr('severity', 'equalto', 'act')|list|length %}
+{% set watch_count = items|selectattr('severity', 'equalto', 'watch')|list|length %}
+<div id="brief-stats"
+     hx-get="/api/brief-stats"
+     hx-trigger="refreshStats from:body"
+     hx-swap="outerHTML"
+     class="flex flex-col gap-3">
+
+  <!-- Pipeline status -->
+  <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+    <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50">
+      <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Pipeline</span>
+    </div>
+    <div class="px-4 py-3 space-y-2">
+      {% if tick %}
+        <div class="flex items-baseline justify-between gap-4">
+          <span class="text-[0.6875rem] text-on-surface-variant">Last tick</span>
+          <span class="text-[0.6875rem] font-medium text-on-surface font-mono truncate">{{ tick.tick_completed_at[:16] if tick.tick_completed_at else '—' }}</span>
+        </div>
+        <div class="flex items-baseline justify-between gap-4">
+          <span class="text-[0.6875rem] text-on-surface-variant">Open items</span>
+          <span class="text-[0.6875rem] font-semibold text-on-surface tabular-nums">{{ items|length }}</span>
+        </div>
+      {% else %}
+        <p class="text-[0.6875rem] text-on-surface-variant">No tick run yet. Advance simulation to begin.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Severity breakdown -->
+  {% if items %}
+  <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+    <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50">
+      <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">By severity</span>
+    </div>
+    <div class="px-4 py-3 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ esc_count }}</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ act_count }}</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ watch_count }}</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>

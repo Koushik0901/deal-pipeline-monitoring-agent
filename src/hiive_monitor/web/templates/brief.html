@@ -1,171 +1,220 @@
 {% extends "base.html" %}
-{% block title %}Daily Brief — Hiive Deal Monitor{% endblock %}
+{% block title %}Daily Brief — Hiive{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+{% set priority_items = items|selectattr('severity', 'in', ['act', 'escalate'])|list %}
+{% set esc_count = items|selectattr('severity', 'equalto', 'escalate')|list|length %}
+{% set act_count = items|selectattr('severity', 'equalto', 'act')|list|length %}
+{% set watch_count = items|selectattr('severity', 'equalto', 'watch')|list|length %}
 
-  <!-- Header -->
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-lg font-semibold text-neutral-900">Daily Brief</h1>
-      {% if tick %}
-      <p class="text-xs text-neutral-400 mt-0.5">
-        Tick {{ tick.tick_id[:8] }} · {{ tick.tick_completed_at[:16] if tick.tick_completed_at else 'in progress' }}
-        {% if debug %}
-        · <a href="/debug/tick/{{ tick.tick_id }}" class="text-purple-500 hover:text-purple-700 font-mono">⟩ debug view</a>
+<div class="flex flex-col gap-4 items-start lg:flex-row lg:gap-6">
+
+  <!-- ── Left: main intervention list ── -->
+  <div class="flex-1 min-w-0">
+
+    <!-- Section header -->
+    <div class="flex items-baseline justify-between mb-4">
+      <h1 class="text-[0.9375rem] font-semibold text-on-surface tracking-tight">Today's priorities</h1>
+      <span class="text-[0.6875rem] text-on-surface-variant">
+        {% if tick %}
+          Tick <span class="font-mono">{{ tick.tick_id[:8] }}</span>
+          {% if tick.tick_completed_at %} · {{ tick.tick_completed_at[:16] }}{% endif %}
+          {% if debug %}
+           · <a href="/debug/tick/{{ tick.tick_id }}" class="text-primary-container hover:underline font-mono">debug ↗</a>
+          {% else %}
+           · <a href="?debug=1" class="hover:text-on-surface transition-colors">debug</a>
+          {% endif %}
         {% else %}
-        · <a href="?debug=1" class="text-neutral-300 hover:text-neutral-500">debug</a>
+          No tick run yet
         {% endif %}
-      </p>
-      {% else %}
-      <p class="text-xs text-neutral-400 mt-0.5">No tick run yet</p>
-      {% endif %}
+      </span>
     </div>
 
-    <!-- Sim advance control -->
-    <div x-data="{ days: 1 }" class="flex items-center gap-2">
-      <span class="text-xs text-neutral-500">Advance sim:</span>
-      <input type="number" x-model="days" min="1" max="30" class="w-16 rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-700 text-center" />
-      <button
-        hx-post="/sim/advance"
-        hx-include="[name=days]"
-        hx-target="#sim-result"
-        hx-swap="innerHTML"
-        x-on:click="document.querySelector('[name=days]') || null"
-        hx-vals='js:{"days": days}'
-        class="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 transition-colors"
-      >
-        Run tick ↑
-      </button>
-      <div id="sim-result" class="text-xs text-neutral-500"></div>
-    </div>
-  </div>
+    <!-- Tabs + dense intervention table -->
+    <div id="brief-list"
+      {% if clock_mode == 'real_time' %}
+      hx-get="/brief" hx-trigger="every 30s" hx-swap="innerHTML" hx-select="#brief-list"
+      {% endif %}>
+    <div x-data="{ tab: 'brief' }">
 
-  <!-- Tab navigation -->
-  <div x-data="{ tab: 'brief' }" class="space-y-4">
-    <div class="flex gap-1 border-b border-neutral-200">
-      <button
-        x-on:click="tab = 'brief'"
-        :class="tab === 'brief' ? 'border-b-2 border-neutral-900 text-neutral-900' : 'text-neutral-500'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
-      >
-        Top Priority ({{ items|selectattr('severity', 'in', ['act', 'escalate'])|list|length }})
-      </button>
-      <button
-        x-on:click="tab = 'all'"
-        :class="tab === 'all' ? 'border-b-2 border-neutral-900 text-neutral-900' : 'text-neutral-500'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
-      >
-        All Open Items ({{ items|length }})
-      </button>
-    </div>
+      <!-- Tab bar -->
+      <div class="flex border-b-[0.5px] border-outline-variant/50" role="tablist">
+        <button
+          role="tab"
+          :aria-selected="tab === 'brief'"
+          aria-controls="tab-panel-brief"
+          x-on:click="tab = 'brief'"
+          x-on:keydown.right.prevent="tab = 'all'; $nextTick(() => $el.nextElementSibling.focus())"
+          :class="tab === 'brief' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
+          class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
+        >Priority ({{ priority_items|length }})</button>
+        <button
+          role="tab"
+          :aria-selected="tab === 'all'"
+          aria-controls="tab-panel-all"
+          x-on:click="tab = 'all'"
+          x-on:keydown.left.prevent="tab = 'brief'; $nextTick(() => $el.previousElementSibling.focus())"
+          :class="tab === 'all' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
+          class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
+        >All open ({{ items|length }})</button>
+      </div>
 
-    <!-- Brief tab -->
-    <div x-show="tab === 'brief'" class="space-y-3">
-      {% set priority_items = items|selectattr('severity', 'in', ['act', 'escalate'])|list %}
-      {% if priority_items %}
-        {% for item in priority_items[:7] %}
-          {{ intervention_card(item, loop.index) }}
-        {% endfor %}
-      {% else %}
-        <div class="rounded border border-neutral-100 bg-white px-6 py-12 text-center">
-          <p class="text-sm text-neutral-500">No act/escalate items. Pipeline looks healthy.</p>
-          {% if not tick %}
-          <p class="mt-2 text-xs text-neutral-400">Run a tick to populate the brief.</p>
+      <!-- Table container -->
+      <div class="border-[0.5px] border-t-0 border-outline-variant/50 rounded-b-lg bg-surface-container-lowest overflow-hidden">
+
+        <!-- Column headers -->
+        <div class="grid grid-cols-12 gap-3 px-3 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest" aria-hidden="true">
+          <div class="col-span-2">Status</div>
+          <div class="hidden sm:block col-span-2">Deal ID</div>
+          <div class="col-span-5 sm:col-span-3">Target</div>
+          <div class="col-span-4">Summary</div>
+          <div class="col-span-1"></div>
+        </div>
+
+        <!-- Priority tab panel -->
+        <div id="tab-panel-brief" role="tabpanel" x-show="tab === 'brief'">
+          {% if priority_items %}
+            {% for item in priority_items %}{{ intervention_row(item) }}{% endfor %}
+          {% else %}
+            <div class="px-4 py-12 text-center">
+              <p class="text-[0.8125rem] text-on-surface-variant">No priority items. Pipeline looks healthy.</p>
+              {% if not tick %}<p class="mt-1 text-[0.6875rem] text-on-surface-variant">Advance the simulation to run a tick.</p>{% endif %}
+            </div>
           {% endif %}
         </div>
-      {% endif %}
+
+        <!-- All tab panel -->
+        <div id="tab-panel-all" role="tabpanel" x-show="tab === 'all'" x-cloak>
+          {% include "_all_open_list.html" %}
+        </div>
+
+      </div>
+    </div>
+    </div><!-- /#brief-list -->
+  </div>
+
+  <!-- ── Right: sidebar ── -->
+  <aside class="w-full lg:w-72 lg:flex-shrink-0 lg:sticky lg:top-[3.25rem] grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-col">
+
+    {% include "_brief_stats.html" %}
+
+    <!-- Sim advance -->
+    <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Simulation</span>
+      </div>
+      <div class="px-4 py-3" x-data="{ days: 1 }">
+        <div class="flex items-center gap-2">
+          <label for="sim-days-input" class="sr-only">Days to advance</label>
+          <input
+            id="sim-days-input"
+            type="number" name="days" x-model="days" min="1" max="30"
+            class="w-14 rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1.5 text-[0.75rem] text-center text-on-surface bg-surface focus:outline-none focus:border-primary-container transition-colors"
+          />
+          <span class="text-[0.6875rem] text-on-surface-variant shrink-0" aria-hidden="true">days</span>
+          <button
+            type="button"
+            hx-post="/sim/advance"
+            hx-include="[name=days]"
+            hx-target="#sim-result"
+            hx-swap="innerHTML"
+            class="flex-1 rounded-[4px] bg-primary-container px-3 py-1.5 text-[0.75rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+          >Advance ↑</button>
+        </div>
+        <div id="sim-result" class="mt-2 text-[0.6875rem] text-on-surface-variant min-h-[1rem]" aria-live="polite"></div>
+      </div>
     </div>
 
-    <!-- All open items tab -->
-    <div x-show="tab === 'all'" class="space-y-3">
-      {% if items %}
-        {% for item in items %}
-          {{ intervention_card(item, loop.index) }}
-        {% endfor %}
-      {% else %}
-        <div class="rounded border border-neutral-100 bg-white px-6 py-8 text-center">
-          <p class="text-sm text-neutral-500">No pending interventions.</p>
-        </div>
-      {% endif %}
-    </div>
-  </div>
+  </aside>
 
 </div>
 {% endblock %}
 
-{% macro intervention_card(item, rank) %}
-<div id="iv-{{ item.intervention_id }}" x-data="{ expanded: false, editing: false, editText: {{ item.draft_body | tojson }} }" class="rounded border border-neutral-200 bg-white">
 
-  <!-- Card header -->
-  <div class="flex items-start gap-4 px-5 py-4">
+{% macro intervention_row(item) %}
+<div id="iv-{{ item.intervention_id }}"
+     x-data='{ expanded: false, editing: false, editText: {{ item.draft_body | tojson }} }'
+     class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
 
-    <!-- Severity badge -->
-    <div class="mt-0.5 flex-shrink-0">
+  <!-- Compact summary row — click/keyboard to expand -->
+  <div
+    role="button"
+    tabindex="0"
+    :aria-expanded="expanded"
+    aria-controls="detail-{{ item.intervention_id }}"
+    x-on:click="expanded = !expanded"
+    x-on:keydown.enter.prevent="expanded = !expanded"
+    x-on:keydown.space.prevent="expanded = !expanded"
+    class="grid grid-cols-12 gap-3 px-3 py-2.5 items-center hover:bg-surface-container-low transition-colors cursor-pointer select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-container"
+  >
+    <!-- Status badge -->
+    <div class="col-span-2">
       {% if item.severity == 'escalate' %}
-        <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">ESCALATE</span>
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10 whitespace-nowrap">ESCALATE</span>
       {% elif item.severity == 'act' %}
-        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">ACT</span>
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10 whitespace-nowrap">ACT</span>
       {% else %}
-        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600">WATCH</span>
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap">WATCH</span>
       {% endif %}
     </div>
 
-    <!-- Deal info -->
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2">
-        <a href="/deals/{{ item.deal_id }}" class="text-sm font-semibold text-neutral-900 hover:text-neutral-600 hover:underline">
-          {{ item.deal_id }}
-        </a>
-        {% if item.deal %}
-        <span class="text-xs text-neutral-400">{{ item.deal.issuer_id | upper }} · {{ item.deal.stage | replace('_', ' ') }}</span>
-        {% endif %}
-      </div>
+    <!-- Deal ID -->
+    <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium text-on-surface-variant font-mono">
+      <a href="/deals/{{ item.deal_id }}" x-on:click.stop class="hover:text-primary-container hover:underline transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">{{ item.deal_id }}</a>
+    </div>
 
-      <!-- Draft subject / headline -->
-      <p class="mt-1 text-sm text-neutral-700 leading-snug">
-        {{ item.draft_subject or item.draft_body[:100] }}…
-      </p>
-
-      <!-- Dimensions triggered -->
-      {% if item.dimensions_triggered %}
-      <div class="mt-2 flex flex-wrap gap-1">
-        {% for dim in item.dimensions_triggered %}
-        <span class="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">{{ dim | replace('_', ' ') }}</span>
-        {% endfor %}
-      </div>
+    <!-- Issuer + Stage -->
+    <div class="col-span-5 sm:col-span-3 min-w-0">
+      {% if item.deal %}
+        <div class="text-[0.8125rem] font-semibold text-on-surface truncate">{{ item.deal.issuer_id | upper }}</div>
+        <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ item.deal.stage | replace('_', ' ') }}</div>
+      {% else %}
+        <div class="text-[0.8125rem] font-semibold text-on-surface">{{ item.deal_id }}</div>
       {% endif %}
     </div>
 
-    <!-- Actions -->
-    <div class="flex-shrink-0 flex items-center gap-2">
-      <button
-        x-on:click="expanded = !expanded"
-        class="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1 rounded hover:bg-neutral-50"
-        x-text="expanded ? 'Hide ↑' : 'View draft ↓'"
-      ></button>
+    <!-- Risk summary -->
+    <div class="col-span-4 min-w-0">
+      <p class="text-[0.8125rem] text-on-surface truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
     </div>
+
+    <!-- Expand toggle -->
+    <div class="col-span-1 text-right text-[0.6875rem] text-on-surface-variant font-mono" aria-hidden="true" x-text="expanded ? '↑' : '↓'"></div>
   </div>
 
-  <!-- Expanded: draft body + reasoning -->
-  <div x-show="expanded" x-cloak class="border-t border-neutral-100 px-5 py-4 space-y-4">
+  <!-- Expanded detail panel -->
+  <div id="detail-{{ item.intervention_id }}" x-show="expanded" x-cloak class="border-t-[0.5px] border-outline-variant/50 bg-surface-container-low/40 px-4 py-4 space-y-4">
 
-    <!-- Draft body (editable) -->
+    <!-- Dimensions triggered -->
+    {% if item.dimensions_triggered %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for dim in item.dimensions_triggered %}
+        <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.6875rem] text-on-surface-variant">{{ dim | replace('_', ' ') }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Draft body -->
     <div>
-      <div class="flex items-center justify-between mb-1.5">
-        <span class="text-xs font-medium text-neutral-500 uppercase tracking-wide">Draft {{ item.intervention_type | replace('_', ' ') }}</span>
-        <button x-on:click="editing = !editing" class="text-xs text-neutral-400 hover:text-neutral-600" x-text="editing ? 'Cancel edit' : 'Edit'"></button>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">{{ item.intervention_type | replace('_', ' ') }}</span>
+        <button
+          type="button"
+          x-on:click.stop="editing = !editing"
+          :aria-expanded="editing"
+          :aria-label="editing ? 'Cancel editing draft' : 'Edit draft'"
+          class="text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
+          x-text="editing ? 'Cancel' : 'Edit'"
+        ></button>
       </div>
 
-      <!-- Read-only view -->
-      <div x-show="!editing" class="rounded bg-neutral-50 border border-neutral-100 px-4 py-3 text-sm text-neutral-700 whitespace-pre-wrap leading-relaxed font-mono text-xs">{{ item.draft_body }}</div>
+      <div x-show="!editing" class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface whitespace-pre-wrap leading-relaxed">{{ item.draft_body }}</div>
 
-      <!-- Edit mode -->
-      <div x-show="editing" class="space-y-2">
+      <div x-show="editing" x-cloak>
         <textarea
-          x-model="editText"
-          rows="8"
-          class="w-full rounded border border-neutral-200 px-3 py-2 text-xs font-mono text-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+          x-model="editText" rows="8"
+          aria-label="Edit intervention draft"
+          class="w-full rounded-[4px] border-[0.5px] border-outline-variant px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface bg-surface focus:outline-none focus:border-primary-container transition-colors resize-y"
         ></textarea>
       </div>
     </div>
@@ -173,56 +222,53 @@
     <!-- Reasoning -->
     {% if item.reasoning_summary %}
     <div>
-      <span class="text-xs font-medium text-neutral-400 uppercase tracking-wide">Agent reasoning</span>
-      <p class="mt-1 text-xs text-neutral-500 leading-relaxed">{{ item.reasoning_summary }}</p>
+      <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Agent reasoning</span>
+      <p class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary }}</p>
     </div>
     {% endif %}
 
     <!-- Action buttons -->
-    <div class="flex items-center gap-2 pt-1" id="actions-{{ item.intervention_id }}">
+    <div class="flex items-center gap-2 pt-0.5">
 
-      <!-- Approve (or confirm edit) -->
       <div x-show="!editing">
         <button
+          type="button"
           hx-post="/interventions/{{ item.intervention_id }}/approve"
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
-          class="rounded bg-neutral-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 transition-colors"
-        >
-          Approve &amp; send
-        </button>
+          hx-on::after-request="if(event.detail.successful) announceAction('Intervention approved and sent.')"
+          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Approve &amp; send</button>
       </div>
 
-      <div x-show="editing">
+      <div x-show="editing" x-cloak>
         <button
+          type="button"
           hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
           hx-vals='js:{"final_text": editText}'
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
-          class="rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
-        >
-          Confirm edit &amp; send
-        </button>
+          hx-on::after-request="if(event.detail.successful) announceAction('Edited intervention sent.')"
+          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Confirm edit &amp; send</button>
       </div>
 
-      <!-- Dismiss -->
       <button
+        type="button"
         hx-post="/interventions/{{ item.intervention_id }}/dismiss"
         hx-target="#iv-{{ item.intervention_id }}"
         hx-swap="outerHTML"
         hx-confirm="Dismiss this intervention?"
-        class="rounded border border-neutral-200 px-4 py-1.5 text-xs font-medium text-neutral-500 hover:text-neutral-700 hover:border-neutral-300 transition-colors"
-      >
-        Dismiss
-      </button>
+        hx-on::after-request="if(event.detail.successful) announceAction('Intervention dismissed.')"
+        class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >Dismiss</button>
 
-      <!-- Copy to clipboard -->
       <button
-        x-on:click="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
-        class="ml-auto rounded border border-neutral-200 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
-      >
-        Copy
-      </button>
+        type="button"
+        x-on:click.stop="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
+        class="ml-auto rounded-[4px] border-[0.5px] border-outline-variant px-3 py-1.5 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >Copy</button>
+
     </div>
   </div>
 

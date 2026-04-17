@@ -1,0 +1,41 @@
+{% from "brief.html" import intervention_row %}
+<div x-data="{
+  severity: '',
+  severities: {{ items | map(attribute='severity') | list | tojson }},
+  get noResults() {
+    return this.severities.length > 0 && !this.severities.some(s => this.severity === '' || s === this.severity);
+  }
+}">
+
+  <!-- Filter chips -->
+  <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60">
+    <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest mr-1">Filter</span>
+    {% for chip in [('', 'All'), ('escalate', 'Escalate'), ('act', 'Act'), ('watch', 'Watch')] %}
+    <button
+      type="button"
+      x-on:click="severity = '{{ chip[0] }}'"
+      :aria-pressed="severity === '{{ chip[0] }}'"
+      :class="severity === '{{ chip[0] }}' ? 'bg-primary-container text-on-primary border-primary-container' : 'bg-surface text-on-surface-variant border-outline-variant hover:text-on-surface'"
+      class="inline-flex items-center px-2 py-0.5 rounded-[4px] border-[0.5px] text-[0.625rem] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-container"
+    >{{ chip[1] }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- Item list -->
+  {% if items %}
+    {% for item in items %}
+    <div x-show="severity === '' || severity === '{{ item.severity }}'">
+      {{ intervention_row(item) }}
+    </div>
+    {% endfor %}
+    <!-- Empty-filter state -->
+    <div x-show="noResults" x-cloak class="px-4 py-8 text-center">
+      <p class="text-[0.8125rem] text-on-surface-variant">No items match this filter.</p>
+    </div>
+  {% else %}
+    <div class="px-4 py-12 text-center">
+      <p class="text-[0.8125rem] text-on-surface-variant">No pending interventions.</p>
+    </div>
+  {% endif %}
+
+</div>

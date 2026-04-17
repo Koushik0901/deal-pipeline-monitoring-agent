@@ -1,152 +1,296 @@
 {% extends "base.html" %}
-{% block title %}{{ deal.deal_id }} — Hiive Deal Monitor{% endblock %}
+{% block title %}{{ deal.deal_id }}{% if issuer %} · {{ issuer.name }}{% endif %} — Hiive{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+{% set sorted_obs = observations | sort(attribute='observed_at', reverse=True) | list %}
+{% set latest_obs = sorted_obs | first if sorted_obs else none %}
 
-  <!-- Header -->
-  <div class="flex items-start justify-between">
-    <div>
-      <div class="flex items-center gap-3">
-        <h1 class="text-lg font-semibold text-neutral-900">{{ deal.deal_id }}</h1>
-        <span class="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
-          {{ deal.stage | replace('_', ' ') | title }}
-        </span>
-      </div>
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-[0.6875rem] text-on-surface-variant mb-4">
+  <a href="/brief" class="hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">Daily Brief</a>
+  <span class="text-outline-variant mx-0.5">›</span>
+  <span class="text-on-surface font-medium">{{ deal.deal_id }}{% if issuer %} · {{ issuer.name }}{% endif %}</span>
+</div>
+
+<!-- Page header -->
+<div class="flex flex-wrap items-start justify-between gap-y-2 pb-4 border-b-[0.5px] border-outline-variant/50 mb-6">
+  <div class="min-w-0">
+    <h1 class="text-[1.1875rem] font-semibold text-on-surface tracking-tight leading-snug">
+      {{ deal.deal_id }}{% if issuer %}<span class="text-on-surface-variant font-normal"> · {{ issuer.name }}</span>{% endif %}
+    </h1>
+    <div class="flex items-center flex-wrap gap-2 mt-2">
+      <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium text-on-surface bg-surface-container-low border-[0.5px] border-outline-variant/50 uppercase tracking-widest">{{ deal.stage | replace('_', ' ') }}</span>
+      {% if latest_obs %}
+        {% if latest_obs.severity == 'escalate' %}
+          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+        {% elif latest_obs.severity == 'act' %}
+          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+        {% elif latest_obs.severity == 'watch' %}
+          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+        {% elif latest_obs.severity == 'info' %}
+          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
+        {% endif %}
+      {% endif %}
       {% if issuer %}
-      <p class="mt-0.5 text-sm text-neutral-500">{{ issuer.name }} · {{ deal.shares | int | format_number }} shares @ ${{ "%.2f"|format(deal.price_per_share) }}</p>
+        <span class="text-[0.6875rem] text-on-surface-variant">{{ deal.shares | int | format_number }} shares @ ${{ "%.2f"|format(deal.price_per_share) }}</span>
       {% endif %}
-    </div>
-    <div class="flex items-center gap-3">
-      <a href="/brief" class="text-sm text-neutral-400 hover:text-neutral-600">← Brief</a>
-      {% if debug %}
-      <a href="/debug/deal/{{ deal.deal_id }}" class="text-xs text-purple-500 hover:text-purple-700 font-mono">⟩ debug view</a>
-      {% else %}
-      <a href="?debug=1" class="text-xs text-neutral-300 hover:text-neutral-500">debug</a>
+      {% if deal.rofr_deadline %}
+        <span class="text-[0.6875rem] text-on-surface-variant">ROFR: {{ deal.rofr_deadline[:10] }}</span>
       {% endif %}
     </div>
   </div>
-
-  <!-- Deal facts -->
-  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-    {% macro fact(label, value) %}
-    <div class="rounded border border-neutral-100 bg-white px-4 py-3">
-      <p class="text-xs text-neutral-400 uppercase tracking-wide">{{ label }}</p>
-      <p class="mt-1 text-sm font-medium text-neutral-800">{{ value or '—' }}</p>
-    </div>
-    {% endmacro %}
-    {{ fact("Stage entered", deal.stage_entered_at[:10] if deal.stage_entered_at else '—') }}
-    {{ fact("Responsible", deal.responsible_party | replace('_', ' ') if deal.responsible_party else '—') }}
-    {{ fact("ROFR deadline", deal.rofr_deadline[:10] if deal.rofr_deadline else 'None') }}
-    {{ fact("Buyer", deal.buyer_id) }}
-  </div>
-
-  <!-- Event timeline -->
-  <div>
-    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Event Timeline</h2>
-    {% if events %}
-    <div class="space-y-1">
-      {% for ev in events | sort(attribute='occurred_at', reverse=True) %}
-      <div class="flex items-start gap-3 text-xs">
-        <span class="flex-shrink-0 text-neutral-400 font-mono">{{ ev.occurred_at[:10] }}</span>
-        <span class="rounded px-1.5 py-0.5
-          {% if ev.event_type == 'comm_outbound' %}bg-blue-50 text-blue-700
-          {% elif ev.event_type == 'comm_inbound' %}bg-green-50 text-green-700
-          {% elif ev.event_type == 'stage_transition' %}bg-neutral-100 text-neutral-600
-          {% elif ev.event_type == 'comm_sent_agent_recommended' %}bg-purple-50 text-purple-700
-          {% else %}bg-neutral-50 text-neutral-500{% endif %}
-        ">{{ ev.event_type | replace('_', ' ') }}</span>
-        <span class="text-neutral-600">{{ ev.summary }}</span>
-      </div>
-      {% endfor %}
-    </div>
+  <div class="flex items-center gap-3 flex-shrink-0 mt-0.5">
+    {% if debug %}
+      <a href="/debug/deal/{{ deal.deal_id }}" class="text-[0.6875rem] font-mono text-primary-container hover:underline transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">debug ↗</a>
     {% else %}
-    <p class="text-xs text-neutral-400">No events yet.</p>
+      <a href="?debug=1" class="text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">debug</a>
     {% endif %}
   </div>
+</div>
 
-  <!-- Agent observations -->
-  <div>
-    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Agent Observations ({{ observations | length }})</h2>
-    {% if observations %}
-    <div class="space-y-3">
-      {% for obs in observations | sort(attribute='observed_at', reverse=True) %}
-      <div class="rounded border border-neutral-100 bg-white px-4 py-3 text-xs" x-data="{ show: false }">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="font-mono text-neutral-400">{{ obs.observed_at[:16] }}</span>
-            {% if obs.severity == 'escalate' %}
-              <span class="rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-700">ESCALATE</span>
-            {% elif obs.severity == 'act' %}
-              <span class="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">ACT</span>
-            {% elif obs.severity == 'watch' %}
-              <span class="rounded-full bg-blue-100 px-2 py-0.5 font-semibold text-blue-600">WATCH</span>
-            {% else %}
-              <span class="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500">INFO</span>
-            {% endif %}
-            {% for dim in obs.reasoning_parsed.get('dimensions_triggered', []) %}
-            <span class="bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-500">{{ dim | replace('_', ' ') }}</span>
-            {% endfor %}
-          </div>
-          <button x-on:click="show = !show" class="text-neutral-400 hover:text-neutral-600"
-            x-text="show ? 'Hide reasoning' : 'Show reasoning'"></button>
+<!-- 3-column grid: Facts+Interventions | Agent Analysis | Event Timeline -->
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start">
+
+  <!-- ── Left (1/4): Deal Facts + Interventions ── -->
+  <div class="lg:col-span-1 flex flex-col gap-4">
+
+    <!-- Deal Facts -->
+    <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Deal Facts</span>
+      </div>
+      <div class="px-4 py-1">
+        {% macro fact_row(label, value, vc='') %}
+        <div class="flex items-baseline justify-between gap-3 py-2 border-b-[0.5px] border-outline-variant/50 last:border-b-0">
+          <span class="text-[0.625rem] text-on-surface-variant uppercase tracking-widest shrink-0">{{ label }}</span>
+          <span class="text-[0.8125rem] font-medium {{ vc or 'text-on-surface' }} text-right truncate">{{ value or '—' }}</span>
         </div>
+        {% endmacro %}
+        {{ fact_row("Stage entered", deal.stage_entered_at[:10] if deal.stage_entered_at else '—') }}
+        {{ fact_row("Responsible", deal.responsible_party | replace('_', ' ') if deal.responsible_party else '—') }}
+        {{ fact_row("ROFR deadline", deal.rofr_deadline[:10] if deal.rofr_deadline else 'None') }}
+        {{ fact_row("Buyer", deal.buyer_id) }}
+      </div>
+    </div>
 
-        <div x-show="show" x-cloak class="mt-3 space-y-2">
-          {% if obs.reasoning_parsed.get('error') %}
-          <div class="rounded bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">
-            LLM error: {{ obs.reasoning_parsed.get('error') }}
-          </div>
-          {% else %}
-          <p class="text-neutral-600 leading-relaxed">{{ obs.reasoning_parsed.get('severity_rationale', '') }}</p>
-          {% set chain = obs.reasoning_parsed.get('enrichment_chain', []) %}
-          {% if chain %}
-          <div class="mt-2 space-y-1">
-            <span class="text-xs font-medium text-neutral-400 uppercase tracking-wide">Enrichment steps ({{ chain|length }})</span>
-            {% for step in chain %}
-            <div class="rounded bg-neutral-50 border border-neutral-100 px-3 py-2 text-xs text-neutral-500">
-              <span class="font-medium text-neutral-600">{{ step.get('tool_called', '?') | replace('_', ' ') }}</span>
-              {% if step.get('rationale') %} — {{ step.get('rationale') }}{% endif %}
+    <!-- Interventions -->
+    <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 flex items-center justify-between">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Interventions</span>
+        <span class="text-[0.6875rem] tabular-nums text-on-surface-variant">{{ interventions | length }}</span>
+      </div>
+      {% if interventions %}
+        <div class="flex flex-col">
+          {% for iv in interventions | sort(attribute='created_at', reverse=True) %}
+          <div class="px-4 py-3 {% if not loop.first %}border-t-[0.5px] border-outline-variant/50{% endif %}">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span class="text-[0.625rem] font-mono text-on-surface-variant">{{ iv.created_at[:10] }}</span>
+              <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.625rem] text-on-surface-variant">{{ iv.intervention_type | replace('_', ' ') }}</span>
+              <span class="text-[0.625rem] font-semibold
+                {% if iv.status in ['approved', 'edited'] %}text-secondary
+                {% elif iv.status == 'pending' %}text-tertiary
+                {% else %}text-on-surface-variant{% endif %}
+              ">{{ iv.status }}</span>
             </div>
-            {% endfor %}
+            <p class="text-[0.8125rem] text-on-surface-variant leading-snug">{{ iv.draft_subject or iv.draft_body[:80] }}</p>
           </div>
-          {% else %}
-          <p class="text-xs text-neutral-400 italic">No enrichment performed — initial signals were sufficient.</p>
-          {% endif %}
-          {% endif %}
-          {% if debug %}
-          <pre class="rounded bg-neutral-50 p-3 text-xs text-neutral-500 overflow-auto max-h-64">{{ obs.reasoning_parsed | tojson(indent=2) }}</pre>
-          {% endif %}
+          {% endfor %}
         </div>
-      </div>
-      {% endfor %}
+      {% else %}
+        <div class="px-4 py-6 text-center">
+          <p class="text-[0.8125rem] text-on-surface-variant">No interventions drafted yet.</p>
+        </div>
+      {% endif %}
     </div>
-    {% else %}
-    <p class="text-xs text-neutral-400">No observations yet — run a tick to analyze this deal.</p>
-    {% endif %}
+
   </div>
 
-  <!-- Interventions -->
-  <div>
-    <h2 class="text-sm font-semibold text-neutral-700 mb-3">Interventions ({{ interventions | length }})</h2>
-    {% if interventions %}
-    <div class="space-y-2">
-      {% for iv in interventions | sort(attribute='created_at', reverse=True) %}
-      <div class="rounded border border-neutral-100 bg-white px-4 py-3 text-xs">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="font-mono text-neutral-400">{{ iv.created_at[:16] }}</span>
-          <span class="bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-600">{{ iv.intervention_type | replace('_', ' ') }}</span>
-          <span class="{% if iv.status == 'pending' %}text-amber-600{% elif iv.status in ['approved','edited'] %}text-green-600{% else %}text-neutral-400{% endif %} font-medium">
-            {{ iv.status }}
-          </span>
+  <!-- ── Center (2/4): Agent Analysis ── -->
+  <div class="lg:col-span-2 flex flex-col gap-4">
+
+    {% if sorted_obs %}
+
+      <!-- Latest observation -->
+      <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+        <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 flex items-center justify-between">
+          <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Agent Analysis</span>
+          <span class="text-[0.6875rem] font-mono text-on-surface-variant">{{ latest_obs.observed_at[:16] }}</span>
         </div>
-        <p class="text-neutral-600">{{ iv.draft_subject or (iv.draft_body[:120] + '…') }}</p>
+        <div class="px-5 py-4 space-y-5">
+
+          {% if latest_obs.reasoning_parsed.get('error') %}
+            <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-error-container/40 px-3 py-2.5 text-[0.6875rem] text-error">
+              LLM error: {{ latest_obs.reasoning_parsed.get('error') }}
+            </div>
+          {% else %}
+
+            <!-- Severity rationale — background tint, no side stripe -->
+            {% set sev = latest_obs.severity %}
+            {% if latest_obs.reasoning_parsed.get('severity_rationale') %}
+            <div>
+              <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest block mb-2">Severity Rationale</span>
+              <p class="text-[0.8125rem] text-on-surface leading-relaxed px-3 py-2.5 rounded-[4px] border-[0.5px]
+                {% if sev == 'escalate' %}bg-error-container/40 border-error/20
+                {% elif sev == 'act' %}bg-primary-fixed/60 border-primary-container/20
+                {% elif sev == 'watch' %}bg-tertiary-fixed/40 border-tertiary/20
+                {% else %}bg-surface-container border-outline-variant/50{% endif %}
+              ">{{ latest_obs.reasoning_parsed.get('severity_rationale') }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Dimensions triggered -->
+            {% set dims = latest_obs.reasoning_parsed.get('dimensions_triggered', []) %}
+            {% if dims %}
+            <div>
+              <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest block mb-2">Dimensions Triggered</span>
+              <div class="flex flex-wrap gap-1.5">
+                {% for dim in dims %}
+                  <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.6875rem] text-on-surface-variant">{{ dim | replace('_', ' ') }}</span>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- Enrichment chain (collapsible) -->
+            {% set chain = latest_obs.reasoning_parsed.get('enrichment_chain', []) %}
+            {% if chain %}
+            <div x-data="{ showChain: false }">
+              <button
+                type="button"
+                x-on:click="showChain = !showChain"
+                :aria-expanded="showChain"
+                aria-controls="enrichment-chain"
+                class="flex items-center gap-1.5 py-1.5 text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors mb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
+              >
+                <span x-text="showChain ? '↑' : '↓'" class="font-mono" aria-hidden="true"></span>
+                <span class="uppercase tracking-widest font-medium">Enrichment steps ({{ chain|length }})</span>
+              </button>
+              <div id="enrichment-chain" x-show="showChain" x-cloak class="flex flex-col gap-1.5">
+                {% for step in chain %}
+                <div class="rounded-[4px] bg-surface-container border-[0.5px] border-outline-variant/50 px-3 py-2 text-[0.6875rem]">
+                  <span class="font-medium text-on-surface">{{ step.get('tool_called', '?') | replace('_', ' ') }}</span>
+                  {% if step.get('rationale') %}<span class="text-on-surface-variant"> — {{ step.get('rationale') }}</span>{% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% else %}
+            <p class="text-[0.6875rem] text-on-surface-variant italic">No enrichment performed — initial signals were sufficient.</p>
+            {% endif %}
+
+          {% endif %}
+
+          {% if debug %}
+          <div>
+            <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest block mb-1.5">Debug — Raw reasoning</span>
+            <pre class="rounded-[4px] bg-surface-container border-[0.5px] border-outline-variant/50 px-3 py-2 text-[0.6875rem] text-on-surface-variant overflow-auto max-h-64">{{ latest_obs.reasoning_parsed | tojson(indent=2) }}</pre>
+          </div>
+          {% endif %}
+
+        </div>
       </div>
-      {% endfor %}
-    </div>
+
+      <!-- Older observations (collapsible) -->
+      {% if sorted_obs | length > 1 %}
+      <div x-data="{ expanded: false }" class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+        <button
+          type="button"
+          x-on:click="expanded = !expanded"
+          :aria-expanded="expanded"
+          aria-controls="older-observations"
+          class="w-full px-4 py-3 flex items-center justify-between hover:bg-surface-container-low transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
+        >
+          <span class="text-[0.8125rem] font-medium text-on-surface-variant">Older observations ({{ sorted_obs | length - 1 }})</span>
+          <span x-text="expanded ? '↑' : '↓'" class="text-[0.6875rem] font-mono text-on-surface-variant" aria-hidden="true"></span>
+        </button>
+        <div id="older-observations" x-show="expanded" x-cloak>
+          {% for obs in sorted_obs[1:] %}
+          <div class="border-t-[0.5px] border-outline-variant/50 px-4 py-3" x-data="{ show: false }">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[0.6875rem] font-mono text-on-surface-variant">{{ obs.observed_at[:16] }}</span>
+                {% if obs.severity == 'escalate' %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+                {% elif obs.severity == 'act' %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+                {% elif obs.severity == 'watch' %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+                {% elif obs.severity == 'info' %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
+                {% endif %}
+                {% for dim in obs.reasoning_parsed.get('dimensions_triggered', []) %}
+                  <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.6875rem] text-on-surface-variant">{{ dim | replace('_', ' ') }}</span>
+                {% endfor %}
+              </div>
+              <button
+                type="button"
+                x-on:click="show = !show"
+                :aria-expanded="show"
+                aria-controls="obs-detail-{{ loop.index }}"
+                :aria-label="show ? 'Collapse observation detail' : 'Expand observation detail'"
+                class="py-2 px-2 text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors shrink-0 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
+              ><span x-text="show ? '↑' : 'Detail'" aria-hidden="true"></span></button>
+            </div>
+            <div id="obs-detail-{{ loop.index }}" x-show="show" x-cloak class="mt-3 space-y-2">
+              {% if obs.reasoning_parsed.get('error') %}
+                <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-error-container/40 px-3 py-2 text-[0.6875rem] text-error">LLM error: {{ obs.reasoning_parsed.get('error') }}</div>
+              {% else %}
+                <p class="text-[0.8125rem] text-on-surface-variant leading-relaxed">{{ obs.reasoning_parsed.get('severity_rationale', '') }}</p>
+              {% endif %}
+              {% if debug %}
+                <pre class="rounded-[4px] bg-surface-container border-[0.5px] border-outline-variant/50 px-3 py-2 text-[0.6875rem] text-on-surface-variant overflow-auto max-h-48">{{ obs.reasoning_parsed | tojson(indent=2) }}</pre>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
     {% else %}
-    <p class="text-xs text-neutral-400">No interventions drafted yet.</p>
+      <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest px-4 py-12 text-center">
+        <p class="text-[0.8125rem] text-on-surface-variant">No observations yet — advance the simulation to analyze this deal.</p>
+      </div>
     {% endif %}
+
+  </div>
+
+  <!-- ── Right (1/4): Event Timeline ── -->
+  <div class="lg:col-span-1">
+    <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 flex items-center justify-between">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Event Timeline</span>
+        <span class="text-[0.6875rem] tabular-nums text-on-surface-variant">{{ events | length }}</span>
+      </div>
+      {% if events %}
+        <div class="px-4 py-4">
+          <!-- Vertical timeline: dot on vertical line, content to the right -->
+          <div class="relative ml-1">
+            <div class="absolute left-0 top-2 bottom-0 border-l-[0.5px] border-outline-variant"></div>
+            <div class="flex flex-col gap-5">
+              {% for ev in events | sort(attribute='occurred_at', reverse=True) %}
+              <div class="relative pl-5">
+                <!-- Timeline dot, centered on the vertical line -->
+                <div class="absolute left-0 top-[0.3125rem] -translate-x-1/2 w-2 h-2 rounded-full border-[1.5px] border-surface-container-lowest
+                  {% if ev.event_type in ['comm_outbound', 'comm_sent_agent_recommended'] %}bg-primary-container
+                  {% elif ev.event_type == 'comm_inbound' %}bg-secondary
+                  {% elif ev.event_type == 'stage_transition' %}bg-on-surface-variant
+                  {% else %}bg-outline-variant{% endif %}
+                "></div>
+                <span class="text-[0.625rem] text-on-surface-variant block">{{ ev.occurred_at[:10] }}</span>
+                <p class="text-[0.8125rem] font-medium text-on-surface mt-0.5 leading-snug">{{ ev.summary }}</p>
+                <span class="text-[0.625rem] text-on-surface-variant mt-0.5 block">{{ ev.event_type | replace('_', ' ') }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="px-4 py-8 text-center">
+          <p class="text-[0.8125rem] text-on-surface-variant">No events yet.</p>
+        </div>
+      {% endif %}
+    </div>
   </div>
 
 </div>

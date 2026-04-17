@@ -13,7 +13,7 @@ from hiive_monitor.config import get_settings
 from hiive_monitor.models.brief import DailyBrief
 from hiive_monitor.llm.prompts.daily_brief import (
     DAILY_BRIEF_OUTPUT,
-    DAILY_BRIEF_SYSTEM,
+    DAILY_BRIEF_TEMPLATE,
     build_daily_brief_prompt,
 )
 
@@ -45,13 +45,13 @@ def compose_daily_brief(tick_id: str) -> DailyBrief | None:
         return DailyBrief(tick_id=tick_id, generated_at=generated_at, items=[])
 
     brief = llm_client.call_structured(
-        prompt=build_daily_brief_prompt(tick_id, generated_at, observations, open_interventions),
+        template=DAILY_BRIEF_TEMPLATE,
+        template_vars=build_daily_brief_prompt(tick_id, generated_at, observations, open_interventions),
         output_model=DAILY_BRIEF_OUTPUT,
-        model=settings.sonnet_model,
+        model=settings.llm_model,
         tick_id=tick_id,
         deal_id="__brief__",
         call_name="compose_daily_brief",
-        system=DAILY_BRIEF_SYSTEM,
     )
 
     if brief is None:

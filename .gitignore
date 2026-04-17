@@ -45,6 +45,15 @@ src/hiive_monitor/web/static/output.css
 .DS_Store
 Thumbs.db
 
+# Claude Code / AI harness artifacts
+.claude/settings.local.json
+.claude/worktrees/
+.agents/
+.claire/
+.playwright-mcp/
+.specify/
+.impeccable.md
+
 # Testing
 .pytest_cache/
 .coverage
