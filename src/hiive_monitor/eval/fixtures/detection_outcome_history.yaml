@@ -1,0 +1,130 @@
+id: detection_outcome_history
+category: enrichment
+setup:
+  now: "2026-04-16T09:00:00Z"
+  deal:
+    deal_id: "eval_outcome_001"
+    issuer_id: "stripe"
+    buyer_id: "buyer_out_01"
+    seller_id: "seller_out_01"
+    stage: "docs_pending"
+    stage_entered_days_ago: 10
+    responsible_party: "buyer"
+    shares: 4000
+    price_per_share: 42.00
+    blockers:
+      - kind: missing_doc
+        description: "Buyer has not returned signed transfer agreement after two follow-ups"
+        since: "2026-04-09T09:00:00Z"
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      deal_size_usd: 168000
+    rofr_deadline_days_from_now: null
+    events:
+      - event_type: stage_transition
+        days_ago: 10
+        summary: "Entered docs_pending"
+      - event_type: comm_outbound
+        days_ago: 10
+        summary: "Transfer docs package sent to buyer"
+        payload:
+          body: "Hi, the Stripe transfer documents are attached. Please sign and return the transfer agreement and accreditation form within 5 business days."
+      - event_type: comm_inbound
+        days_ago: 8
+        summary: "Buyer acknowledged receipt"
+        payload:
+          body: "Got it, reviewing now."
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: "First follow-up — no docs received"
+        payload:
+          body: "Following up on the Stripe transfer docs sent April 6th. Please return the signed transfer agreement."
+      - event_type: comm_outbound
+        days_ago: 2
+        summary: "Second follow-up — still no response"
+        payload:
+          body: "Second follow-up on the Stripe transfer documents. We need the signed agreement to move forward. Please respond today."
+  issuers:
+    - issuer_id: "stripe"
+      name: "Stripe"
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: "buyer_out_01"
+      party_type: "buyer"
+      display_name: "Andromeda Capital Partners"
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: "seller_out_01"
+      party_type: "seller"
+      display_name: "Sarah Chen"
+      is_first_time: false
+      prior_breakage_count: 0
+  # Historical Stripe deals with approved outbound nudges — 3 of 4 produced a response (75%)
+  historical_interventions:
+    - deal_id: "eval_stripe_hist_01"
+      issuer_id: "stripe"
+      buyer_id: "buyer_out_01"
+      seller_id: "seller_out_01"
+      shares: 3000
+      price_per_share: 42.00
+      intervention_type: "outbound_nudge"
+      approved_at_days_ago: 60
+      followed_by:
+        - event_type: comm_inbound
+          days_after_approval: 3
+          summary: "Buyer returned signed documents"
+    - deal_id: "eval_stripe_hist_02"
+      issuer_id: "stripe"
+      buyer_id: "buyer_out_01"
+      seller_id: "seller_out_01"
+      shares: 5000
+      price_per_share: 42.00
+      intervention_type: "outbound_nudge"
+      approved_at_days_ago: 45
+      followed_by:
+        - event_type: stage_transition
+          days_after_approval: 5
+          summary: "Moved to signing — docs received"
+    - deal_id: "eval_stripe_hist_03"
+      issuer_id: "stripe"
+      buyer_id: "buyer_out_01"
+      seller_id: "seller_out_01"
+      shares: 2000
+      price_per_share: 42.00
+      intervention_type: "outbound_nudge"
+      approved_at_days_ago: 30
+      followed_by:
+        - event_type: comm_inbound
+          days_after_approval: 10
+          summary: "Buyer eventually responded — outside 7-day window"
+    - deal_id: "eval_stripe_hist_04"
+      issuer_id: "stripe"
+      buyer_id: "buyer_out_01"
+      seller_id: "seller_out_01"
+      shares: 4000
+      price_per_share: 42.00
+      intervention_type: "outbound_nudge"
+      approved_at_days_ago: 20
+      followed_by:
+        - event_type: comm_inbound
+          days_after_approval: 2
+          summary: "Buyer returned signed docs promptly"
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+  expected_tools:
+    - fetch_intervention_outcomes
+assertions:
+  severity_gte: watch
+  enrichment_tool_called: fetch_intervention_outcomes
+  dimensions_triggered:
+    - communication_silence

@@ -164,6 +164,61 @@ def _seed_from_scenario(conn: sqlite3.Connection, setup: dict) -> None:
                 payload=ev.get("payload", {}),
             )
 
+    # Seed historical settled deals + approved interventions for outcome tracking (TS08)
+    for hist in setup.get("historical_interventions", []):
+        hist_now_str = setup.get("now", "2026-04-16T09:00:00Z")
+        hist_now = datetime.fromisoformat(hist_now_str.replace("Z", "+00:00"))
+        from datetime import timedelta
+
+        approved_days_ago = hist.get("approved_at_days_ago", 30)
+        approved_at = (hist_now - timedelta(days=approved_days_ago)).isoformat()
+
+        # Insert the deal in settled stage
+        hist_deal_id = hist["deal_id"]
+        hist_issuer_id = hist.get("issuer_id", deal.get("issuer_id", ""))
+        conn.execute(
+            """INSERT OR IGNORE INTO deals
+               (deal_id, issuer_id, buyer_id, seller_id, shares, price_per_share,
+                stage, stage_entered_at, rofr_deadline, responsible_party,
+                blockers, risk_factors, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'settled', ?, NULL, 'buyer', '[]', '{}', ?, ?)""",
+            (
+                hist_deal_id, hist_issuer_id,
+                hist.get("buyer_id", "buyer_hist"), hist.get("seller_id", "seller_hist"),
+                hist.get("shares", 1000), hist.get("price_per_share", 100.0),
+                approved_at, approved_at, hist_now_str,
+            ),
+        )
+
+        # Insert the approved intervention
+        hist_iv_id = str(uuid.uuid4())
+        conn.execute(
+            """INSERT OR IGNORE INTO interventions
+               (intervention_id, deal_id, observation_id, intervention_type,
+                recipient_type, draft_subject, draft_body, reasoning_ref,
+                status, final_text, approved_at, created_at)
+               VALUES (?, ?, ?, ?, 'buyer', 'Follow-up', 'Follow-up message', ?,
+                       'approved', 'Follow-up message', ?, ?)""",
+            (
+                hist_iv_id, hist_deal_id, str(uuid.uuid4()),
+                hist.get("intervention_type", "outbound_nudge"),
+                hist_iv_id, approved_at, approved_at,
+            ),
+        )
+
+        # Insert follow-on events (within or outside the 7-day response window)
+        for fev in hist.get("followed_by", []):
+            days_after = fev.get("days_after_approval", 3)
+            fev_occ = (hist_now - timedelta(days=approved_days_ago - days_after)).isoformat()
+            dao.insert_event(
+                conn,
+                deal_id=hist_deal_id,
+                event_type=fev["event_type"],
+                occurred_at=datetime.fromisoformat(fev_occ),
+                summary=fev.get("summary", fev["event_type"]),
+            )
+        conn.commit()
+
     for obs in setup.get("prior_observations_to_seed", []):
         tick_id = obs.get("tick_id", str(uuid.uuid4()))
         _seed_tick(conn, tick_id, setup.get("now", "2026-04-16T09:00:00Z"))

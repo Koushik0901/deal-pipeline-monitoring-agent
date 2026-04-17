@@ -63,4 +63,4 @@ class SufficiencyDecision(BaseModel):
 
     sufficient: bool
     rationale: str = Field(max_length=300)
-    tool_to_call: str | None = None  # one of the three enrichment tool names, or None
+    tool_to_call: str | None = None  # one of the four enrichment tool names, or None

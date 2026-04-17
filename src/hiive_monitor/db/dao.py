@@ -241,15 +241,21 @@ def get_interventions(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
 
 
 def get_open_interventions(conn: sqlite3.Connection) -> list[dict]:
-    """All pending interventions with act/escalate severity, for the Daily Brief."""
+    """All pending interventions (any severity) ordered by severity then age."""
     rows = conn.execute(
         """SELECT i.*, d.issuer_id, d.stage, o.severity
            FROM interventions i
            JOIN deals d ON d.deal_id = i.deal_id
            LEFT JOIN agent_observations o ON o.observation_id = i.observation_id
            WHERE i.status = 'pending'
-             AND o.severity IN ('act', 'escalate')
-           ORDER BY o.severity DESC, i.created_at"""
+           ORDER BY
+             CASE o.severity
+               WHEN 'escalate' THEN 0
+               WHEN 'act'      THEN 1
+               WHEN 'watch'    THEN 2
+               ELSE 3
+             END,
+             i.created_at"""
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -444,6 +450,56 @@ def edit_intervention_atomic(
         )
 
     return event_id
+
+
+# ── Intervention outcome tracking (TS08) ──────────────────────────────────────
+
+
+def fetch_intervention_outcomes(conn: sqlite3.Connection, issuer_id: str) -> list[dict]:
+    """
+    For each approved/edited intervention on deals belonging to this issuer,
+    check whether a stage_transition or comm_inbound event followed within 7 days.
+    Returns stats grouped by intervention_type.
+    Attribution is correlation, not causation.
+    """
+    rows = conn.execute(
+        """SELECT
+               i.intervention_type,
+               CASE
+                 WHEN EXISTS (
+                   SELECT 1 FROM events e
+                   WHERE e.deal_id = i.deal_id
+                     AND e.event_type IN ('stage_transition', 'comm_inbound')
+                     AND e.occurred_at > i.approved_at
+                     AND e.occurred_at <= datetime(i.approved_at, '+7 days')
+                 ) THEN 1 ELSE 0
+               END AS responded
+           FROM interventions i
+           JOIN deals d ON d.deal_id = i.deal_id
+           WHERE d.issuer_id = ?
+             AND i.status IN ('approved', 'edited')
+             AND i.approved_at IS NOT NULL
+           ORDER BY i.intervention_type""",
+        (issuer_id,),
+    ).fetchall()
+
+    stats: dict[str, dict] = {}
+    for r in rows:
+        t = r["intervention_type"]
+        if t not in stats:
+            stats[t] = {"total": 0, "with_response": 0}
+        stats[t]["total"] += 1
+        stats[t]["with_response"] += r["responded"]
+
+    return [
+        {
+            "intervention_type": itype,
+            "total_approved": v["total"],
+            "followed_by_response_7d": v["with_response"],
+            "response_rate_pct": round(v["with_response"] / v["total"] * 100) if v["total"] > 0 else 0,
+        }
+        for itype, v in stats.items()
+    ]
 
 
 # ── Issuers ────────────────────────────────────────────────────────────────────

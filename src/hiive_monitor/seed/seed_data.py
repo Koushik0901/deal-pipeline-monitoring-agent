@@ -588,6 +588,115 @@ def build_events(deals: list[dict]) -> list[dict]:
     return events
 
 
+# ── Historical settled deals for intervention outcome tracking (TS08) ─────────
+
+def build_historical_deals() -> list[dict]:
+    """4 settled Stripe deals with engineered intervention outcome history."""
+    now = _now_base()
+    deals = []
+
+    def settled(deal_id, buyer_id, seller_id, shares, price, settled_days_ago):
+        created = _ago(settled_days_ago + 30)
+        return {
+            "deal_id": deal_id,
+            "issuer_id": "stripe",
+            "buyer_id": buyer_id,
+            "seller_id": seller_id,
+            "shares": shares,
+            "price_per_share": price,
+            "stage": "settled",
+            "stage_entered_at": _iso(_ago(settled_days_ago)),
+            "rofr_deadline": None,
+            "responsible_party": "buyer",
+            "blockers": json.dumps([]),
+            "risk_factors": json.dumps({}),
+            "created_at": _iso(created),
+            "updated_at": _iso(now),
+        }
+
+    deals.append(settled("D-H01", "buyer_01", "seller_01", 3000, 42.00, settled_days_ago=55))
+    deals.append(settled("D-H02", "buyer_03", "seller_02", 5000, 42.00, settled_days_ago=40))
+    deals.append(settled("D-H03", "buyer_05", "seller_04", 2000, 42.00, settled_days_ago=25))
+    deals.append(settled("D-H04", "buyer_02", "seller_06", 4000, 42.00, settled_days_ago=15))
+    return deals
+
+
+def build_historical_interventions_and_events() -> tuple[list[dict], list[dict]]:
+    """
+    Approved outbound_nudge interventions on the 4 Stripe historical deals,
+    plus follow-on events. 3 of 4 produced a response within 7 days (75% rate).
+    """
+    interventions = []
+    events = []
+
+    def iv(intervention_id, deal_id, observation_id, approved_days_ago):
+        approved_at = _iso(_ago(approved_days_ago))
+        return {
+            "intervention_id": intervention_id,
+            "deal_id": deal_id,
+            "observation_id": observation_id,
+            "intervention_type": "outbound_nudge",
+            "recipient_type": "buyer",
+            "draft_subject": "Follow-up on document submission",
+            "draft_body": "Hi, following up on the outstanding document submission for your Stripe transfer.",
+            "reasoning_ref": observation_id,
+            "status": "approved",
+            "final_text": "Hi, following up on the outstanding document submission for your Stripe transfer.",
+            "approved_at": approved_at,
+            "created_at": approved_at,
+        }
+
+    def evt(deal_id, event_type, days_ago, summary):
+        occ = _ago(days_ago)
+        return {
+            "event_id": str(uuid.uuid4()),
+            "deal_id": deal_id,
+            "event_type": event_type,
+            "occurred_at": _iso(occ),
+            "created_at": _iso(occ),
+            "summary": summary,
+            "payload": json.dumps({"summary": summary}),
+        }
+
+    # D-H01: nudge approved 60 days ago → comm_inbound 3 days later (responded) ✓
+    interventions.append(iv("IV-H01", "D-H01", "OB-H01", approved_days_ago=60))
+    events += [
+        evt("D-H01", "stage_transition", 65, "Entered docs_pending"),
+        evt("D-H01", "comm_outbound", 62, "Sent docs package to buyer"),
+        evt("D-H01", "comm_inbound", 57, "Buyer returned signed documents"),  # 60-57=3d after nudge ✓
+        evt("D-H01", "stage_transition", 55, "Settled — deal completed"),
+    ]
+
+    # D-H02: nudge approved 45 days ago → stage_transition 5 days later (responded) ✓
+    interventions.append(iv("IV-H02", "D-H02", "OB-H02", approved_days_ago=45))
+    events += [
+        evt("D-H02", "stage_transition", 50, "Entered docs_pending"),
+        evt("D-H02", "comm_outbound", 47, "Sent docs reminder"),
+        evt("D-H02", "stage_transition", 40, "Docs received — moved to signing"),  # 45-40=5d after nudge ✓
+        evt("D-H02", "stage_transition", 40, "Settled — deal completed"),
+    ]
+
+    # D-H03: nudge approved 30 days ago → no response within 7 days (no response) ✗
+    interventions.append(iv("IV-H03", "D-H03", "OB-H03", approved_days_ago=30))
+    events += [
+        evt("D-H03", "stage_transition", 35, "Entered docs_pending"),
+        evt("D-H03", "comm_outbound", 32, "Sent initial docs"),
+        evt("D-H03", "comm_inbound", 20, "Buyer responded after 10-day gap"),  # 30-20=10d, outside 7d window ✗
+        evt("D-H03", "stage_transition", 25, "Settled — deal completed"),
+    ]
+
+    # D-H04: nudge approved 20 days ago → comm_inbound 2 days later (responded) ✓
+    interventions.append(iv("IV-H04", "D-H04", "OB-H04", approved_days_ago=20))
+    events += [
+        evt("D-H04", "stage_transition", 25, "Entered docs_pending"),
+        evt("D-H04", "comm_outbound", 22, "Docs sent to buyer"),
+        evt("D-H04", "comm_inbound", 18, "Buyer returned signed docs promptly"),  # 20-18=2d after nudge ✓
+        evt("D-H04", "stage_transition", 15, "Settled — deal completed"),
+    ]
+
+    return interventions, events
+
+
 # ── Main seeder ───────────────────────────────────────────────────────────────
 
 def seed(reset: bool = False) -> None:
@@ -630,11 +739,41 @@ def seed(reset: bool = False) -> None:
             event_id=ev["event_id"],
         )
 
+    # Historical settled deals + approved interventions for outcome tracking (TS08)
+    hist_deals = build_historical_deals()
+    for deal in hist_deals:
+        dao.insert_deal(conn, deal)
+
+    hist_interventions, hist_events = build_historical_interventions_and_events()
+    for ev in hist_events:
+        dao.insert_event(
+            conn,
+            deal_id=ev["deal_id"],
+            event_type=ev["event_type"],
+            occurred_at=datetime.fromisoformat(ev["occurred_at"]),
+            summary=ev["summary"],
+            payload=json.loads(ev["payload"]) if isinstance(ev["payload"], str) else ev["payload"],
+            event_id=ev["event_id"],
+        )
+    for iv_row in hist_interventions:
+        conn.execute(
+            """INSERT OR IGNORE INTO interventions
+               (intervention_id, deal_id, observation_id, intervention_type,
+                recipient_type, draft_subject, draft_body, reasoning_ref,
+                status, final_text, approved_at, created_at)
+               VALUES (:intervention_id, :deal_id, :observation_id, :intervention_type,
+                       :recipient_type, :draft_subject, :draft_body, :reasoning_ref,
+                       :status, :final_text, :approved_at, :created_at)""",
+            iv_row,
+        )
     conn.commit()
     conn.close()
-    logger.info("seed.complete", deals=len(deals), events=len(events), issuers=len(ISSUERS))
-    print(f"Seeded {len(deals)} deals, {len(events)} events, {len(ISSUERS)} issuers.")
-    assert len(deals) == 40, f"Expected 40 deals, got {len(deals)}"
+    total_deals = len(deals) + len(hist_deals)
+    total_events = len(events) + len(hist_events)
+    logger.info("seed.complete", deals=total_deals, events=total_events, issuers=len(ISSUERS))
+    print(f"Seeded {total_deals} deals ({len(hist_deals)} historical), {total_events} events, {len(ISSUERS)} issuers.")
+    assert len(deals) == 40, f"Expected 40 live deals, got {len(deals)}"
+    assert len(hist_deals) == 4, f"Expected 4 historical deals, got {len(hist_deals)}"
 
 
 if __name__ == "__main__":

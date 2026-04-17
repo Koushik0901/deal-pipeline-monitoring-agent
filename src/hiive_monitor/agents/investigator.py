@@ -216,6 +216,16 @@ def enrich_context(state: InvestigatorState) -> dict:
                 "; ".join(f"{d['final_stage']}: {d.get('key_signals', [])}" for d in data[:3])
                 if data else "none"
             )
+        elif tool_name == "fetch_intervention_outcomes":
+            data = dao.fetch_intervention_outcomes(conn, snap.issuer_id)
+            summary = f"Intervention outcomes for {snap.issuer_name}: " + (
+                "; ".join(
+                    f"{o['intervention_type']} {o['followed_by_response_7d']}/{o['total_approved']} "
+                    f"responded within 7d ({o['response_rate_pct']}%)"
+                    for o in data
+                )
+                if data else "no prior approved interventions found"
+            )
         else:
             data = []
             summary = "unknown tool"
