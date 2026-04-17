@@ -1,0 +1,75 @@
+id: adversarial_conflicting_comm
+category: adversarial_calibration
+description: >
+  Surface signal is 14-day communication silence, which would normally suggest
+  a stall. However the communication history contains an inbound message from
+  15 days ago where the issuer explicitly stated they are under a legal hold and
+  cannot respond for approximately two weeks. The agent must fetch the full
+  communication content during enrichment to discover this context, then suppress
+  the raw silence alarm. Expected: enrichment fires, severity ceiling watch.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: palantir-adv2
+      name: Palantir
+      typical_response_days: 5
+      rofr_window_days: 45
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-adv2
+      party_type: buyer
+      display_name: Wellington Management
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-adv2
+      party_type: seller
+      display_name: Alex Rivera
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-ADV-002
+    issuer_id: palantir-adv2
+    buyer_id: buyer-adv2
+    seller_id: seller-adv2
+    shares: 12000
+    price_per_share: 31.50
+    stage: rofr_pending
+    stage_entered_days_ago: 17
+    rofr_deadline_days_from_now: 28
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 18
+        summary: ROFR notice sent to Palantir legal
+        payload:
+          body: "Palantir legal — ROFR window has opened for the Rivera transfer (12,000 shares at $31.50). Window closes May 14th. Please advise on ROFR election."
+      - event_type: comm_inbound
+        days_ago: 15
+        summary: Palantir legal citing legal hold — cannot respond for ~2 weeks
+        payload:
+          body: "Thank you for the notice. Please be advised that Palantir is currently under a legal hold related to an unrelated matter and our legal team is unable to respond to ROFR or transfer inquiries for approximately two weeks. We will resume normal communications around April 17th and will provide our ROFR election at that time. We have noted the May 14th deadline and it will not be affected."
+      - event_type: comm_outbound
+        days_ago: 14
+        summary: Follow-up acknowledging legal hold
+        payload:
+          body: "Understood — we have noted the legal hold and will await your response around April 17th. The May 14th ROFR deadline remains in place."
+
+assertions:
+  enrichment_tool_called: fetch_communication_content
+  severity_lte: watch
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - communication_silence
+  dimensions_not_triggered:
+    - deadline_proximity
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools:
+    - fetch_communication_content

@@ -1,0 +1,62 @@
+id: edge_very_new_deal_healthy
+category: edge_case
+description: >
+  Brand-new deal: bid_accepted stage entered today (stage_entered_days_ago: 0).
+  A comm_inbound was received today confirming the bid. No deadline pressure,
+  experienced buyer with zero prior breakage, no blockers. Agent must not flag
+  a deal that literally just started — severity must be informational or watch,
+  no intervention. Guards against spurious early-stage alarms.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: stripe-edge4
+      name: Stripe
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge4
+      party_type: buyer
+      display_name: Sequoia Capital Fund XII
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge4
+      party_type: seller
+      display_name: Jamie Park
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-004
+    issuer_id: stripe-edge4
+    buyer_id: buyer-edge4
+    seller_id: seller-edge4
+    shares: 5000
+    price_per_share: 22.00
+    stage: bid_accepted
+    stage_entered_days_ago: 0
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_inbound
+        days_ago: 0
+        summary: Buyer confirmed bid acceptance
+        payload:
+          body: "We confirm our bid for 5,000 Stripe shares at $22.00. Please send transfer documents at your earliest convenience."
+
+assertions:
+  severity_lte: watch
+  no_intervention: true
+
+ground_truth:
+  severity: informational
+  dimensions_triggered: []
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

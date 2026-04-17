@@ -51,3 +51,14 @@ assertions:
   severity_gte: watch
   intervention_drafted: true
 
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+    - communication_silence
+  expected_tools: []
+

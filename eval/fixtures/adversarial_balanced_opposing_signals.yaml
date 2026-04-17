@@ -1,0 +1,76 @@
+id: adversarial_balanced_opposing_signals
+category: adversarial_calibration
+description: >
+  Two signals in direct tension: stage_aging is triggered (docs_pending for 8 days,
+  2.6x the 3-day baseline — a clear stall), but deadline pressure is low (ROFR
+  window has 30+ days remaining) and communication is active (comm_inbound 2 days ago,
+  so no silence). The agent must hold a calibrated middle — the aging stall is
+  real and must not be dismissed, but the responsive comms and comfortable deadline
+  preclude escalation. Expected: severity in [watch, act].
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: canva-adv4
+      name: Canva
+      typical_response_days: 4
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-adv4
+      party_type: buyer
+      display_name: Andreessen Horowitz Fund
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-adv4
+      party_type: seller
+      display_name: Priya Nair
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-ADV-004
+    issuer_id: canva-adv4
+    buyer_id: buyer-adv4
+    seller_id: seller-adv4
+    shares: 5500
+    price_per_share: 38.00
+    stage: docs_pending
+    stage_entered_days_ago: 8
+    rofr_deadline_days_from_now: 32
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 8
+        summary: Transfer docs sent to buyer
+        payload:
+          body: "Hi — Canva transfer documents attached for your review. Please sign and return within 5 business days."
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: Follow-up on docs
+        payload:
+          body: "Following up on the transfer docs sent April 8th. Please let us know if you need anything."
+      - event_type: comm_inbound
+        days_ago: 2
+        summary: Buyer still reviewing, expects to return docs this week
+        payload:
+          body: "Apologies for the delay — our compliance team needed to review the structure. We expect to return the signed documents by Friday."
+
+assertions:
+  severity_gte: watch
+  severity_lte: act
+  dimensions_triggered:
+    - stage_aging
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

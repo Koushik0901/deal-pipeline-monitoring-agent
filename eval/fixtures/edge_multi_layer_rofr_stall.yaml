@@ -1,0 +1,71 @@
+id: edge_multi_layer_rofr_stall
+category: edge_case
+description: >
+  Deal with multi_layer_rofr: true and an issuer with typical_response_days: 7.
+  Deal has been in rofr_pending for 30 days (1.5× the 20-day baseline — a mild
+  but real stall). The last communication was 9 days ago (exceeding the issuer's
+  7-day typical response window). ROFR deadline is 15 days away (not critical).
+  Tests that the multi-layer ROFR flag is surfaced in unusual_characteristics
+  and that the combination with issuer non-responsiveness reaches watch or above.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: anthropic-edge5
+      name: Anthropic
+      typical_response_days: 7
+      rofr_window_days: 45
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer-edge5
+      party_type: buyer
+      display_name: Wellington Management Secondary
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge5
+      party_type: seller
+      display_name: Sarah Chen
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-005
+    issuer_id: anthropic-edge5
+    buyer_id: buyer-edge5
+    seller_id: seller-edge5
+    shares: 7500
+    price_per_share: 510.00
+    stage: rofr_pending
+    stage_entered_days_ago: 30
+    rofr_deadline_days_from_now: 15
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+      multi_layer_rofr: true
+    events:
+      - event_type: comm_outbound
+        days_ago: 30
+        summary: ROFR notice sent — multi-layer approval noted
+        payload:
+          body: "Anthropic legal — ROFR notice for the Chen transfer (7,500 shares at $510). Note: multi-layer board and legal approval required. Window closes May 1st."
+      - event_type: comm_inbound
+        days_ago: 9
+        summary: Anthropic legal acknowledged — board review in progress
+        payload:
+          body: "Thank you for the notice. Board approval process is underway. We will update you within the week."
+
+assertions:
+  dimensions_triggered:
+    - unusual_characteristics
+  severity_gte: watch
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - unusual_characteristics
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+    - communication_silence
+  expected_tools: []

@@ -45,3 +45,14 @@ setup:
 assertions:
   severity_lte: watch
   no_intervention: true
+
+ground_truth:
+  severity: informational
+  dimensions_triggered: []
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

@@ -54,3 +54,14 @@ assertions:
   dimensions_triggered:
     - deadline_proximity
   intervention_drafted: true
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - stage_aging
+    - missing_prerequisites
+  expected_tools: []

@@ -1,0 +1,57 @@
+id: edge_empty_event_history
+category: edge_case
+description: >
+  Deal in docs_pending with zero events — no communications ever sent or received.
+  The agent must not hallucinate a communication history. With no comms and stage
+  entered 3 days ago (right at the 3-day baseline), signals are borderline. There
+  is no deadline pressure and no risk factors. Agent should produce watch or lower
+  with no intervention. Primary fixture for validating the agent does not fabricate
+  event content when the event list is empty.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: ramp-edge1
+      name: Ramp
+      typical_response_days: 4
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge1
+      party_type: buyer
+      display_name: Meridian Capital Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge1
+      party_type: seller
+      display_name: Priya Sharma
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-001
+    issuer_id: ramp-edge1
+    buyer_id: buyer-edge1
+    seller_id: seller-edge1
+    shares: 3000
+    price_per_share: 22.50
+    stage: docs_pending
+    stage_entered_days_ago: 3
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+
+assertions:
+  severity_lte: watch
+  no_intervention: true
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - communication_silence
+  dimensions_not_triggered:
+    - deadline_proximity
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

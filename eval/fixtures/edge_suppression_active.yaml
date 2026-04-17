@@ -1,0 +1,68 @@
+id: edge_suppression_active
+category: edge_case
+description: >
+  Deal that would normally receive an intervention (signing stage for 9 days —
+  2.25× the 4-day baseline, with no recent communication) but has a recent
+  comm_sent_agent_recommended event from 1 day ago, placing it inside the
+  suppression window (SUPPRESSION_TICKS=3 default). The attention score should
+  be multiplied by 0.2 (FR-LOOP-02), dropping below the 0.6 investigation threshold.
+  Validates that the suppression mechanism prevents duplicate interventions after
+  an analyst has already approved an agent-recommended outreach.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: groq-edge7
+      name: Groq
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge7
+      party_type: buyer
+      display_name: Andromeda Capital Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge7
+      party_type: seller
+      display_name: Marcus Webb
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-007
+    issuer_id: groq-edge7
+    buyer_id: buyer-edge7
+    seller_id: seller-edge7
+    shares: 4000
+    price_per_share: 14.20
+    stage: signing
+    stage_entered_days_ago: 9
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 9
+        summary: Signature pages sent
+        payload:
+          body: "Hi Marcus, Groq transfer signature pages attached. Please countersign and return."
+      - event_type: comm_sent_agent_recommended
+        days_ago: 1
+        summary: Agent-recommended nudge approved and sent by analyst
+        payload:
+          body: "Following up on the signature pages sent on April 7th. Please return the countersigned transfer agreement at your earliest convenience — we need to close this transfer by end of month."
+
+assertions:
+  no_intervention: true
+
+ground_truth:
+  severity: informational
+  dimensions_triggered: []
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

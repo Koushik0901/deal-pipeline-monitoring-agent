@@ -1,0 +1,70 @@
+id: edge_enrichment_cap
+category: edge_case
+description: >
+  Deal designed to invite multiple enrichment rounds: 18-day comm silence
+  (invites fetch_communication_content), buyer with prior_breakage_count: 2
+  (invites fetch_prior_observations), issuer with a history that would invite
+  fetch_issuer_history. All three enrichment triggers are present simultaneously,
+  but the agent is hard-capped at 2 enrichment rounds (FR-AGENT-04). The fixture
+  asserts that enrichment fired AND the observation's enrichment_chain has at most
+  2 entries — validating the hard cap holds under maximum enrichment pressure.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: perplexity-edge8
+      name: Perplexity AI
+      typical_response_days: 4
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge8
+      party_type: buyer
+      display_name: Repeat Buyer with Two Prior Breaks
+      is_first_time: false
+      prior_breakage_count: 2
+    - party_id: seller-edge8
+      party_type: seller
+      display_name: Priya Nair
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-008
+    issuer_id: perplexity-edge8
+    buyer_id: buyer-edge8
+    seller_id: seller-edge8
+    shares: 8000
+    price_per_share: 65.00
+    stage: docs_pending
+    stage_entered_days_ago: 18
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 2
+    events:
+      - event_type: comm_outbound
+        days_ago: 18
+        summary: Transfer docs sent to buyer
+        payload:
+          body: "Hi, Perplexity AI transfer documents attached. Please review and sign — this buyer has had prior issues at this stage."
+      - event_type: comm_outbound
+        days_ago: 11
+        summary: First follow-up
+        payload:
+          body: "Following up on the transfer docs from April 8th. Please confirm receipt and expected return date."
+
+assertions:
+  agent_triggers_enrichment: true
+  severity_gte: act
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - communication_silence
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+  expected_tools:
+    - fetch_communication_content

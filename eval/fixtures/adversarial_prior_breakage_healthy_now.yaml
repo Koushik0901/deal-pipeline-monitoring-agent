@@ -1,0 +1,69 @@
+id: adversarial_prior_breakage_healthy_now
+category: adversarial_calibration
+description: >
+  Buyer has a prior breakage count of 3, which alone would normally elevate risk.
+  However the current deal is entirely healthy: stage dwell is within baseline
+  (docs_pending entered 2 days ago, 3-day baseline), communication is active
+  (comm_inbound yesterday), and there are no blockers or deadline pressure.
+  Validates that historical counterparty risk does not trigger an intervention
+  when all present-state signals are clean. Expected: severity watch or below,
+  no intervention drafted.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: figma-adv3
+      name: Figma
+      typical_response_days: 3
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-adv3
+      party_type: buyer
+      display_name: Repeat Buyer with History
+      is_first_time: false
+      prior_breakage_count: 3
+    - party_id: seller-adv3
+      party_type: seller
+      display_name: Jamie Park
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-ADV-003
+    issuer_id: figma-adv3
+    buyer_id: buyer-adv3
+    seller_id: seller-adv3
+    shares: 3000
+    price_per_share: 44.00
+    stage: docs_pending
+    stage_entered_days_ago: 2
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 3
+    events:
+      - event_type: comm_outbound
+        days_ago: 2
+        summary: Transfer docs sent to buyer
+        payload:
+          body: "Hi — transfer documents for the Figma shares are attached. Please review, sign, and return within 5 business days."
+      - event_type: comm_inbound
+        days_ago: 1
+        summary: Buyer confirmed receipt, reviewing docs
+        payload:
+          body: "Received the documents. I am reviewing them with my advisor and will return the signed copies by end of week."
+
+assertions:
+  severity_lte: watch
+  no_intervention: true
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+  expected_tools: []

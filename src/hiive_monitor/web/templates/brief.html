@@ -133,7 +133,7 @@
 
 {% macro intervention_row(item) %}
 <div id="iv-{{ item.intervention_id }}"
-     x-data='{ expanded: false, editing: false, editText: {{ item.draft_body | tojson }} }'
+     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }} }'
      class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
 
   <!-- Compact summary row — click/keyboard to expand -->

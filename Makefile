@@ -1,5 +1,5 @@
 PORT ?= 8000
-.PHONY: setup seed run eval demo clean test lint
+.PHONY: setup seed run eval eval-deep langfuse-up langfuse-down demo clean test lint
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -23,6 +23,19 @@ run:
 # ── Eval ─────────────────────────────────────────────────────────────────────
 eval:
 	uv run python -m hiive_monitor.eval.runner
+
+# ── Deep Eval (LLM-as-judge + langfuse traces) ───────────────────────────────
+eval-deep:
+	uv run python -m hiive_monitor.eval.runner --deep
+
+# ── Langfuse dashboard (open-source, self-hosted) ────────────────────────────
+# Requires Docker. First run: open http://localhost:3000 and create an account,
+# then copy keys into .env as LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.
+langfuse-up:
+	docker compose -f docker-compose.langfuse.yml up -d
+
+langfuse-down:
+	docker compose -f docker-compose.langfuse.yml down
 
 # ── Demo ─────────────────────────────────────────────────────────────────────
 # Seeds DB, runs 3 simulated ticks (fast-forwarding clock), then starts the app.

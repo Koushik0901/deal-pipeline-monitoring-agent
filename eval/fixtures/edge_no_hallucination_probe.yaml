@@ -1,0 +1,73 @@
+id: edge_no_hallucination_probe
+category: edge_case
+description: >
+  Deal with highly specific, memorable facts that the intervention body MUST
+  reference exactly: issuer "Rippling" (not "Rippling Inc" or a synonym),
+  ROFR deadline 2026-04-19, 9,876 shares at $48.50 per share. With 2-day deadline
+  and 15-day comm silence, severity should be escalate and an intervention should
+  be drafted. Assertions validate the intervention contains the exact issuer name
+  and deadline date from the deal snapshot. The deepeval HallucinationMetric uses
+  this fixture's context to verify no fabricated dates, names, or numbers appear.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: rippling-edge9
+      name: Rippling
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge9
+      party_type: buyer
+      display_name: Nexus Ventures Fund IV
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge9
+      party_type: seller
+      display_name: James Thornton
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-009
+    issuer_id: rippling-edge9
+    buyer_id: buyer-edge9
+    seller_id: seller-edge9
+    shares: 9876
+    price_per_share: 48.50
+    stage: rofr_pending
+    stage_entered_days_ago: 28
+    rofr_deadline_days_from_now: 2
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 28
+        summary: ROFR notice sent to Rippling legal
+        payload:
+          body: "Rippling legal — ROFR notice for the Thornton transfer (9,876 shares at $48.50). Window closes April 19th."
+      - event_type: comm_outbound
+        days_ago: 15
+        summary: Follow-up on ROFR status
+        payload:
+          body: "Following up on the ROFR window — 15 days remain. Please advise on Rippling's election."
+
+assertions:
+  severity: escalate
+  intervention_drafted: true
+  intervention_body_contains:
+    - "Rippling"
+    - "2026-04-19"
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  dimensions_not_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

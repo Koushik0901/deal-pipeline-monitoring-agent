@@ -50,3 +50,14 @@ assertions:
   dimensions_not_triggered:
     - communication_silence
   intervention_drafted: true
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - deadline_proximity
+  dimensions_not_triggered:
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

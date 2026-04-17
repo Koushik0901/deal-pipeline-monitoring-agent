@@ -57,3 +57,14 @@ assertions:
     - stage_aging
     - unusual_characteristics
   intervention_drafted: true
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - stage_aging
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+  expected_tools: []

@@ -1,0 +1,70 @@
+id: edge_deadline_zero_days
+category: edge_case
+description: >
+  ROFR expires today (rofr_deadline_days_from_now: 0) — the 0-day boundary of
+  the critical deadline band. Deal is in rofr_pending, 19 days in (within the
+  20-day baseline). There is a recent comm_inbound from 2 days ago so the issuer
+  is not silent. The sole risk is the expiring deadline. Agent must produce
+  severity=escalate and flag deadline_proximity. Tests whether the 0-day case is
+  treated as the most critical deadline band.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: databricks-edge2
+      name: Databricks
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge2
+      party_type: buyer
+      display_name: Kairos Secondary LP
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge2
+      party_type: seller
+      display_name: Marcus Webb
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-002
+    issuer_id: databricks-edge2
+    buyer_id: buyer-edge2
+    seller_id: seller-edge2
+    shares: 6000
+    price_per_share: 95.00
+    stage: rofr_pending
+    stage_entered_days_ago: 19
+    rofr_deadline_days_from_now: 0
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 19
+        summary: ROFR notice sent to Databricks legal
+        payload:
+          body: "Databricks legal — ROFR window opened today for the Webb transfer (6,000 shares at $95.00). Window closes April 16th."
+      - event_type: comm_inbound
+        days_ago: 2
+        summary: Databricks confirmed decision imminent
+        payload:
+          body: "We are finalizing the ROFR election today — formal response by end of business."
+
+assertions:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+  dimensions_not_triggered:
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

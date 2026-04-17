@@ -1,0 +1,74 @@
+id: adversarial_strong_single_signal
+category: adversarial_calibration
+description: >
+  Deal with a single strong signal — ROFR expires in 2 days — but every other
+  indicator is healthy: issuer is responsive (comm_inbound yesterday), stage dwell
+  is within baseline, no blockers, experienced buyer with zero prior breakage.
+  Validates that one urgent deadline does not force escalate when the surrounding
+  picture is clean. Expected ceiling: act.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: stripe-adv1
+      name: Stripe
+      typical_response_days: 3
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-adv1
+      party_type: buyer
+      display_name: Sequoia Capital Fund XIV
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-adv1
+      party_type: seller
+      display_name: Mark Huang
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-ADV-001
+    issuer_id: stripe-adv1
+    buyer_id: buyer-adv1
+    seller_id: seller-adv1
+    shares: 8000
+    price_per_share: 22.00
+    stage: rofr_pending
+    stage_entered_days_ago: 8
+    rofr_deadline_days_from_now: 2
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 9
+        summary: ROFR notice sent to Stripe legal
+        payload:
+          body: "Stripe legal — ROFR window begins today for the Huang transfer (8,000 shares at $22.00). Window closes April 18th."
+      - event_type: comm_inbound
+        days_ago: 7
+        summary: Stripe acknowledged receipt, reviewing
+        payload:
+          body: "Received. Our legal team is reviewing the transfer details and will respond before the deadline."
+      - event_type: comm_inbound
+        days_ago: 1
+        summary: Stripe confirmed decision expected today
+        payload:
+          body: "We are finalizing our ROFR election today and will send formal notice by end of business."
+
+assertions:
+  severity_lte: act
+  dimensions_triggered:
+    - deadline_proximity
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - deadline_proximity
+  dimensions_not_triggered:
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

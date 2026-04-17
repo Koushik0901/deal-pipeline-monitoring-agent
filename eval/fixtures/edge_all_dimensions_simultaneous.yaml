@@ -1,0 +1,79 @@
+id: edge_all_dimensions_simultaneous
+category: edge_case
+description: >
+  Deal engineered to trigger all five LLM risk dimensions simultaneously:
+  (1) stage_aging: docs_pending for 12 days — 4× the 3-day baseline;
+  (2) deadline_proximity: ROFR deadline in 3 days — critical band;
+  (3) communication_silence: last comm 21 days ago — severe silence;
+  (4) missing_prerequisites: two unresolved blockers (board approval + legal sign-off);
+  (5) unusual_characteristics: first-time buyer at 4× typical deal size.
+  With all five dimensions simultaneously active, severity must be escalate.
+  This is the maximum-signal stress test for the severity scorer.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: spacex-edge3
+      name: SpaceX
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: true
+  parties:
+    - party_id: buyer-edge3
+      party_type: buyer
+      display_name: First-Time Sovereign Fund
+      is_first_time: true
+      prior_breakage_count: 0
+    - party_id: seller-edge3
+      party_type: seller
+      display_name: Alex Rivera
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-003
+    issuer_id: spacex-edge3
+    buyer_id: buyer-edge3
+    seller_id: seller-edge3
+    shares: 40000
+    price_per_share: 185.00
+    stage: docs_pending
+    stage_entered_days_ago: 12
+    rofr_deadline_days_from_now: 3
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: true
+      prior_breakage_count: 0
+      multi_layer_rofr: true
+    blockers:
+      - kind: missing_doc
+        description: First-time buyer has not returned executed transfer documents
+        since: "2026-04-04T09:00:00Z"
+      - kind: awaiting_response
+        description: SpaceX board approval for transfer not yet received
+        since: "2026-04-05T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 21
+        summary: Transfer docs sent to first-time buyer
+        payload:
+          body: "Hi, transfer docs for 40,000 SpaceX shares attached. Please sign and return immediately — ROFR window closes April 19th."
+
+assertions:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  dimensions_not_triggered: []
+  expected_tools: []

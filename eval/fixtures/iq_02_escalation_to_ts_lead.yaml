@@ -55,3 +55,14 @@ setup:
 assertions:
   severity: escalate
   intervention_drafted: true
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+  expected_tools: []

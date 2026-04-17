@@ -42,3 +42,14 @@ setup:
 
 assertions:
   severity_lte: watch
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

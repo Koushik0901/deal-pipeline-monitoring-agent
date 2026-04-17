@@ -1,0 +1,67 @@
+id: edge_severity_not_inflated
+category: edge_case
+description: >
+  Single mild signal: signing stage for 5 days — 1.25× the 4-day baseline.
+  A marginal dwell slightly above baseline but below any meaningful stall.
+  Everything else is clean: comm_inbound 2 days ago (responsive), no deadline,
+  experienced buyer, no blockers. Agent must NOT over-escalate on a weak single
+  signal — severity must stay at watch or below. No intervention should be drafted.
+  Guards against alarm fatigue caused by over-flagging borderline deals.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: canva-edge10
+      name: Canva
+      typical_response_days: 4
+      rofr_window_days: 21
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge10
+      party_type: buyer
+      display_name: Andreessen Horowitz Fund XVI
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-edge10
+      party_type: seller
+      display_name: Sarah Chen
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-010
+    issuer_id: canva-edge10
+    buyer_id: buyer-edge10
+    seller_id: seller-edge10
+    shares: 4500
+    price_per_share: 34.50
+    stage: signing
+    stage_entered_days_ago: 5
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: Signature pages sent to seller
+        payload:
+          body: "Hi Sarah, Canva transfer signature pages attached. Please countersign and return within the next few days."
+      - event_type: comm_inbound
+        days_ago: 2
+        summary: Seller acknowledged receipt
+        payload:
+          body: "Received, will return the signed pages by end of week."
+
+assertions:
+  severity_lte: watch
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

@@ -338,10 +338,10 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 
 **Purpose**: Test the agent's handling of uncertainty, conflicting signals, and prior history. These don't test detection — they test *calibration*. The agent should hold a measured middle position, not collapse to either extreme.
 
-- [ ] T113a [P] [US7] Author `adversarial_strong_single_signal.yaml` — deal with strong `deadline_proximity` (2 days to ROFR) but four otherwise healthy signals (responsive issuer, on-stage, no blockers, no silence); assert `severity_lte: act` — one strong signal should not produce escalate when the surrounding picture is clean
-- [ ] T113b [P] [US7] Author `adversarial_conflicting_comm.yaml` — 14-day comm silence as the surface signal, but `fetch_communication_content` reveals an earlier message explicitly explaining a legal hold; assert `enrichment_tool_called: fetch_communication_content` and `severity_lte: watch` — enrichment context must suppress the raw silence signal
-- [ ] T113c [P] [US7] Author `adversarial_prior_breakage_healthy_now.yaml` — buyer party with `prior_breakage_count: 3` but deal is currently on-stage, within deadline, and recently responsive; assert `severity_lte: watch`, `no_intervention: true` — historical counterparty risk alone should not trigger an intervention when present signals are clean
-- [ ] T113d [P] [US7] Author `adversarial_balanced_opposing_signals.yaml` — `stage_aging` triggered (dwell at 2× baseline) but `deadline_proximity` fine, recent `comm_inbound` present; assert `severity_gte: watch` AND `severity_lte: act` — agent must hold a calibrated middle, not over-escalate on aging alone nor dismiss the signal entirely
+- [X] T113a [P] [US7] Author `adversarial_strong_single_signal.yaml` — deal with strong `deadline_proximity` (2 days to ROFR) but four otherwise healthy signals (responsive issuer, on-stage, no blockers, no silence); assert `severity_lte: act` — one strong signal should not produce escalate when the surrounding picture is clean
+- [X] T113b [P] [US7] Author `adversarial_conflicting_comm.yaml` — 14-day comm silence as the surface signal, but `fetch_communication_content` reveals an earlier message explicitly explaining a legal hold; assert `enrichment_tool_called: fetch_communication_content` and `severity_lte: watch` — enrichment context must suppress the raw silence signal
+- [X] T113c [P] [US7] Author `adversarial_prior_breakage_healthy_now.yaml` — buyer party with `prior_breakage_count: 3` but deal is currently on-stage, within deadline, and recently responsive; assert `severity_lte: watch`, `no_intervention: true` — historical counterparty risk alone should not trigger an intervention when present signals are clean
+- [X] T113d [P] [US7] Author `adversarial_balanced_opposing_signals.yaml` — `stage_aging` triggered (dwell at 2× baseline) but `deadline_proximity` fine, recent `comm_inbound` present; assert `severity_gte: watch` AND `severity_lte: act` — agent must hold a calibrated middle, not over-escalate on aging alone nor dismiss the signal entirely
 
 **Checkpoint**: US7 standalone — `make eval` runs ≥13/15 green; enrichment scenario (T105) is one of the 15.
 
@@ -368,7 +368,7 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 
 - [X] T122 Tailwind CLI final build in `make setup`: `npx tailwindcss -i static/input.css -o static/app.css --minify`
 - [X] T123 [P] Design pass — run `/impeccable teach` to establish design context in `.impeccable.md`, then apply `/layout` + `/typeset` + `/polish` to `brief.html` and `deal_detail.html`
-- [ ] T123a [P] Auto-expand escalate items in `brief.html` `intervention_row` macro — change Alpine `x-data` `expanded` initial value from `false` to `{{ 'true' if item.severity == 'escalate' else 'false' }}` so the analyst sees reasoning and action buttons immediately for the most urgent items without an extra click
+- [X] T123a [P] Auto-expand escalate items in `brief.html` `intervention_row` macro — change Alpine `x-data` `expanded` initial value from `false` to `{{ 'true' if item.severity == 'escalate' else 'false' }}` so the analyst sees reasoning and action buttons immediately for the most urgent items without an extra click
 - [X] T124 [P] Empty states: "no items in today's brief", "no observations yet for this deal", "no enrichment performed" (when enrichment_chain empty in observation row)
 - [X] T125 [P] Error states: LLM-error observation rendering, 404 deal, 400 sim-advance in real_time mode toast
 - [X] T125a [US5] Timeout for crashed background ticks — `/api/tick/{tick_id}/status` in `web/routes/main.py` polls every 2s with no upper bound; if `run_tick` crashes before `dao.start_tick()` inserts the tick row (or during the graph run), the client polls forever because the status endpoint keeps returning the "running" fragment. Add server-side detection: track tick-dispatch time (in-memory dict or a `ticks.dispatched_at` column) and, after ~30s with no completion, return a terminal "tick failed — check logs" div with no `hx-trigger` so the HTMX polling loop terminates. Alternative: cap client polling via `hx-trigger="every 2s, count:30"` and render a timeout state on final swap.
@@ -381,19 +381,98 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 
 ---
 
+## Phase 12: Deep Evaluation Framework (deepeval + langfuse)
+
+**Purpose**: Elevate the eval harness from deterministic assertion checking to full LLM-as-judge coverage with per-dimension precision/recall, severity confusion matrix, and persistent observability traces. Produces evidence that every failure mode has been probed and the system is calibrated — not just passing its own golden tests.
+
+**Architecture**: Two Makefile targets sharing the same fixture corpus.
+- `make eval` — Layer 1 deterministic (fast, CI-safe, ~2 min). Unchanged behaviour.
+- `make eval-deep` — Layer 1 + Layer 2 LLM-as-judge + Layer 3 langfuse traces (pre-release, ~10–20 min + judge LLM cost).
+
+**New env vars** (add to `.env.example`): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (default `https://cloud.langfuse.com`), `EVAL_JUDGE_MODEL` (default `qwen/qwen3-plus` — routed via OpenRouter, model-agnostic).
+
+**Reference spec**: [`specs/001-deal-pipeline-monitor/eval-deep-spec.md`](./eval-deep-spec.md)
+
+### 12.1 Ground-truth labels + scorecard metrics
+
+- [X] TEV01 [P] Backfill ground-truth labels on all existing 23 fixtures — add `ground_truth.dimensions_triggered` and `ground_truth.dimensions_not_triggered` lists alongside existing `assertions` block. These feed Layer 1 P/R computation without changing existing assertion semantics. Fixtures without a `severity` assertion get `ground_truth.severity` added too.
+- [X] TEV02 Extend `eval/runner.py` scorecard with two new sections printed after the existing per-scenario results:
+  - **Per-dimension precision/recall table** — for each `RiskDimension`, compute TP (dimension in both ground_truth and actual), FP (actual but not ground_truth), FN (ground_truth but not actual), TN (neither); emit P, R, F1 per row.
+  - **4×4 severity confusion matrix** — expected (row) × actual (col): `informational | watch | act | escalate`; surface systematic bias patterns (under-escalation, over-escalation).
+  - Both computed from `ground_truth` fields + existing `assertion_results` — no new LLM calls. Also write `eval_results/latest.md` symlink / copy for README badge.
+
+### 12.2 Edge-case + failure-mode fixtures (11 new, total → 30)
+
+**Boundary conditions:**
+
+- [X] TEV03a [P] Author `eval/fixtures/edge_empty_event_history.yaml` — deal in `docs_pending` with zero events (no comms ever); assert `no_intervention: true` and intervention body (if any) contains no fabricated comm references. Validates agent doesn't hallucinate a communication history.
+- [X] TEV03b [P] Author `edge_deadline_zero_days.yaml` — ROFR expires today (`rofr_deadline_days_from_now: 0`); assert `severity: escalate` and `dimensions_triggered: [deadline_proximity]`. Tests the 0-day boundary of the critical band.
+- [X] TEV03c [P] Author `edge_all_dimensions_simultaneous.yaml` — deal engineered to fire all five LLM dimensions at once: stage 3× baseline, ROFR in 3 days, 21-day comm silence, unresolved doc blocker, first-time buyer at 4× typical deal size; assert `severity: escalate` and all five dimensions in `dimensions_triggered`.
+- [X] TEV03d [P] Author `edge_very_new_deal_healthy.yaml` — deal entered stage today (`stage_entered_days_ago: 0`), no deadline pressure, recent `comm_inbound`; assert `severity_lte: watch`, `no_intervention: true`. Guards against spurious flagging of brand-new deals.
+- [X] TEV03e [P] Author `edge_multi_layer_rofr_stall.yaml` — `multi_layer_rofr: true`, issuer with `typical_response_days: 7`, deal dwell at 1.5× baseline with no recent comm; assert `unusual_characteristics` in `dimensions_triggered` and `severity_gte: watch`. Tests the multi-layer ROFR path in the unusual_characteristics evaluator.
+- [X] TEV03f [P] Author `edge_multiple_blockers.yaml` — deal with three structured blockers in `risk_factors.blockers` (e.g. board-approval, legal-review, tax-clearance); assert `missing_prerequisites` in `dimensions_triggered`, `severity_gte: act`.
+
+**Failure mode probes:**
+
+- [X] TEV03g [P] Author `edge_suppression_active.yaml` — seed a `comm_sent_agent_recommended` event for the deal at tick-1 (within `SUPPRESSION_TICKS` window); assert `no_intervention: true` even if the underlying signals would normally warrant one. Tests FR-LOOP-02 suppression end-to-end through the eval harness.
+- [X] TEV03h [P] Author `edge_enrichment_cap.yaml` — scenario with three sequential silence signals that each invite another enrichment round; seed the deal's enrichment so the first two calls return ambiguous context; assert `enrichment_chain` length ≤ 2 in the persisted observation (FR-AGENT-04 hard cap). This is the only fixture that deliberately violates sufficiency to probe the cap.
+- [X] TEV03i [P] Author `edge_no_hallucination_probe.yaml` — healthy deal with known facts (specific issuer name, exact deadline, specific share count); assert `intervention_body_contains` uses the exact real issuer name + deadline from the fixture (not a placeholder), and that the body does NOT contain any name/date not in the snapshot. Primary fixture for the deepeval `HallucinationMetric`.
+- [X] TEV03j [P] Author `edge_severity_not_inflated.yaml` — single mild signal: stage dwell at 1.1× baseline, no other risk; assert `severity_lte: watch`. Guards against over-escalation on a weak single signal.
+- [X] TEV03k [P] Author `edge_first_time_large_deal.yaml` — `is_first_time: true`, deal size 5× the issuer's typical deal size, no other risk signals; assert `unusual_characteristics` in `dimensions_triggered`, `severity_gte: watch`, `intervention_drafted: true`. Tests the unusual_characteristics path independently.
+
+### 12.3 deepeval integration
+
+- [X] TEV04 Add dependencies to `pyproject.toml`: `deepeval>=0.21`, `langfuse>=2.0`. Run `uv sync`. Add `EVAL_JUDGE_MODEL=qwen/qwen3-plus` and langfuse keys to `.env.example`.
+- [X] TEV05 Implement `eval/deepeval_adapter.py::OpenRouterJudge(DeepEvalBaseLLM)` — wraps `ChatOpenRouter` using `EVAL_JUDGE_MODEL` env var; implements `generate()` and `a_generate()` as required by the deepeval `DeepEvalBaseLLM` protocol. Allows all deepeval metrics to use OpenRouter without an OpenAI key.
+- [X] TEV06 Implement `eval/deepeval_cases.py::build_test_case(scenario, run_result) -> LLMTestCase` — maps scenario YAML + `run_scenario()` result to a deepeval `LLMTestCase`:
+  - `input`: formatted deal snapshot (stage, dwell, events summary, parties)
+  - `actual_output`: serialized observation (severity + triggered dimensions + intervention body if any)
+  - `expected_output`: `ground_truth.severity` + `ground_truth.dimensions_triggered` from fixture
+  - `context`: list of raw deal facts (issuer name, deadline date, share count, stage) — used by HallucinationMetric
+  - `tools_called`: list of `ToolCall(name=..., input_parameters={"deal_id": ...})` reconstructed from `enrichment_chain`
+- [X] TEV07 Implement `eval/deepeval_metrics.py` — five metric wrappers using `OpenRouterJudge`:
+  - **Task Completion** (`TaskCompletionMetric`) — task description: "Screen the deal, evaluate all risk dimensions, assess sufficiency, score severity, and draft an intervention if severity ≥ act"; checks the agent completed every pipeline step.
+  - **Tool Correctness** (`ToolCorrectnessMetric`) — compares `tools_called` (from enrichment_chain) against `ground_truth.expected_tools` from fixture; passes when called tools match expected (or both empty).
+  - **Argument Correctness** (`ArgumentCorrectnessMetric`) — validates `deal_id` and `issuer_id` args in tool calls match the fixture's actual deal/issuer IDs; catches hallucinated identifiers.
+  - **Misinformation / Factual Grounding** (`HallucinationMetric`) — `context` = deal snapshot facts; `actual_output` = intervention draft body; fails if body contains names/dates/numbers not in context.
+  - **Answer Correctness** (`GEval`, custom rubric) — evaluates severity accuracy + dimension detection accuracy; rubric: "Given the deal facts in [input], the expected severity is [expected_output.severity] and the expected triggered dimensions are [expected_output.dimensions]. Score 1.0 if both match exactly, 0.5 if severity matches but ≤1 dimension differs, 0.0 if severity is wrong by more than one level or majority of dimensions are wrong."
+- [X] TEV08 Implement `eval/deepeval_runner.py::run_deep_eval(fixtures_dir, results_dir)`:
+  - Calls existing `run_scenario()` for each fixture (Layer 1 unchanged)
+  - Builds `LLMTestCase` via `build_test_case()`
+  - Runs all 5 metrics; aggregates per-metric pass rate + mean score
+  - Returns combined scorecard (Layer 1 assertions + Layer 2 metric scores per scenario)
+- [X] TEV09 Extend `eval/scorecard.py` (or `runner.py`) to render the deep eval scorecard section: per-scenario metric scores table, aggregate metric pass rates, flag any scenario where `HallucinationMetric < 0.5` or `AnswerCorrectness < 0.5` as a :warning: priority failure.
+
+### 12.4 Langfuse observability
+
+- [X] TEV10 Implement `eval/langfuse_tracer.py::EvalTracer`:
+  - `trace_scenario(scenario_id, category, expected_severity, actual_severity, metric_scores: dict[str, float], enrichment_rounds: int, llm_call_count: int)` — creates one `langfuse.trace()` per scenario with all fields as metadata
+  - `flush()` — calls `langfuse.flush()` after all scenarios complete
+  - Gracefully no-ops (logs a warning) when `LANGFUSE_PUBLIC_KEY` is not set, so `make eval` still works offline
+- [X] TEV11 Integrate `EvalTracer` into `deepeval_runner.py` — call `tracer.trace_scenario(...)` after each scenario's metric scores are computed; call `tracer.flush()` at end of run.
+
+### 12.5 Makefile + CLI
+
+- [X] TEV12 Add `make eval-deep` target: `uv run python -m hiive_monitor.eval --deep`; update `eval/__main__.py` to accept `--deep` flag routing to `deepeval_runner.run_deep_eval()` vs existing `main()`. Update `make eval` to explicitly NOT pass `--deep` so existing behaviour is unchanged.
+- [X] TEV13 Write `specs/001-deal-pipeline-monitor/eval-deep-spec.md` — reference document for the deep eval framework: metric definitions, fixture schema extensions (`ground_truth` block), judge model configuration, langfuse dashboard setup, how to interpret the confusion matrix and per-dimension P/R table, how to add a new metric.
+
+**Checkpoint**: `make eval-deep` runs all 30 fixtures through both layers; langfuse dashboard shows per-scenario metric traces; scorecard includes P/R table + confusion matrix + metric aggregate scores.
+
+---
+
 ## Stretch Queue (start only after Phase 11; hard-start cut-offs per plan.md)
 
 - [ ] TS01 [STRETCH] Fourth intervention type `status_recommendation` — add to `models/interventions.py` discriminated union + new prompt + severity-rubric branch. Cut-off: hour 48.
 - [ ] TS02 [STRETCH] Scale to 40 deals + 23 scenarios — `generate_deals(count=40)` already parametric (T116); add 8 YAML fixtures. Cut-off: hour 50.
 - [ ] TS03 [STRETCH] Screen 3 standalone "Reviewer Queue" page — add `web/routes/queue.py` + `templates/queue.html`; reuses `_all_open_list.html`. Cut-off: hour 51.
-- [ ] TS04 [STRETCH] Tier 2 LLM-as-judge — `eval/judge.py` + `judge_rubric:` block in 3 intervention_quality YAMLs + Sonnet grader. Cut-off: hour 49.
+- [~] TS04 [SUPERSEDED by Phase 12] Tier 2 LLM-as-judge — replaced by the full deepeval + langfuse framework in Phase 12 (TEV04–TEV12), which covers all five metric classes across all 30 fixtures rather than 3 intervention_quality YAMLs only.
 - [ ] TS05 [STRETCH] Simulated-mode autoplay (SSE stream advancing N days over M seconds). Cut-off: hour 52.
 - [ ] TS06 [STRETCH] Document collection tracking (BUILD_PLAN §9.2 #6) — add `required_documents_by_stage` map to `models/stages.py`; add `documents_received` column to `deals` via `ALTER TABLE deals ADD COLUMN documents_received TEXT DEFAULT '[]' NOT NULL` (SQLite errors on duplicate-column re-run, so wrap the `ALTER` in a try/except catching `sqlite3.OperationalError` and treating it as a no-op — idempotent migration). Add this `ALTER` to a `stretch_migrations()` function in `db/schema.py` that is called only when the TS06 feature flag is enabled. Enrich `DealSnapshot` with `missing_documents` derived field; specialize `intervention_outbound_nudge.py` prompt so drafts targeting a `docs_pending` deal name the exact missing document by filename from `missing_documents`. Estimated 3h. Cut-off: **hour 48**.
 - [ ] TS07 [STRETCH] ROFR outcome tracking (BUILD_PLAN §9.2 #7) — extend `Stage` enum with `rofr_exercised` (between `rofr_pending` and `signing`); add `models/rofr_exercise.py` (`RofrExercise` with `assignee_party_id`, `original_buyer_party_id`, `exercised_at`); new Investigator branch node `handle_rofr_exercised` that drafts two interventions in one tick — (a) outbound nudge to issuer-assignee coordinating substitute-buyer signing, (b) internal internal_escalation notifying TS of original-buyer fallout needing comms; log the exercise event to `issuers` history so `fetch_issuer_history` surfaces exercise rate for future deals. Add YAML fixture `detection_rofr_exercised.yaml` to golden set. Estimated 4h. Cut-off: **hour 45**.
 - [ ] TS08 [STRETCH] Intervention outcome tracking — close the learning loop: after an intervention is approved, track whether `stage_transition` or `comm_inbound` events followed on the same deal within 7 days; surface the outcome stats in `assess_sufficiency` reasoning as e.g. "of 8 prior outbound nudges on this issuer, 7 resulted in a response within 7 days." Implementation: new `dao.py` function `get_intervention_outcomes(issuer_id, intervention_type)` joining approved `interventions` to subsequent `events` within a time window; add a fourth enrichment tool `fetch_intervention_outcomes` alongside the existing three (update `SufficiencyDecision.suggested_tool` Literal); engineer 3–4 historical settled deals in `seed/deals.py` with prior approved interventions + follow-on events; add one eval scenario `detection_outcome_history.yaml` asserting `enrichment_tool_called: fetch_intervention_outcomes` and that the intervention body references the outcome stat. Attribution is correlation not causation — phrase as "following a nudge, X of Y cases saw response" not "nudge caused response." Estimated 4h. Cut-off: **hour 50**.
 - [ ] TS09 [STRETCH] Portfolio-level pattern detection — a tick-level pattern detector at portfolio scope, complementing the per-deal Investigator. Add `detect_portfolio_patterns(state)` node in `agents/monitor.py` running after `close_tick`; groups live deals by `(issuer_id, stage)`, compares cluster size to a 3-tick rolling average derived from prior `agent_observations` counts, flags any cluster where current count exceeds 2× rolling average; stores results as JSON in a new `signals` column on `ticks` (idempotent `ALTER TABLE` in `stretch_migrations()`); renders as a collapsible "Portfolio signals" section at the top of `brief.html` when `tick.signals` is non-empty. Detection is purely deterministic — no LLM call. This is intentionally agentic at a different scope than the per-deal Investigator: the per-deal agent sees deal-level risk; the portfolio detector sees systemic issuer-level stalls that no single deal observation can surface. Estimated 5h. Cut-off: **hour 52**.
 - [ ] TS10 [STRETCH] Deal snooze — analyst can suppress a deal from the monitoring loop for N hours with a required reason, acknowledging out-of-band knowledge the agent cannot see. Schema: add `snoozed_until TEXT, snooze_reason TEXT` columns to `deals` via idempotent `ALTER TABLE` in `stretch_migrations()`; add `'snooze_created'` to `events.event_type` CHECK constraint; update `get_live_deals()` to filter `AND (snoozed_until IS NULL OR snoozed_until < current_simulated_time)`. New route `POST /deals/{deal_id}/snooze` with `hours: int = Form(48)` and `reason: str = Form(...)` — inserts `snooze_created` event to `events` (audit trail). UI: snooze button with reason textarea in brief expanded panel and deal detail header; "Snoozed until X — {reason}" badge on compact brief row when active. Snooze is semantically distinct from dismiss: dismiss is permanent and reason-free; snooze is temporary and reason-required. Estimated 4h. Cut-off: **hour 51**.
-- [ ] TS11 [STRETCH] Eval failure mode analysis — extend `write_scorecard` in `eval/runner.py` with cross-scenario diagnostics so the harness explains *why* scenarios failed, not just that they did. Add: (1) per-`RiskDimension` precision/recall table — for each dimension, count scenarios where it was expected (appears in assertions) vs. correctly triggered (assertion passed); (2) 4×4 severity confusion matrix (expected row × actual column) across all scenarios; (3) per-failure root-cause hint — when a `severity` assertion fails, correlate with which dimension assertions also failed in the same scenario and emit e.g. "severity under-estimated; likely missed dimension: deadline_proximity (also failed)." All computed from the existing `assertion_results` tuples — no new API calls, no schema changes. Estimated 2.5h. Cut-off: **hour 53**.
+- [~] TS11 [SUPERSEDED by Phase 12 / TEV02] Eval failure mode analysis — the per-dimension P/R table and 4×4 severity confusion matrix are now TEV02 in Phase 12 (promoted from stretch to core). The per-failure root-cause hint ("severity under-estimated; likely missed dimension: X") can be added as a TEV02 extension once the confusion matrix scaffolding is in place.
 - [ ] TS12 [STRETCH] Batch approve Watch items — add "Approve all Watch" button in the All Open tab header of `_all_open_list.html`, rendered only when ≥1 pending watch-severity intervention exists; new route `POST /interventions/batch-approve` with `severity_filter: str = Form('watch')` that loops `approve_intervention_atomic` for each matching pending intervention and returns a refreshed list fragment; `hx-confirm` on the button shows the count of items that will be affected. Scope is strictly Watch-severity: act/escalate items require individual review. Estimated 2h. Cut-off: **hour 53**.
 
 ---
@@ -412,9 +491,10 @@ description: "Task list for Deal Pipeline Monitoring Agent (rev 2 — includes I
 | Phase 6 US5 Sim | Phase 3 (needs run_tick) | — |
 | Phase 7 US2 Per-deal | Phase 3 + Phase 4 (needs observations/interventions) | — |
 | Phase 8 US6 Audit | Phase 2 logging; alongside Phase 3 | — |
-| Phase 9 US7 Eval | Phase 2; runner lands at Phase 3/4 time; 5 scenarios by Phase 5 | — |
+| Phase 9 US7 Eval | Phase 2; runner lands at Phase 3/4 time; 5 scenarios by Phase 5 | Phase 12 (fixture corpus) |
 | Phase 10 Seed | Phase 2 schema; seed data usable from hour 8 | Phase 5 demo |
 | Phase 11 Polish | All MVP phases | — |
+| Phase 12 Deep Eval | Phase 9 (fixture corpus + runner); Phase 3+4 (agent must work end-to-end) | — |
 
 ### Critical path within Phase 4 (Investigator)
 

@@ -47,3 +47,14 @@ assertions:
   intervention_body_contains:
     - "SpaceX"
     - "2026-04-18"
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  dimensions_not_triggered:
+    - stage_aging
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

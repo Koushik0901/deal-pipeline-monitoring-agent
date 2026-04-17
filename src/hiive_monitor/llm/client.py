@@ -12,6 +12,7 @@ All calls go through call_structured(), which:
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Type, TypeVar
 
@@ -23,6 +24,46 @@ from pydantic import BaseModel, ValidationError
 
 from hiive_monitor import logging as log_module
 from hiive_monitor.config import get_settings
+
+
+def _langfuse_handler(call_name: str, tick_id: str, deal_id: str):
+    """
+    Return a Langfuse CallbackHandler scoped to the current tick's root trace.
+
+    All LLM calls within one tick share a parent trace (keyed by tick_id) so the
+    Langfuse UI shows per-tick cost, latency, and token aggregates.  Each individual
+    LLM call becomes a nested generation span with its own model, tokens, and latency.
+
+    The handler automatically captures:
+      - model name (from the ChatOpenRouter invocation)
+      - input / output token counts (from OpenRouter's OpenAI-compatible usage response)
+      - latency (start_time / end_time on the generation span)
+      - cost (inferred by Langfuse when the model is in its registry; otherwise set
+              cost_details manually — see _update_generation_cost())
+
+    Gracefully returns None when LANGFUSE_PUBLIC_KEY is not set.
+    """
+    if not os.getenv("LANGFUSE_PUBLIC_KEY"):
+        return None
+    try:
+        from langfuse.callback import CallbackHandler
+        return CallbackHandler(
+            # Nest this call under the tick's root trace rather than creating a new root.
+            # All calls with the same trace_id share one parent trace in Langfuse.
+            trace_id=tick_id,
+            trace_name=f"tick/{tick_id}",
+            # The span name identifies which pipeline step this generation belongs to.
+            observation_name=call_name,
+            session_id=f"deal/{deal_id}",
+            metadata={
+                "deal_id": deal_id,
+                "tick_id": tick_id,
+                "call_name": call_name,
+            },
+            tags=["llm-call", call_name],
+        )
+    except Exception:
+        return None
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -116,10 +157,13 @@ def _call_with_retry(
     structured_llm = llm.with_structured_output(output_model, method="json_schema", strict=True)
     last_error: Exception | None = None
 
+    lf_handler = _langfuse_handler(call_name, tick_id, deal_id)
+    invoke_cfg = {"callbacks": [lf_handler]} if lf_handler else {}
+
     for attempt in range(1, _MAX_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            result = structured_llm.invoke(messages)
+            result = structured_llm.invoke(messages, config=invoke_cfg)
             latency_ms = int((time.monotonic() - t0) * 1000)
 
             logger.info(

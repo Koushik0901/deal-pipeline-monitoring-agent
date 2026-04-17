@@ -1,0 +1,72 @@
+id: edge_first_time_large_deal
+category: edge_case
+description: >
+  First-time buyer on an unusually large deal: 50,000 shares at $185 per share
+  ($9.25M notional) — approximately 5× a typical deal size for SpaceX on this
+  platform. No other risk signals: docs_pending entered 2 days ago (well within
+  3-day baseline), recent comm_inbound yesterday, no blockers, no deadline pressure.
+  Tests that unusual_characteristics fires specifically on the combination of
+  first-time buyer status and outsized deal size. Agent should flag the deal as
+  watch-level with an intervention drafted. Counterparty risk from inexperience
+  on a large transaction justifies analyst attention even with clean present signals.
+
+setup:
+  now: "2026-04-16T09:00:00Z"
+  issuers:
+    - issuer_id: spacex-edge11
+      name: SpaceX
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-edge11
+      party_type: buyer
+      display_name: First-Time Family Office
+      is_first_time: true
+      prior_breakage_count: 0
+    - party_id: seller-edge11
+      party_type: seller
+      display_name: Vertex Employee Trust
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-EDGE-011
+    issuer_id: spacex-edge11
+    buyer_id: buyer-edge11
+    seller_id: seller-edge11
+    shares: 50000
+    price_per_share: 185.00
+    stage: docs_pending
+    stage_entered_days_ago: 2
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: true
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 2
+        summary: Transfer docs sent to first-time buyer
+        payload:
+          body: "Hi, transfer documents for 50,000 SpaceX shares attached. Given the size of this transaction and your first participation in a secondary transfer, please review carefully with your legal counsel before signing."
+      - event_type: comm_inbound
+        days_ago: 1
+        summary: First-time buyer confirmed receipt, engaging counsel
+        payload:
+          body: "Received. We have engaged legal counsel to review the documents and will revert within 3 business days."
+
+assertions:
+  dimensions_triggered:
+    - unusual_characteristics
+  severity_gte: watch
+  intervention_drafted: true
+
+ground_truth:
+  severity: watch
+  dimensions_triggered:
+    - unusual_characteristics
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - stage_aging
+    - missing_prerequisites
+  expected_tools: []

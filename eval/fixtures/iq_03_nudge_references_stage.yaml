@@ -54,3 +54,14 @@ assertions:
   intervention_drafted: true
   intervention_body_contains:
     - "Stripe"
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - deadline_proximity
+    - communication_silence
+    - unusual_characteristics
+  expected_tools: []
