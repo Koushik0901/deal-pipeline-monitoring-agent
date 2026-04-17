@@ -80,7 +80,7 @@ _TASK_DESCRIPTION = (
 )
 
 
-def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-defined]
+def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-defined]  # noqa: F821
     """Return the five deepeval metric instances. Lazily imported."""
     from deepeval.metrics import (
         GEval,

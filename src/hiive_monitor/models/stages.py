@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Stage(str, Enum):
+class Stage(StrEnum):
     BID_ACCEPTED = "bid_accepted"
     DOCS_PENDING = "docs_pending"
     ISSUER_NOTIFIED = "issuer_notified"

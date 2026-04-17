@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     INFORMATIONAL = "informational"
     WATCH = "watch"
     ACT = "act"
     ESCALATE = "escalate"
 
 
-class RiskDimension(str, Enum):
+class RiskDimension(StrEnum):
     STAGE_AGING = "stage_aging"
     DEADLINE_PROXIMITY = "deadline_proximity"
     COMMUNICATION_SILENCE = "communication_silence"

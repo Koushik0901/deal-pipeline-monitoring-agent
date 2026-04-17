@@ -3,7 +3,7 @@ Deal Investigator — per-deal LangGraph agentic sub-graph.
 
 7-node variable-path graph (FR-AGENT-01–06):
   N1 observe          → load snapshot (already in state from Monitor fan-out)
-  N2 evaluate_risks   → 5 LLM dimension calls + 1 deterministic call (parallel via Send)
+  N2 evaluate_risks   → 1 combined LLM call (all 5 dimensions) + 1 deterministic call
   N3 assess_sufficiency → agentic loop: LLM decides if more context needed (max 2 rounds)
   N4 enrich_context   → calls one enrichment tool per round
   N5 score_severity   → Sonnet severity rubric call
@@ -369,7 +369,6 @@ def draft_intervention(state: InvestigatorState) -> dict:
 def emit_observation(state: InvestigatorState) -> dict:
     """Persist observation + optional intervention to domain DB. INSERT OR IGNORE for idempotency."""
     conn = get_domain_conn()
-    snap = state["deal_snapshot"]
     signals = state.get("risk_signals", [])
     severity = state.get("severity", Severity.INFORMATIONAL)
     enrichment_chain = state.get("enrichment_chain", [])
