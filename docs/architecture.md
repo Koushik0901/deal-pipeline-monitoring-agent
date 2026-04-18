@@ -86,7 +86,10 @@ eval/fixtures/*.yaml  →  runner.py
         → scorecard_{timestamp}.md
 ```
 
-17 scenarios across 3 categories:
-- **detection** (10): verifies the agent flags the right risks
+39 scenarios across 6 categories:
+- **detection** (11): verifies the agent flags the right risks for specific signal profiles
 - **prioritization** (4): verifies severity ordering
-- **intervention_quality** (3): verifies draft content against domain-accuracy requirements
+- **intervention_quality** (6): verifies draft content against domain-accuracy requirements
+- **adversarial_calibration** (4): conflicting signals, legal holds, communication that appears silent but isn't
+- **edge_cases** (9): suppression, enrichment cap, unusual deal structures
+- **regression** (5): prevents re-introduction of fixed bugs

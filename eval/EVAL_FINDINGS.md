@@ -1,8 +1,10 @@
 # Eval Run Findings — 2026-04-17 / Updated 2026-04-18
 
-Two eval runs completed across two sessions. The first run revealed harness-level bugs; fixes
-brought the baseline from 32/39 (82%) → 34/39 (87%). A second round of prompt and fixture
-fixes confirmed by rerun: **35/39 (89%)**.
+Three Tier 1 runs and two Tier 2 runs completed across two sessions. The first Tier 1 run
+revealed harness-level bugs; fixes brought the baseline from 32/39 (82%) → 34/39 (87%). A
+second round of prompt and fixture fixes confirmed by rerun: **35/39 (89%)**. Both Tier 2
+runs followed — the first surfaced five harness bugs; the corrected second run confirmed
+**26/39 scenarios pass all five G-Eval metrics**.
 
 ---
 

@@ -98,23 +98,20 @@ intervention body fields retain their limits.
 
 ## Open limitations
 
-### Tool Correctness metric shows n/a
-**What:** The `expected_tools` field in all 27 eval fixtures is currently `[]`,
-so the Tool Correctness aggregate metric always reports n/a.
+### Tool Correctness metric — partially resolved
+**What:** The `expected_tools` field was `[]` in all initial fixtures; Tier 2
+Tool Correctness reported n/a. Now populated in adversarial/enrichment scenarios
+where the tool choice is deterministic from the signal.
 
-**Why deferred:** The enrichment tool choice (fetch_communication_content vs.
-fetch_prior_observations vs. fetch_issuer_history) is emergent agent behaviour —
-the agent decides based on signal profile. Hardcoding an expected tool in a
-fixture would over-specify the agent's strategy and make tests brittle to
-legitimate prompt improvements.
+**Current state:** `expected_tools` is set in `adversarial_conflicting_comm`,
+`detection_enrichment_issuer_breakage`, and `edge_enrichment_cap`. Tier 2 Tool
+Correctness mean is 0.92 (36/39 pass rate) — 3 failures are the same scenarios
+where the agent skips mandatory enrichment.
 
-**Current mitigation:** The `enrichment_tool_called` and
-`agent_triggers_enrichment` assertions in individual fixtures test that
-enrichment happened; they just don't assert a specific tool name.
-
-**To fix:** Populate `expected_tools` in fixtures where the tool choice is
-deterministic from the signal (e.g., a comm-silence scenario should always
-call `fetch_communication_content`).
+**Remaining gap:** Enrichment tool choice is emergent in ambiguous scenarios;
+`expected_tools` should remain absent there to avoid over-specifying agent
+strategy. Only add it where the correct tool is unambiguous from the signal
+profile (e.g., comm-silence → `fetch_communication_content`).
 
 ---
 
