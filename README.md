@@ -10,6 +10,9 @@
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind-06B6D4?logo=tailwindcss&logoColor=white)
 ![HTMX](https://img.shields.io/badge/HTMX-3366CC)
+![Claude Code](https://img.shields.io/badge/Claude%20Code-D97757?logo=anthropic&logoColor=white)
+![Spec Kit](https://img.shields.io/badge/Spec%20Kit-111827)
+![Impeccable](https://img.shields.io/badge/Impeccable-1B4332)
 ![Eval 89%](https://img.shields.io/badge/Tier%201%20Eval-35%2F39%20(89%25)-brightgreen)
 
 ![Daily Brief screen](assets/Daily%20Brief%20Screen.png)
