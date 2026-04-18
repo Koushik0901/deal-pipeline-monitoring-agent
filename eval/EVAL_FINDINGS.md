@@ -43,19 +43,37 @@ Notes:
 
 ---
 
-## Tier 2 Results (LLM-as-judge)
+## Tier 2 Results (LLM-as-judge) — confirmed 2026-04-18
 
-**Baseline run:** 2026-04-17 (pre-harness-fix). Second run with all fixes in progress 2026-04-18.
+**26/39 scenarios passed all metrics** (all five G-Eval metrics above threshold simultaneously).
 
-| Metric | Score | Notes |
-|--------|-------|-------|
-| tool_correctness | 0.95 | 2 failures: adversarial_conflicting_comm + edge_enrichment_cap (no enrichment called) |
-| argument_correctness | 0.95 | Same 2 failures |
-| answer_correctness | 0.64 | Dimension attribution gap + rubric scope both contributed |
-| task_completion | 0.41 | Rubric included internal pipeline steps invisible at output level |
-| hallucination | 0.00 | **PERFECT** (inverted metric — 0 = no hallucination) |
+| Metric | Mean | Pass rate | Notes |
+|--------|------|-----------|-------|
+| task_completion | 0.67 | 32/39 | Judge still docks for internal pipeline steps not visible at output |
+| tool_correctness | 0.92 | 36/39 | 3 failures: enrichment not called when expected |
+| argument_correctness | 0.92 | 36/39 | Same 3 failures |
+| hallucination | 0.00 | 39/39 | **PERFECT** (inverted metric — 0 = no hallucination) |
+| answer_correctness | 0.75 | 35/39 | |
 
-Note: the baseline scorecard incorrectly flags `hallucination=0.00` as a priority failure for all 39 scenarios (harness bug #1). The fix (only flag ≥ 0.5) is applied in the current `deepeval_runner.py`; the 2026-04-18 run will produce a corrected scorecard.
+### Tier 2 failures (13 scenarios)
+
+**Enrichment not called (tool/arg = 0.00) — 3 scenarios:**
+- `adversarial_conflicting_comm` — comm_silence + legal-hold; model skips mandatory enrich
+- `detection_enrichment_issuer_breakage` — model does not call enrichment before severity
+- `edge_enrichment_cap` — all-high-confidence signals; model skips as "verdict unchangeable"
+
+**Low answer_correctness — 4 scenarios:**
+- `adversarial_prior_breakage_healthy_now` (0.20) — judge expects prior_breakage dimension flagged even though severity is correct (informational)
+- `edge_empty_event_history` (0.20) — informational severity correct but judge expects more dimensions evaluated
+- `edge_first_time_large_deal` (0.20) — unusual_characteristics not triggered (Tier 1 open issue #17)
+- `edge_severity_not_inflated` (0.30) — judge disagrees on severity bound assertion
+
+**Low task_completion — 6 scenarios (Tier 1 passing, Tier 2 docks for invisible steps):**
+- `det_08_healthy_deal_no_flag` (0.20), `edge_suppression_active` (0.20),
+  `pri_02_watch_only_no_draft` (0.20), `pri_04_funding_stage_healthy` (0.20),
+  `regression_intervention_not_stale` (0.20), `pri_03_informational_new_deal` (0.40)
+
+Pre-harness-fix baseline (2026-04-17): task_completion=0.41, answer_correctness=0.64, hallucination incorrectly flagged as failure for all 39 scenarios.
 
 ---
 
@@ -165,6 +183,8 @@ Note: the baseline scorecard incorrectly flags `hallucination=0.00` as a priorit
 
 | Run | Pass rate | Notes |
 |-----|-----------|-------|
-| Run 1 (2026-04-17) | 32/39 (82%) | First eval; 5 harness bugs, 2 agent bugs |
-| Run 2 (2026-04-18) | 34/39 (87%) | After harness fixes |
-| Run 3 (2026-04-18) | **35/39 (89%)** | After prompt/fixture fixes; 4 open issues remain |
+| Tier 1 Run 1 (2026-04-17) | 32/39 (82%) | First eval; 5 harness bugs, 2 agent bugs |
+| Tier 1 Run 2 (2026-04-18) | 34/39 (87%) | After harness fixes |
+| Tier 1 Run 3 (2026-04-18) | **35/39 (89%)** | After prompt/fixture fixes; 4 open issues remain |
+| Tier 2 Run 1 (2026-04-17) | pre-fix baseline | hallucination bug → all 39 flagged as failures |
+| Tier 2 Run 2 (2026-04-18) | **26/39 all-metrics pass** | task=0.67, tool/arg=0.92, halluc=0.00, ans=0.75 |
