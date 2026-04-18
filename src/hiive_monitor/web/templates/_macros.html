@@ -1,6 +1,6 @@
 {% macro intervention_row(item) %}
 <div id="iv-{{ item.intervention_id }}"
-     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }} }'
+     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }}, snoozing: false, snoozeHours: 48, snoozeReason: "" }'
      class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
 
   <!-- Compact summary row — click/keyboard to expand -->
@@ -132,11 +132,51 @@
 
       <button
         type="button"
+        x-on:click.stop="snoozing = !snoozing"
+        :aria-expanded="snoozing"
+        class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >Snooze</button>
+
+      <button
+        type="button"
         x-on:click.stop="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
         class="ml-auto rounded-[4px] border-[0.5px] border-outline-variant px-3 py-1.5 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
       >Copy</button>
 
     </div>
+
+    <!-- Snooze inline form -->
+    <div x-show="snoozing" x-cloak class="border-t-[0.5px] border-outline-variant/50 pt-3 mt-1">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-[0.6875rem] text-on-surface-variant shrink-0">Snooze for</span>
+        <input
+          type="number"
+          x-model.number="snoozeHours"
+          min="1" max="168"
+          aria-label="Snooze hours"
+          class="w-14 rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1 text-[0.75rem] text-center text-on-surface bg-surface focus:outline-none focus:border-primary-container transition-colors"
+        />
+        <span class="text-[0.6875rem] text-on-surface-variant shrink-0">hours —</span>
+        <input
+          type="text"
+          x-model="snoozeReason"
+          placeholder="reason (required)"
+          aria-label="Snooze reason"
+          class="flex-1 min-w-[10rem] rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1 text-[0.75rem] text-on-surface bg-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container transition-colors"
+        />
+        <button
+          type="button"
+          :disabled="!snoozeReason.trim()"
+          hx-post="/deals/{{ item.deal_id }}/snooze"
+          :hx-vals='JSON.stringify({ hours: snoozeHours, reason: snoozeReason })'
+          hx-target="#iv-{{ item.intervention_id }}"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful) announceAction('Deal snoozed.')"
+          class="rounded-[4px] bg-surface-container px-3 py-1 text-[0.75rem] font-medium text-on-surface-variant border-[0.5px] border-outline-variant hover:text-on-surface hover:border-outline transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Confirm snooze</button>
+      </div>
+    </div>
+
   </div>
 
 </div>

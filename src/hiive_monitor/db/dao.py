@@ -17,11 +17,47 @@ from hiive_monitor import clock as clk
 
 
 def get_live_deals(conn: sqlite3.Connection) -> list[dict]:
-    """Return all deals not in settled or broken stage."""
-    rows = conn.execute(
-        "SELECT * FROM deals WHERE stage NOT IN ('settled', 'broken') ORDER BY stage_entered_at"
-    ).fetchall()
+    """Return all active deals, excluding settled/broken and currently snoozed ones."""
+    now = clk.now().isoformat()
+    try:
+        rows = conn.execute(
+            """SELECT * FROM deals
+               WHERE stage NOT IN ('settled', 'broken')
+                 AND (snoozed_until IS NULL OR snoozed_until < ?)
+               ORDER BY stage_entered_at""",
+            (now,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # snoozed_until column not yet migrated — run without snooze filter
+        rows = conn.execute(
+            "SELECT * FROM deals WHERE stage NOT IN ('settled', 'broken') ORDER BY stage_entered_at"
+        ).fetchall()
     return [dict(r) for r in rows]
+
+
+def snooze_deal(
+    conn: sqlite3.Connection,
+    deal_id: str,
+    hours: int,
+    reason: str,
+) -> None:
+    """Set snoozed_until on a deal and record an audit event."""
+    from datetime import timedelta
+
+    snooze_until = (clk.now() + timedelta(hours=hours)).isoformat()
+    conn.execute(
+        "UPDATE deals SET snoozed_until = ?, snooze_reason = ? WHERE deal_id = ?",
+        (snooze_until, reason, deal_id),
+    )
+    insert_event(
+        conn,
+        deal_id=deal_id,
+        event_type="snooze_created",
+        occurred_at=clk.now(),
+        summary=f"Snoozed for {hours}h: {reason}",
+        payload={"hours": hours, "reason": reason, "snoozed_until": snooze_until},
+    )
+    conn.commit()
 
 
 def get_deal(conn: sqlite3.Connection, deal_id: str) -> dict | None:
@@ -116,6 +152,56 @@ def get_last_completed_tick(conn: sqlite3.Connection) -> dict | None:
         "SELECT * FROM ticks WHERE tick_completed_at IS NOT NULL ORDER BY tick_started_at DESC LIMIT 1"
     ).fetchone()
     return dict(row) if row else None
+
+
+def get_last_n_completed_tick_ids(
+    conn: sqlite3.Connection,
+    n: int,
+    exclude_tick_id: str | None = None,
+) -> list[str]:
+    """Return up to n most-recent completed tick_ids, optionally excluding one."""
+    rows = conn.execute(
+        "SELECT tick_id FROM ticks WHERE tick_completed_at IS NOT NULL ORDER BY tick_started_at DESC LIMIT ?",
+        (n + 1,),
+    ).fetchall()
+    ids = [r["tick_id"] for r in rows if r["tick_id"] != exclude_tick_id]
+    return ids[:n]
+
+
+def get_cluster_observation_counts(
+    conn: sqlite3.Connection,
+    tick_ids: list[str],
+) -> dict[tuple[str, str], float]:
+    """Return rolling-average deal count per (issuer_id, stage) for the given tick_ids."""
+    if not tick_ids:
+        return {}
+    placeholders = ",".join("?" * len(tick_ids))
+    rows = conn.execute(
+        f"""SELECT o.tick_id, d.issuer_id, d.stage, COUNT(DISTINCT o.deal_id) AS cnt
+            FROM agent_observations o
+            JOIN deals d ON d.deal_id = o.deal_id
+            WHERE o.tick_id IN ({placeholders})
+            GROUP BY o.tick_id, d.issuer_id, d.stage""",
+        tick_ids,
+    ).fetchall()
+    totals: dict[tuple[str, str], int] = {}
+    for r in rows:
+        key = (r["issuer_id"], r["stage"])
+        totals[key] = totals.get(key, 0) + r["cnt"]
+    n = len(tick_ids)
+    return {k: v / n for k, v in totals.items()}
+
+
+def set_tick_signals(conn: sqlite3.Connection, tick_id: str, signals: list[dict]) -> None:
+    """Persist portfolio pattern signals on the tick row (graceful no-op if column absent)."""
+    try:
+        conn.execute(
+            "UPDATE ticks SET signals = ? WHERE tick_id = ?",
+            (json.dumps(signals), tick_id),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # signals column not yet migrated
 
 
 # ── Agent Observations ────────────────────────────────────────────────────────
@@ -256,6 +342,21 @@ def get_open_interventions(conn: sqlite3.Connection) -> list[dict]:
                ELSE 3
              END,
              i.created_at"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_pending_interventions_by_severity(
+    conn: sqlite3.Connection, severity: str
+) -> list[dict]:
+    """Pending interventions for a specific severity level — used by batch-approve."""
+    rows = conn.execute(
+        """SELECT i.*
+           FROM interventions i
+           LEFT JOIN agent_observations o ON o.observation_id = i.observation_id
+           WHERE i.status = 'pending' AND o.severity = ?
+           ORDER BY i.created_at""",
+        (severity,),
     ).fetchall()
     return [dict(r) for r in rows]
 

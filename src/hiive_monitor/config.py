@@ -40,6 +40,8 @@ class Settings(BaseSettings):
 
     # Feature flags
     enable_ts06_doc_tracking: bool = False  # TS06: document collection tracking
+    enable_ts09_portfolio_patterns: bool = True  # TS09: portfolio-level cluster detection
+    enable_ts10_snooze: bool = True  # TS10: analyst deal snooze
 
     # LLM limits
     llm_timeout_seconds: float = 30.0

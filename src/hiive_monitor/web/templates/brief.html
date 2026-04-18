@@ -13,6 +13,31 @@
   <!-- ── Left: main intervention list ── -->
   <div class="flex-1 min-w-0">
 
+    <!-- Portfolio signals -->
+    {% if portfolio_signals %}
+    <details class="mb-4 group border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden" open>
+      <summary class="flex items-center justify-between px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 cursor-pointer select-none list-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container">
+        <div class="flex items-center gap-2">
+          <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Portfolio signals</span>
+          <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-tertiary-fixed text-tertiary text-[0.5625rem] font-bold">{{ portfolio_signals | length }}</span>
+        </div>
+        <span class="text-[0.6875rem] text-on-surface-variant font-mono group-open:rotate-180 transition-transform" aria-hidden="true">↓</span>
+      </summary>
+      <div class="divide-y-[0.5px] divide-outline-variant/50">
+        {% for sig in portfolio_signals %}
+        <div class="flex items-center gap-3 px-4 py-2.5">
+          <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.5625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap tabular-nums">{{ sig.ratio }}×</span>
+          <div class="min-w-0">
+            <span class="text-[0.8125rem] font-semibold text-on-surface">{{ sig.issuer_id | upper }}</span>
+            <span class="ml-2 text-[0.6875rem] text-on-surface-variant">{{ sig.stage | replace('_', ' ') }}</span>
+          </div>
+          <span class="ml-auto text-[0.6875rem] text-on-surface-variant tabular-nums whitespace-nowrap">{{ sig.current_count }} deals (avg {{ sig.rolling_avg }})</span>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+
     <!-- Section header -->
     <div class="flex items-baseline justify-between mb-4">
       <h1 class="text-[0.9375rem] font-semibold text-on-surface tracking-tight">Today's priorities</h1>
@@ -33,9 +58,7 @@
 
     <!-- Tabs + dense intervention table -->
     <div id="brief-list"
-      {% if clock_mode == 'real_time' %}
-      hx-get="/brief" hx-trigger="every 30s" hx-swap="innerHTML" hx-select="#brief-list"
-      {% endif %}>
+      hx-get="/brief" hx-trigger="tickComplete from:body{% if clock_mode == 'real_time' %}, every 30s{% endif %}" hx-swap="innerHTML" hx-select="#brief-list">
     <div x-data="{ tab: 'brief' }">
 
       <!-- Tab bar -->

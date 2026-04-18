@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import UTC
 
 from langgraph.graph import END, START, StateGraph
@@ -183,16 +183,23 @@ def screen_with_SLM(state: MonitorState) -> dict:
     scores: dict[str, float] = {}
     errors: list[ErrorRecord] = []
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {
-            pool.submit(_screen_one_deal, deal, tick_id, settings.slm_model): deal["deal_id"]
-            for deal in deals_to_screen
-        }
-        for future in as_completed(futures):
-            deal_id, score, error = future.result()
-            scores[deal_id] = score
-            if error:
-                errors.append(error)
+    _SCREEN_TIMEOUT = 45.0
+    pool = ThreadPoolExecutor(max_workers=max_workers)
+    futures = {
+        pool.submit(_screen_one_deal, deal, tick_id, settings.slm_model): deal["deal_id"]
+        for deal in deals_to_screen
+    }
+    done, pending = wait(futures, timeout=_SCREEN_TIMEOUT)
+    pool.shutdown(wait=False, cancel_futures=True)
+    for future in pending:
+        deal_id = futures[future]
+        log_module.get_logger().warning("monitor.screen_timeout", deal_id=deal_id, tick_id=tick_id)
+        scores[deal_id] = 0.0
+    for future in done:
+        deal_id, score, error = future.result()
+        scores[deal_id] = score
+        if error:
+            errors.append(error)
 
     log_module.get_logger().info(
         "monitor.screened", tick_id=tick_id, count=len(scores), workers=max_workers
@@ -311,17 +318,23 @@ def fan_out_investigators(state: MonitorState) -> dict:
     results: list[InvestigatorResult] = []
     errors: list[ErrorRecord] = []
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {
-            pool.submit(_investigate_one_deal, deal, tick_id, graph): deal["deal_id"]
-            for deal in deals_to_investigate
-        }
-        for future in as_completed(futures):
-            result, error = future.result()
-            if result:
-                results.append(result)
-            if error:
-                errors.append(error)
+    _INVESTIGATE_TIMEOUT = 120.0
+    pool = ThreadPoolExecutor(max_workers=max_workers)
+    futures = {
+        pool.submit(_investigate_one_deal, deal, tick_id, graph): deal["deal_id"]
+        for deal in deals_to_investigate
+    }
+    done, pending = wait(futures, timeout=_INVESTIGATE_TIMEOUT)
+    pool.shutdown(wait=False, cancel_futures=True)
+    for future in pending:
+        deal_id = futures[future]
+        log_module.get_logger().warning("monitor.investigate_timeout", deal_id=deal_id, tick_id=tick_id)
+    for future in done:
+        result, error = future.result()
+        if result:
+            results.append(result)
+        if error:
+            errors.append(error)
 
     log_module.get_logger().info(
         "monitor.investigators_complete",
@@ -363,6 +376,56 @@ def close_tick(state: MonitorState) -> dict:
     return {}
 
 
+def detect_portfolio_patterns(state: MonitorState) -> dict:
+    """
+    Deterministic portfolio-level anomaly detection.
+
+    Groups live deals by (issuer_id, stage) and compares each cluster's size
+    to its 3-tick rolling average from prior observations. Clusters exceeding
+    2× the average are flagged and stored as JSON in ticks.signals.
+    """
+    if not get_settings().enable_ts09_portfolio_patterns:
+        return {}
+
+    tick_id = state["tick_id"]
+    live_deals = state.get("live_deals", [])
+
+    # Build current cluster counts from live deals this tick
+    current_clusters: dict[tuple[str, str], int] = {}
+    for deal in live_deals:
+        key = (deal["issuer_id"], deal["stage"])
+        current_clusters[key] = current_clusters.get(key, 0) + 1
+
+    conn = get_domain_conn()
+    prior_tick_ids = dao.get_last_n_completed_tick_ids(conn, 3, exclude_tick_id=tick_id)
+    rolling_avg = dao.get_cluster_observation_counts(conn, prior_tick_ids)
+
+    signals = []
+    for (issuer_id, stage), current_count in current_clusters.items():
+        avg = rolling_avg.get((issuer_id, stage), 0.0)
+        if avg > 0 and current_count > 2 * avg:
+            signals.append({
+                "issuer_id": issuer_id,
+                "stage": stage,
+                "current_count": current_count,
+                "rolling_avg": round(avg, 1),
+                "ratio": round(current_count / avg, 1),
+            })
+
+    signals.sort(key=lambda s: s["ratio"], reverse=True)
+
+    if signals:
+        dao.set_tick_signals(conn, tick_id, signals)
+        log_module.get_logger().info(
+            "monitor.portfolio_patterns",
+            tick_id=tick_id,
+            signals_count=len(signals),
+        )
+
+    conn.close()
+    return {}
+
+
 # ── Graph construction ────────────────────────────────────────────────────────
 
 
@@ -374,6 +437,7 @@ def build_monitor_graph():
     g.add_node("select_investigation_queue", select_investigation_queue)
     g.add_node("fan_out_investigators", fan_out_investigators)
     g.add_node("close_tick", close_tick)
+    g.add_node("detect_portfolio_patterns", detect_portfolio_patterns)
 
     g.add_edge(START, "load_live_deals")
     g.add_edge("load_live_deals", "screen_with_SLM")
@@ -381,7 +445,8 @@ def build_monitor_graph():
     g.add_edge("apply_suppression", "select_investigation_queue")
     g.add_edge("select_investigation_queue", "fan_out_investigators")
     g.add_edge("fan_out_investigators", "close_tick")
-    g.add_edge("close_tick", END)
+    g.add_edge("close_tick", "detect_portfolio_patterns")
+    g.add_edge("detect_portfolio_patterns", END)
 
     return g.compile()
 

@@ -1,14 +1,15 @@
 {% from "_macros.html" import intervention_row %}
+{% set watch_count = items | selectattr('severity', 'equalto', 'watch') | list | length %}
 <div x-data="{
   severity: '',
   severities: {{ items | map(attribute='severity') | list | tojson }},
   get noResults() {
-    return this.severities.length > 0 && !this.severities.some(s => this.severity === '' || s === this.severity);
+    return this.severities.length &gt; 0 && !this.severities.some(s =&gt; this.severity === '' || s === this.severity);
   }
 }">
 
-  <!-- Filter chips -->
-  <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60">
+  <!-- Filter chips + batch action -->
+  <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60 flex-wrap">
     <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest mr-1">Filter</span>
     {% for chip in [('', 'All'), ('escalate', 'Escalate'), ('act', 'Act'), ('watch', 'Watch')] %}
     <button
@@ -19,6 +20,21 @@
       class="inline-flex items-center px-2 py-0.5 rounded-[4px] border-[0.5px] text-[0.625rem] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-container"
     >{{ chip[1] }}</button>
     {% endfor %}
+
+    {% if watch_count > 0 %}
+    <div class="ml-auto" id="batch-approve-result">
+      <button
+        type="button"
+        hx-post="/interventions/batch-approve"
+        hx-vals='{"severity_filter": "watch"}'
+        hx-target="#batch-approve-result"
+        hx-swap="outerHTML"
+        hx-confirm="Approve all {{ watch_count }} watch intervention{{ 's' if watch_count != 1 else '' }}? This will send outreach for each."
+        hx-on::after-request="if(event.detail.successful) { htmx.trigger(document.body, 'refreshBriefList') }"
+        class="inline-flex items-center px-2.5 py-0.5 rounded-[4px] border-[0.5px] border-tertiary/30 bg-tertiary-fixed text-tertiary text-[0.625rem] font-medium hover:bg-tertiary/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-tertiary"
+      >Approve all Watch ({{ watch_count }})</button>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Item list -->

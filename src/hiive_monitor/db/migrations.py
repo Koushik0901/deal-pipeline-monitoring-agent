@@ -29,4 +29,24 @@ def stretch_migrations() -> None:
         except sqlite3.OperationalError:
             pass  # column already exists — idempotent
 
+    if settings.enable_ts09_portfolio_patterns:
+        try:
+            conn.execute("ALTER TABLE ticks ADD COLUMN signals TEXT")
+            conn.commit()
+            log.info("migration.ts09.applied", column="signals")
+        except sqlite3.OperationalError:
+            pass  # column already exists — idempotent
+
+    if settings.enable_ts10_snooze:
+        for col, defn in [
+            ("snoozed_until", "TEXT"),
+            ("snooze_reason", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE deals ADD COLUMN {col} {defn}")
+                conn.commit()
+                log.info("migration.ts10.applied", column=col)
+            except sqlite3.OperationalError:
+                pass  # column already exists — idempotent
+
     conn.close()

@@ -69,6 +69,13 @@ async def daily_brief(request: Request, debug: str = ""):
             "reasoning_summary": reasoning.get("severity_rationale", ""),
             "dimensions_triggered": reasoning.get("dimensions_triggered", []),
         })
+    portfolio_signals = []
+    if tick and tick.get("signals"):
+        try:
+            portfolio_signals = json.loads(tick["signals"])
+        except (ValueError, TypeError):
+            pass
+
     conn.close()
 
     return _templates().TemplateResponse(
@@ -79,6 +86,7 @@ async def daily_brief(request: Request, debug: str = ""):
             "now": clk.now().isoformat(),
             "debug": debug == "1",
             "clock_mode": get_settings().clock_mode,
+            "portfolio_signals": portfolio_signals,
         },
     )
 
@@ -123,6 +131,38 @@ async def dismiss_intervention(request: Request, intervention_id: str):
     return resp
 
 
+@router.post("/interventions/batch-approve")
+async def batch_approve_interventions(
+    request: Request,
+    severity_filter: str = Form("watch"),
+):
+    from hiive_monitor import clock as clk
+
+    if severity_filter not in ("watch",):
+        raise HTTPException(status_code=400, detail="Batch approve is limited to watch severity")
+
+    conn = get_domain_conn()
+    pending = dao.get_pending_interventions_by_severity(conn, severity_filter)
+
+    approved_ids = []
+    for iv in pending:
+        try:
+            dao.approve_intervention_atomic(conn, iv["intervention_id"], simulated_timestamp=clk.now())
+            approved_ids.append(iv["intervention_id"])
+        except Exception:
+            log.warning("batch_approve.skip", intervention_id=iv["intervention_id"])
+
+    conn.close()
+
+    resp = HTMLResponse(
+        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">'
+        f'Approved {len(approved_ids)} watch intervention{"s" if len(approved_ids) != 1 else ""}.'
+        f'</div>',
+    )
+    resp.headers["HX-Trigger"] = "refreshBriefList, refreshStats"
+    return resp
+
+
 @router.post("/interventions/{intervention_id}/confirm-edit")
 async def confirm_edit(request: Request, intervention_id: str, final_text: str = Form(...)):
     from hiive_monitor import clock as clk
@@ -143,6 +183,42 @@ async def confirm_edit(request: Request, intervention_id: str, final_text: str =
         f'Edited draft sent \u2014 {iv["deal_id"]}'
         f'</div>'
     )
+
+
+# ── Deal snooze ───────────────────────────────────────────────────────────────
+
+
+@router.post("/deals/{deal_id}/snooze")
+async def snooze_deal(
+    request: Request,
+    deal_id: str,
+    hours: int = Form(48),
+    reason: str = Form(...),
+):
+    from hiive_monitor.config import get_settings
+
+    if not get_settings().enable_ts10_snooze:
+        raise HTTPException(status_code=403, detail="Snooze feature not enabled")
+
+    conn = get_domain_conn()
+    deal = dao.get_deal(conn, deal_id)
+    if not deal:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    dao.snooze_deal(conn, deal_id, hours=hours, reason=reason)
+    conn.close()
+
+    from hiive_monitor import clock as clk
+    from datetime import timedelta
+    until = (clk.now() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")
+    resp = HTMLResponse(
+        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">'
+        f'Snoozed {deal_id} until {until} \u2014 {reason}'
+        f'</div>'
+    )
+    resp.headers["HX-Trigger"] = "refreshStats"
+    return resp
 
 
 # ── Deal detail ───────────────────────────────────────────────────────────────
