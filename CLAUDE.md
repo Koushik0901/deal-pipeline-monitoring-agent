@@ -1,30 +1,43 @@
 # deal-pipeline-monitoring-agent Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-16
-
 ## Active Technologies
 
-- Python 3.11+ (single language, single repo). + FastAPI, LangGraph (+ `langgraph-checkpoint-sqlite`), Anthropic Python SDK, Pydantic v2, APScheduler, Jinja2, HTMX (pinned), Alpine.js (pinned), Tailwind CSS (CLI build), structlog, PyYAML, pytest, uv (dep manager). (master)
+Python 3.11+ · FastAPI · LangGraph (`langgraph-checkpoint-sqlite`) · Pydantic v2 · APScheduler · Jinja2 · HTMX (pinned) · Alpine.js (pinned) · Tailwind CSS (CLI build) · structlog · PyYAML · pytest · uv (dep manager) · OpenRouter (LLM gateway)
 
 ## Project Structure
 
 ```text
-backend/
-frontend/
-tests/
+src/hiive_monitor/{agents,db,llm,models,seed,eval,web}/
+tests/{integration,unit,smoke,eval}/
+specs/001-deal-pipeline-monitor/   # task list + contracts
 ```
 
 ## Commands
 
-cd src; pytest; ruff check .
+```bash
+uv run pytest tests/integration/ -v          # always use uv run, not plain pytest
+uv run pytest --ignore=tests/eval -v        # skip eval fixtures in fast runs
+ruff check .
+```
 
 ## Code Style
 
-Python 3.11+ (single language, single repo).: Follow standard conventions
+Python 3.11+. Follow standard conventions.
 
-## Recent Changes
+## Environment & Gotchas
 
-- master: Added Python 3.11+ (single language, single repo). + FastAPI, LangGraph (+ `langgraph-checkpoint-sqlite`), Anthropic Python SDK, Pydantic v2, APScheduler, Jinja2, HTMX (pinned), Alpine.js (pinned), Tailwind CSS (CLI build), structlog, PyYAML, pytest, uv (dep manager).
+- **Test runner:** Always `uv run pytest`, never `python -m pytest` — venv deps require uv
+- **Stretch migrations:** `db/migrations.py::stretch_migrations()` runs at startup only; test DBs skip it. Add columns manually in tests that need them (e.g. `conn.execute("ALTER TABLE ticks ADD COLUMN signals TEXT")`)
+- **Lazy imports in routes:** `web/routes/main.py` uses lazy imports (`from hiive_monitor import clock as clk` inside handlers) to break circular imports — preserve this pattern, don't hoist to module level
+- **`clk.now()` discipline:** Never call `datetime.now()` — enforced by grep test `tests/unit/test_no_datetime_now.py`. Always use `clk.now()` from `hiive_monitor.clock`; capture once per function if used multiple times
+- **AllRiskSignals mock pattern:** Integration test mocks branch on `output_model is AllRiskSignals` (identity check), not `hasattr` introspection
+
+## Key Architecture Patterns
+
+- **DAO writes:** All inserts use `INSERT OR IGNORE` for idempotency (FR-024); snooze/approval use explicit transactions via `with conn:`
+- **Stretch migrations:** Idempotent `ALTER TABLE` wrapped in `try/except sqlite3.OperationalError` in `stretch_migrations()`, gated by feature flags in `config.py`
+- **Feature flags:** Add to `Settings` in `config.py` with `enable_<feature>: bool`; default `True` for analyst-facing UI features
+- **LLM combined call:** 5 risk dimensions evaluated in one `AllRiskSignals` call (not 5 separate calls) via `llm/prompts/risk_all_dimensions.py`
 
 <!-- MANUAL ADDITIONS START -->
 
