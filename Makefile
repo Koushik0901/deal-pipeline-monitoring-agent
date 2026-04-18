@@ -26,6 +26,7 @@ eval:
 
 # ── Deep Eval (Tier 2: LLM-as-judge on saved Tier 1 results) ─────────────────
 # Run 'make eval' first to generate eval_results/results_latest.json
+eval-deep: export DEEPEVAL_TELEMETRY_OPT_OUT := YES
 eval-deep:
 	uv run python -m hiive_monitor.eval.deepeval_runner
 

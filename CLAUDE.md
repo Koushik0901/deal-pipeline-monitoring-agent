@@ -18,6 +18,7 @@ specs/001-deal-pipeline-monitor/   # task list + contracts
 uv run pytest tests/integration/ -v          # always use uv run, not plain pytest
 uv run pytest --ignore=tests/eval -v        # skip eval fixtures in fast runs
 ruff check .
+npx tailwindcss -i ./src/hiive_monitor/web/static/input.css -o ./src/hiive_monitor/web/static/output.css --minify   # rebuild CSS after editing input.css
 ```
 
 ## Code Style
@@ -31,6 +32,11 @@ Python 3.11+. Follow standard conventions.
 - **Lazy imports in routes:** `web/routes/main.py` uses lazy imports (`from hiive_monitor import clock as clk` inside handlers) to break circular imports — preserve this pattern, don't hoist to module level
 - **`clk.now()` discipline:** Never call `datetime.now()` — enforced by grep test `tests/unit/test_no_datetime_now.py`. Always use `clk.now()` from `hiive_monitor.clock`; capture once per function if used multiple times
 - **AllRiskSignals mock pattern:** Integration test mocks branch on `output_model is AllRiskSignals` (identity check), not `hasattr` introspection
+- **`ChatOpenRouter` + `extra_body`:** Never pass `extra_body=` to `ChatOpenRouter` constructor — gets forwarded to the provider SDK's `Chat.send()` which rejects it entirely. Token counts are available via `usage_metadata` without it.
+- **No `max_length` on internal LLM output fields:** Fields like `evidence`, `reasoning`, `rationale`, `reason` must have no `max_length` — CoT prompting routinely exceeds static limits and raises Pydantic `ValidationError` at runtime.
+- **`get_events` ordering:** `dao.get_events()` fetches `ORDER BY occurred_at DESC LIMIT N` then reverses → ASC. So `comm_events[-1]` is the most recent event. Fixture `days_ago` values are relative to `setup.now`.
+- **`@view-transition` CSS placement:** Must be at top-level in `input.css`, NOT inside `@layer base {}` — Tailwind silently drops it. Place after the closing `}` of the layer block.
+- **Pipeline filter is client-side:** `pipeline.py` no longer applies `tier/stage/issuer/responsible` query params to filter rendered `items` — all deals always render to DOM. `window.PF` (defined in `pipeline.html` scripts block) controls row visibility via `data-*` attributes. Jinja2 uses URL params only to set the initial `hidden` class (no-JS fallback).
 
 ## Key Architecture Patterns
 
@@ -38,6 +44,7 @@ Python 3.11+. Follow standard conventions.
 - **Stretch migrations:** Idempotent `ALTER TABLE` wrapped in `try/except sqlite3.OperationalError` in `stretch_migrations()`, gated by feature flags in `config.py`
 - **Feature flags:** Add to `Settings` in `config.py` with `enable_<feature>: bool`; default `True` for analyst-facing UI features
 - **LLM combined call:** 5 of the 6 risk dimensions are evaluated in one `AllRiskSignals` call (not 5 separate calls) via `llm/prompts/risk_all_dimensions.py`. The 6th dimension, `counterparty_nonresponsiveness`, is **deterministic** — computed outside the LLM from last-inbound timestamps. `AllRiskSignals` schema does not include it; don't try to add it there.
+- **View Transitions naming convention:** Severity badges use `view-transition-name: sev-{deal_id}`, deal ID text uses `dealid-{deal_id}`. Names must match across `_macros.html` (Brief rows), `pipeline.html` (pipeline rows), and `deal_detail.html` (page header) for the cross-document morph to fire.
 
 ## Severity & Risk Rules
 
@@ -53,8 +60,8 @@ Source of truth: `src/hiive_monitor/llm/prompts/severity.py` and `src/hiive_moni
   7. 0 dims triggered at confidence ≥ 0.70 → **informational**
 - **"3+ dimensions" is NOT sufficient for escalate** — escalate needs either a short deadline, prior_breakage + act-level, or deadline+comm_silence co-trigger. The severity prompt explicitly calls this out.
 - **Dimension trigger thresholds:**
-  - `stage_aging`: ratio = `stage_entered_days_ago / typical_response_days`; fires at ~1.5× (watch/low conf), ≥2.0× (act/high conf)
-  - `communication_silence`: fires when days-since-last-inbound ≥ ~2× `typical_response_days`
+  - `stage_aging`: ratio = `stage_entered_days_ago / DWELL_BASELINES[stage]` — NOT issuer `typical_response_days`. Key baselines: `docs_pending=3, rofr_pending=20, signing=4` (see `models/stages.py`). Fires at ~1.5× (watch), ≥2.0× (act/high conf).
+  - `communication_silence`: threshold is strictly `>` (not `≥`): late stages (rofr_cleared, signing, funding) `>7 days`; any live stage `>14 days`. Set fixture `days_ago` to threshold+1 to ensure triggering.
   - `unusual_characteristics`: `is_first_time_buyer=true`, `prior_breakage_count ≥ 1`, or `multi_layer_rofr=true` — these are static facts, so confidence is inherently high
   - `missing_prerequisites`: any non-empty `blockers` list
   - `deadline_proximity`: non-null `rofr_deadline_days_from_now ≤ 10`

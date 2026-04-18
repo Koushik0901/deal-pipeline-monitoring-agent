@@ -29,6 +29,39 @@ log = get_logger(__name__)
 _tick_dispatch_times: dict[str, float] = {}
 
 
+# Severity-decision-tree priority: the dimensions that most commonly drive the
+# verdict come first, so the analyst reads the strongest reason before the weaker one.
+_WHY_TODAY_PRIORITY = {
+    "deadline_proximity": 1,
+    "communication_silence": 2,
+    "counterparty_nonresponsiveness": 3,
+    "stage_aging": 4,
+    "missing_prerequisites": 5,
+    "unusual_characteristics": 6,
+}
+
+
+def _why_today(reasoning: dict) -> str:
+    """Compose the single sharpest line explaining why this deal is in the brief today.
+
+    Pulls up to two triggered signals in decision-tree priority order and joins
+    their evidence with a middot. Evidence is truncated so the line fits one row;
+    losing nuance is fine — the full reasoning is one click away in the expand panel.
+    """
+    signals = reasoning.get("all_signals") or []
+    triggered = [s for s in signals if s.get("triggered")]
+    if not triggered:
+        return ""
+    triggered.sort(key=lambda s: _WHY_TODAY_PRIORITY.get(s.get("dimension", ""), 99))
+
+    def _clip(text: str, limit: int = 55) -> str:
+        text = (text or "").strip().rstrip(".")
+        return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+    parts = [_clip(s.get("evidence", "")) for s in triggered[:2] if s.get("evidence")]
+    return " · ".join(p for p in parts if p)
+
+
 def _tick_polling_div(tick_id: str) -> str:
     """Return the HTMX polling fragment for an in-flight tick (self-replaces via outerHTML swap)."""
     short = tick_id[:8]
@@ -69,6 +102,7 @@ async def daily_brief(request: Request, debug: str = ""):
             "deal": deal,
             "reasoning_summary": reasoning.get("severity_rationale", ""),
             "dimensions_triggered": reasoning.get("dimensions_triggered", []),
+            "why_today": _why_today(reasoning),
         })
     portfolio_signals = []
     if tick and tick.get("signals"):
@@ -78,6 +112,7 @@ async def daily_brief(request: Request, debug: str = ""):
             pass
 
     handled_ivs = dao.get_handled_interventions(conn)
+    snoozed_deals = dao.get_snoozed_deals(conn)
     conn.close()
 
     return _templates().TemplateResponse(
@@ -85,6 +120,7 @@ async def daily_brief(request: Request, debug: str = ""):
         {
             "items": items,
             "handled_items": handled_ivs,
+            "snoozed_deals": snoozed_deals,
             "tick": tick,
             "now": clk.now().isoformat(),
             "debug": debug == "1",

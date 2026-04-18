@@ -9,7 +9,6 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
-        inter: ["Inter", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "Consolas", "monospace"],
       },
       colors: {

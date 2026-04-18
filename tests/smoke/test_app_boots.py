@@ -49,10 +49,16 @@ def test_brief_returns_200(client):
     assert b"Daily Brief" in resp.content
 
 
-def test_queue_returns_200(client):
-    resp = client.get("/queue")
+def test_pipeline_returns_200(client):
+    resp = client.get("/pipeline")
     assert resp.status_code == 200
-    assert b"Queue" in resp.content
+    assert b"Pipeline" in resp.content
+
+
+def test_queue_redirects_to_pipeline(client):
+    resp = client.get("/queue", follow_redirects=False)
+    assert resp.status_code in (307, 308)
+    assert resp.headers["location"].startswith("/pipeline")
 
 
 def test_sim_page_returns_200(client):

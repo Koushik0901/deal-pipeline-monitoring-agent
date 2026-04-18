@@ -9,6 +9,8 @@ FastAPI + Jinja2 + HTMX. All routes are single-user, localhost, no auth. HTML ro
 | GET | `/` | redirect → `/brief` | Landing. |
 | GET | `/brief` | full page or `_brief_list.html` fragment | Daily Brief — top 5–7 ranked items with drafted interventions. |
 | GET | `/brief/all-open` | full page or `_all_open_list.html` fragment | "All Open Items" tab — every act/escalate across deals, filterable by severity/stage/issuer. |
+| GET | `/pipeline` | full page | Book-of-deals view — every live deal, one row, deterministic health tier. Filters (tier/stage/issuer/responsible/text) and sort are **client-side only**; server always renders all rows. |
+| GET | `/queue` | 307 → `/pipeline` | Back-compat redirect; preserves query string. |
 | GET | `/deals/{deal_id}` | full page or `_deal_detail.html` fragment | Per-deal drill-down: facts header, event timeline, agent observation history, intervention history. |
 | POST | `/interventions/{intervention_id}/approve` | `_brief_item.html` (OOB status bar) | Marks intervention `approved`, returns swapped list-item with "handled" badge. |
 | POST | `/interventions/{intervention_id}/edit` | `_brief_item.html` | Form body: `body`, `subject?`, `recipient_name?`. Persists edit, marks `edited`. |
@@ -26,6 +28,16 @@ FastAPI + Jinja2 + HTMX. All routes are single-user, localhost, no auth. HTML ro
 
 **Redirect/push-url**:
 - `hx-push-url="true"` on deal drill-down links so the back button works.
+
+**Pipeline filter semantics** (`/pipeline`):
+- Query params (`tier`, `stage`, `issuer`, `responsible`, `sort`) are accepted for deep-linking and no-JS fallback only. They set the initial `hidden` class on non-matching rows via Jinja2; they do **not** filter the server-side row set.
+- Once JS is loaded, the `window.PF` controller reads the same URL params, populates the control widgets, and applies instant visibility toggles via `data-*` attributes. No server round-trip on filter/sort changes.
+- `counts_by_tier` in the header reflects the whole pipeline, not the filtered slice — book-wide triage context is preserved regardless of the active filter.
+
+**View Transitions** (same-document and cross-document):
+- Severity badge: `view-transition-name: sev-{deal_id}` on Brief rows (`_macros.html`), Pipeline rows (`pipeline.html`), and the deal-detail header (`deal_detail.html`).
+- Deal ID text: `view-transition-name: dealid-{deal_id}` in the same three places.
+- Matching names cause the clicked row's badge + ID to morph into the detail page during navigation. Non-matching names crossfade with the root. Firefox has no cross-document VT support → navigation works, just without the morph.
 
 **CSRF**: not required (single-user localhost prototype). Documented as assumption.
 

@@ -79,7 +79,48 @@ Badges must be rectangular (4px radius), never pill-shaped. They use a high-cont
 
 ---
 
-## 6. Future Components (Reserved for Product Expansion)
+## 6. Motion & Cross-Document Morphing
+
+Motion in this system is reserved for **state change and spatial continuity**. We do not animate for delight; we animate to tell the analyst that something they just did worked, or to preserve their sense of place between views.
+
+### Cross-document View Transitions (pipeline row → deal detail)
+When an analyst clicks a deal on `/pipeline` or in the Brief, the severity badge and deal ID morph into the destination page header rather than cross-fading with the rest of the document. This is implemented with the native View Transitions API — no JS library — using three coordinated pieces:
+
+1. **Opt-in at the top of `input.css`** (NOT inside `@layer base {}` — Tailwind silently drops it there):
+```css
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation-duration: 160ms; animation-timing-function: ease-in; }
+::view-transition-new(root) { animation-duration: 240ms; animation-timing-function: var(--ease-out-expo); }
+::view-transition-group(*)  { animation-duration: 300ms; animation-timing-function: var(--ease-out-expo); }
+```
+
+2. **Matching names on both pages** — the clicked row's badge and ID carry `view-transition-name: sev-{deal_id}` and `dealid-{deal_id}`; the detail page header carries the same names. Names must match exactly across `_macros.html` (Brief), `pipeline.html` (Pipeline), and `deal_detail.html` (detail header). Any mismatch silently falls back to a plain crossfade — no error.
+
+3. **Reduced-motion escape hatch**:
+```css
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
+    animation-duration: 0.01ms !important; animation-delay: 0ms !important;
+  }
+}
+```
+
+Firefox currently ships only same-document View Transitions; cross-document is Chrome 126+ and Safari 18.2+. The feature degrades to a normal navigation everywhere else — no broken state, just no morph.
+
+### Instant client-side filter/sort (pipeline view)
+The `/pipeline` route renders **every** live deal to the DOM. Filter pills, the stage/issuer/responsible selects, the free-text search box, and column sorting are all client-side. A single global `window.PF = { filter, sort, clear }` controller toggles row visibility against `data-tier`, `data-stage`, `data-issuer`, `data-responsible`, `data-search`, `data-ratio`, `data-rofr`, `data-comm` attributes on each row.
+
+Rules that hold this pattern together:
+- **Jinja2 sets the initial `hidden` class** from URL params — this is the no-JS fallback and also prevents flash for deep-linked views.
+- **`counts_by_tier` is computed before any filter** — the header always shows book-wide triage counts, not the filtered slice.
+- **Keyboard navigation (`j`/`k`) reads `getVisibleRows()`** — selection respects the current filter without special-casing.
+- **Sort state lives in memory only** — never pushed to the URL; sort is transient workspace state, filter is shareable context.
+
+Analyst feedback loop: < 16ms from keystroke to re-ranked table, even with ~60 rows. That's the bar for "feels like a local tool, not a web page."
+
+---
+
+## 7. Future Components (Reserved for Product Expansion)
 
 These patterns are validated for the Hiive design system and should be implemented when the corresponding product pages are built. Do not implement speculatively.
 
@@ -183,7 +224,7 @@ For drill-down pages (deal detail, issuer profile) requiring structured data + a
 
 ---
 
-## 7. Do's and Don'ts
+## 8. Do's and Don'ts
 
 ### Do
 *   **DO** use whitespace to group related deal data.

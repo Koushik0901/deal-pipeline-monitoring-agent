@@ -53,7 +53,7 @@ setup:
         payload:
           body: "Thank you for the notice. Please be advised that Palantir is currently under a legal hold related to an unrelated matter and our legal team is unable to respond to ROFR or transfer inquiries for approximately two weeks. We will resume normal communications around April 17th and will provide our ROFR election at that time. We have noted the May 14th deadline and it will not be affected."
       - event_type: comm_outbound
-        days_ago: 14
+        days_ago: 15
         summary: Follow-up acknowledging legal hold
         payload:
           body: "Understood — we have noted the legal hold and will await your response around April 17th. The May 14th ROFR deadline remains in place."

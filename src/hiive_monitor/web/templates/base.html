@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Hiive Deal Monitor{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
   <link rel="stylesheet" href="/static/output.css" />
   <!-- Prevent flash of wrong theme: apply .dark before first paint -->
   <script>
@@ -16,6 +19,10 @@
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"
           integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
           crossorigin="anonymous"></script>
+  <!-- idiomorph: morph-swap extension for htmx. Preserves DOM identity
+       across swaps so tabs, inputs, and Alpine state survive re-renders. -->
+  <script src="https://unpkg.com/idiomorph@0.7.3/dist/idiomorph-ext.min.js"
+          crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"
           integrity="sha384-X9kJyAubVxnP0hcA+AMMs21U445qsnqhnUF8EBlEpP3a42Kh/JwWjlv2ZcvGfphb"
           crossorigin="anonymous"></script>
@@ -26,24 +33,43 @@
       el.className = 'text-[0.6875rem] px-3 py-2 rounded-[4px] bg-surface-container text-on-surface border-[0.5px] border-outline-variant/50';
       el.setAttribute('role', 'status');
       el.textContent = msg;
+      // Start hidden, slide in from right
+      el.style.cssText = 'opacity:0;transform:translateX(10px)';
       area.appendChild(el);
-      setTimeout(function() { el.remove(); }, 3000);
+      // Double rAF ensures initial paint before transition starts
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          el.style.transition = 'opacity 200ms cubic-bezier(0.22,1,0.36,1), transform 200ms cubic-bezier(0.22,1,0.36,1)';
+          el.style.opacity = '1';
+          el.style.transform = 'translateX(0)';
+        });
+      });
+      // 5s visible, then fade out and remove
+      setTimeout(function() {
+        el.style.transitionDuration = '150ms';
+        el.style.transitionTimingFunction = 'ease-in';
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(8px)';
+        setTimeout(function() { el.remove(); }, 150);
+      }, 5000);
     }
     function toggleTheme() {
       var isDark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
     }
+    // For the dev who opened DevTools — you're in good company.
+    console.log('%c Hiive Monitor ', 'background:#1b4332;color:#fff;padding:2px 6px;border-radius:2px;font-family:monospace', '— deal pipeline monitoring agent');
   </script>
 </head>
-<body class="h-full bg-background text-on-background font-sans antialiased">
+<body class="h-full bg-background text-on-background font-sans antialiased" hx-ext="morph">
 
   <!-- Top navigation bar -->
-  <header class="sticky top-0 z-50 h-12 bg-surface-container-lowest border-b-[0.5px] border-outline-variant/50 flex items-center justify-between px-6">
-    <div class="flex items-center gap-6">
-      <a href="/brief" class="text-[0.8125rem] font-semibold text-primary-container tracking-tight">Hiive</a>
-      <nav class="flex gap-0.5">
-        <a href="/brief" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request is defined and (request.url.path.startswith('/brief') or request.url.path == '/') %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Daily Brief</a>
-        <a href="/queue" class="px-3 py-1.5 text-[0.8125rem] font-medium rounded transition-colors {% if request is defined and request.url.path.startswith('/queue') %}text-on-surface bg-surface-container-low{% else %}text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low{% endif %}">Queue</a>
+  <header class="sticky top-0 z-50 h-14 bg-surface-container-lowest border-b-[0.5px] border-outline-variant/50 flex items-center justify-between px-6">
+    <div class="flex items-center gap-6 h-full">
+      <a href="/brief" class="text-[0.875rem] font-semibold text-primary-container tracking-tight">Hiive</a>
+      <nav class="flex h-full">
+        <a href="/brief" class="flex items-center px-3 text-[0.8125rem] font-medium transition-colors {% if request is defined and (request.url.path.startswith('/brief') or request.url.path == '/') %}text-on-surface border-b-2 border-primary-container{% else %}text-on-surface-variant hover:text-on-surface{% endif %}">Daily Brief</a>
+        <a href="/pipeline" class="flex items-center px-3 text-[0.8125rem] font-medium transition-colors {% if request is defined and (request.url.path.startswith('/pipeline') or request.url.path.startswith('/queue')) %}text-on-surface border-b-2 border-primary-container{% else %}text-on-surface-variant hover:text-on-surface{% endif %}">Pipeline</a>
       </nav>
     </div>
     <div class="flex items-center gap-3">
@@ -61,7 +87,7 @@
   <div id="toast-area" class="fixed top-16 right-4 z-50 flex flex-col gap-2" aria-live="polite"></div>
 
   <!-- Main content -->
-  <main class="mx-auto max-w-7xl px-6 py-6">
+  <main class="mx-auto max-w-7xl px-6 py-6 pb-14">
     {% block content %}{% endblock %}
   </main>
 

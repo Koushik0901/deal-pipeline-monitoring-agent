@@ -1,7 +1,7 @@
 id: pri_02_watch_only_no_draft
 category: prioritization
 description: >
-  Deal at watch severity: mild aging (1.5x the 4-day baseline, docs_pending for 6 days),
+  Deal at watch severity: mild aging (1.67x the 3-day baseline, docs_pending for 5 days),
   communication recent. No deadline. Agent should flag severity=watch; at watch the
   agent drafts a brief_entry (not an outbound nudge) — no external outreach.
 
@@ -28,7 +28,7 @@ setup:
     shares: 2000
     price_per_share: 48.00
     stage: docs_pending
-    stage_entered_days_ago: 6
+    stage_entered_days_ago: 5
     responsible_party: buyer
     risk_factors:
       is_first_time_buyer: false

@@ -61,3 +61,13 @@ htmlcov/
 
 # node (tailwind CLI only — no node_modules in src)
 node_modules/
+
+# JUnit XML test output
+smoke*.xml
+*_result.xml
+*_morph.xml
+
+# deepeval runtime files
+.deepeval/.temp_test_run_data.json
+.deepeval/.latest_test_run.json
+.deepeval/.deepeval-cache.json

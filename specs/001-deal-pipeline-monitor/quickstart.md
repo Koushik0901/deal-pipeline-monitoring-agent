@@ -42,7 +42,8 @@ Exit criteria: browser lands on a Daily Brief with ≥5 ranked items, each with 
 
 From the UI you can:
 - Approve / edit / dismiss any drafted intervention (copy-to-clipboard on approve).
-- Drill into a deal via its row → per-deal timeline with every observation's full reasoning.
+- Drill into a deal via its row → per-deal timeline with every observation's full reasoning. On Chrome/Safari the severity badge and deal ID morph into the detail header via the View Transitions API.
+- Open the Pipeline view (`/pipeline`) for the full book of live deals with deterministic health tiers; filter by tier/stage/issuer/responsible and free-text search with zero-latency client-side updates (hit `/` to jump to search, `j`/`k` to navigate visible rows).
 - Advance the simulated clock by N days via the controls in the header; the brief auto-refreshes.
 - Append `?debug=1` to any URL for the raw structured-log view.
 

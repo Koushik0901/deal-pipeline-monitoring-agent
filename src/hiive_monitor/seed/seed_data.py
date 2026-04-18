@@ -320,6 +320,148 @@ def build_deals() -> list[dict]:
         risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 112500},
     ))
 
+    # ── Deals 41-46: PROGRESSION deals — engineered to climb severity as sim advances.
+    # These deals are healthy (or low) today and cross severity thresholds over the next
+    # 2-12 sim days, so advancing the simulation produces new priorities instead of just
+    # re-escalating the same set. Values are chosen against the thresholds in
+    # `llm/prompts/severity.py` and `risk_all_dimensions.py`.
+
+    # D-041 — Stripe silence climb.
+    # Today: healthy. Day+8: comm_silence triggers (10d ≥ 2× 5d response norm) → ACT.
+    # Day+10: stage_aging crosses 2× baseline → act-level compound.
+    deals.append(deal(
+        "D-041", "stripe", "buyer_01", "seller_04", 4000, 42.00,
+        stage="docs_pending", stage_entered_days_ago=2,  # baseline 5d
+        responsible_party="buyer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
+    ))
+
+    # D-042 — Canva ROFR deadline progression + silence co-trigger.
+    # Today: informational (deadline 12d, silence 6d < 10d threshold).
+    # Day+2: deadline 10d → WATCH (elevated). Day+4: silence 10d ≥ 2×5d → ACT.
+    # Day+10: deadline 2d + ongoing silence → ESCALATE (co-trigger rule).
+    deals.append(deal(
+        "D-042", "canva", "buyer_05", "seller_06", 5000, 34.50,
+        stage="rofr_pending", stage_entered_days_ago=10,
+        rofr_deadline_days=12,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 172500},
+    ))
+
+    # D-043 — Perplexity prior-breakage escalation.
+    # Today: healthy (stage 2d < 1.5× 3d baseline).
+    # Day+3: stage_aging 1.67× → WATCH.
+    # Day+5: stage_aging 2.33× + prior_breakage=1 → ESCALATE (rule: prior_breakage + act-level).
+    deals.append(deal(
+        "D-043", "perplexity", "buyer_02", "seller_03", 3000, 65.00,
+        stage="docs_pending", stage_entered_days_ago=2,  # baseline 3d
+        responsible_party="buyer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "deal_size_usd": 195000},
+    ))
+
+    # D-044 — Cerebras multi-layer ROFR slow climb.
+    # Today: informational (deadline 14d > 10, silence 3d < threshold).
+    # Day+4: deadline 10d → WATCH. Day+8: deadline 6d → ACT (urgent).
+    # Day+12: deadline 2d → ESCALATE.
+    deals.append(deal(
+        "D-044", "cerebras", "buyer_06", "seller_02", 6000, 28.75,
+        stage="rofr_pending", stage_entered_days_ago=3,
+        rofr_deadline_days=14,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "multi_layer_rofr": True, "deal_size_usd": 172500},
+    ))
+
+    # D-045 — Databricks fast deadline climb (cleanest ESCALATE demo).
+    # Today: deadline 6d → WATCH (elevated). Day+2: deadline 4d → ACT (urgent).
+    # Day+5: deadline 1d → ESCALATE.
+    deals.append(deal(
+        "D-045", "databricks", "buyer_03", "seller_01", 4500, 95.00,
+        stage="rofr_pending", stage_entered_days_ago=20,
+        rofr_deadline_days=6,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 427500},
+    ))
+
+    # D-046 — Rippling signing stall (seller side) with active blocker.
+    # Today: healthy-ish (stage 1d, blocker fresh).
+    # Day+3: stage_aging 1.33× + 4d blocker → WATCH/ACT.
+    # Day+5: stage_aging 2× + 6d blocker in signing → ACT (critical-stage blocker rule).
+    deals.append(deal(
+        "D-046", "rippling", "buyer_04", "seller_05", 3500, 48.00,
+        stage="signing", stage_entered_days_ago=1,  # baseline 3d
+        responsible_party="seller",
+        blockers=[{"kind": "pending_signature", "description": "Seller has not yet returned countersigned TA — follow-up required", "since": _iso(_ago(1))}],
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
+    ))
+
+    # ── Gap-filler progression deals (D-047 to D-051) ──
+    # These cover sim days +1, +6, +7, +9, +11 so every single Advance click surfaces a
+    # new transition rather than clustering changes on even days. Threshold math is in
+    # the inline comment for each deal.
+
+    # D-047 — Anthropic docs_pending stage-aging climb, fills DAY +1.
+    # Today: 7d/5d baseline = 1.4× → below 1.5× trigger → informational.
+    # Day +1: 1.6× → WATCH (stage_aging, low conf).
+    # Day +4: 2.2× → ACT (rule 5: stage_aging ≥ 2×).
+    deals.append(deal(
+        "D-047", "anthropic", "buyer_03", "seller_06", 2500, 510.00,
+        stage="docs_pending", stage_entered_days_ago=7,  # baseline 5d
+        responsible_party="buyer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "multi_layer_rofr": True, "deal_size_usd": 1275000},
+    ))
+
+    # D-048 — Groq slow deadline + silence climb, fills DAY +6.
+    # Today: deadline 16d > 10 and silence 4d (norm 7d, threshold 14d) → informational.
+    # Day +6: deadline 10d → WATCH (elevated).
+    # Day +10: silence 14d crosses threshold → 2 dims → ACT.
+    # Day +14: deadline 2d → ESCALATE.
+    deals.append(deal(
+        "D-048", "groq", "buyer_01", "seller_02", 5000, 14.20,
+        stage="rofr_pending", stage_entered_days_ago=4,
+        rofr_deadline_days=16,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 71000},
+    ))
+
+    # D-049 — SpaceX deadline + silence co-trigger, fills DAY +7.
+    # Today: deadline 17d, silence 7d (SpaceX norm 7d, threshold 14d) → informational.
+    # Day +7: deadline 10d → WATCH; silence 14d → 2nd dim → ACT (rule 6).
+    # Day +15: deadline 2d + ongoing silence → ESCALATE (co-trigger rule 3).
+    deals.append(deal(
+        "D-049", "spacex", "buyer_05", "seller_01", 2000, 185.50,
+        stage="rofr_pending", stage_entered_days_ago=13,
+        rofr_deadline_days=17,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 371000},
+    ))
+
+    # D-050 — Stripe prior-breakage buyer deadline progression, fills DAY +9.
+    # Today: deadline 18d → informational; buyer carries prior_breakage=1 (static).
+    # Day +9: deadline 9d → WATCH.
+    # Day +13: deadline 5d → ACT (rule 4: deadline ≤10 + triggered dim).
+    # Day +16: deadline 2d → ESCALATE.
+    deals.append(deal(
+        "D-050", "stripe", "buyer_02", "seller_03", 6000, 42.00,
+        stage="rofr_pending", stage_entered_days_ago=12,
+        rofr_deadline_days=18,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "deal_size_usd": 252000},
+    ))
+
+    # D-051 — Databricks dual-threshold climb (silence then deadline), fills DAY +11.
+    # Today: deadline 14d, silence 7d (Databricks norm 5d, threshold 10d) → informational.
+    # Day +3: silence 10d → WATCH (single dim, no deadline pressure yet).
+    # Day +4: deadline 10d → 2 dims → ACT.
+    # Day +11: deadline 3d → urgent, still ACT.
+    # Day +12: deadline 2d → ESCALATE.
+    deals.append(deal(
+        "D-051", "databricks", "buyer_05", "seller_04", 3000, 95.00,
+        stage="rofr_pending", stage_entered_days_ago=16,
+        rofr_deadline_days=14,
+        responsible_party="issuer",
+        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 285000},
+    ))
+
     return deals
 
 
@@ -559,6 +701,114 @@ def build_events(deals: list[dict]) -> list[dict]:
             {"body": "Hi, the Ramp transfer signature pages are attached. Please review and countersign at your earliest convenience."}),
     ]
 
+    # ── Progression deals (D-041 to D-046) ──
+    # Event timestamps are chosen so that, as the sim clock advances, silence and
+    # stage-aging cross documented thresholds on specific days (see comments next to
+    # each deal in build_deals).
+
+    # D-041 Stripe — last comm 2d ago; silence will reach 10d (2× 5d norm) at day+8.
+    events += [
+        evt("D-041", "stage_transition", 2, "Entered docs_pending"),
+        evt("D-041", "comm_outbound", 2, "Transfer docs sent to buyer",
+            {"body": "Hi, attached are the Stripe transfer documents. Please review and return the signed transfer agreement at your earliest convenience."}),
+    ]
+
+    # D-042 Canva — issuer acknowledged 6d ago; deadline 12d out today.
+    events += [
+        evt("D-042", "stage_transition", 10, "Entered rofr_pending"),
+        evt("D-042", "comm_outbound", 10, "ROFR notice sent to Canva legal",
+            {"body": "Dear Canva Legal, ROFR notice attached for 5,000 shares at $34.50. 21-day window begins today."}),
+        evt("D-042", "comm_inbound", 6, "Canva acknowledged — in legal review",
+            {"body": "Received. Our legal team is reviewing and will respond before the window closes."}),
+    ]
+
+    # D-043 Perplexity — last inbound 1d ago; stage 2d (well under 3d baseline today).
+    events += [
+        evt("D-043", "stage_transition", 2, "Entered docs_pending"),
+        evt("D-043", "comm_outbound", 2, "Transfer docs sent to buyer",
+            {"body": "Hi, the Perplexity transfer docs are attached. Please sign and return."}),
+        evt("D-043", "comm_inbound", 1, "Buyer acknowledged — reviewing with counsel",
+            {"body": "Got it — reviewing with my attorney. Back to you shortly."}),
+    ]
+
+    # D-044 Cerebras — last outbound 3d ago; deadline 14d out.
+    events += [
+        evt("D-044", "stage_transition", 3, "Entered rofr_pending"),
+        evt("D-044", "comm_outbound", 3, "ROFR notice to Cerebras — multi-layer approval",
+            {"body": "Dear Cerebras Legal, ROFR notice attached for 6,000 shares at $28.75. 30-day window; note that this transfer requires board-level approval."}),
+    ]
+
+    # D-045 Databricks — issuer acknowledged 4d ago; deadline 6d out today.
+    events += [
+        evt("D-045", "stage_transition", 20, "Entered rofr_pending"),
+        evt("D-045", "comm_outbound", 20, "ROFR notice to Databricks",
+            {"body": "Dear Databricks Legal, ROFR notice attached for 4,500 shares at $95.00. 30-day window."}),
+        evt("D-045", "comm_inbound", 14, "Databricks acknowledged — under review",
+            {"body": "Received. Reviewing internally; will respond within the window."}),
+        evt("D-045", "comm_outbound", 4, "Mid-window check-in",
+            {"body": "Hi, following up on the ROFR. Please advise on election status — 10 days remaining."}),
+    ]
+
+    # D-046 Rippling — docs sent to seller 1d ago; active blocker.
+    events += [
+        evt("D-046", "stage_transition", 1, "Entered signing"),
+        evt("D-046", "comm_outbound", 1, "Signature pages sent to seller",
+            {"body": "Hi, the Rippling signature pages are attached. Please countersign and return — we're waiting on this to move to funding."}),
+    ]
+
+    # ── Gap-filler progression events (D-047 to D-051) ──
+    # These align with the threshold math documented on each deal in build_deals.
+
+    # D-047 Anthropic — last inbound 4d ago (norm 5d, silence threshold 10d).
+    # Silence won't trigger until ~day+6; stage_aging is the leading signal on day+1.
+    events += [
+        evt("D-047", "stage_transition", 7, "Entered docs_pending"),
+        evt("D-047", "comm_outbound", 7, "Transfer docs sent to buyer",
+            {"body": "Hi, the Anthropic transfer docs are attached. Please sign and return — note this is a multi-layer ROFR deal, so downstream timing matters."}),
+        evt("D-047", "comm_inbound", 4, "Buyer: reviewing with counsel",
+            {"body": "Thanks — my attorney is reviewing. Will circle back shortly."}),
+    ]
+
+    # D-048 Groq — issuer acknowledged 4d ago (norm 7d, threshold 14d).
+    # Silence crosses threshold at day+10; deadline is leading signal until then.
+    events += [
+        evt("D-048", "stage_transition", 4, "Entered rofr_pending"),
+        evt("D-048", "comm_outbound", 4, "ROFR notice sent to Groq legal",
+            {"body": "Dear Groq Legal, ROFR notice attached for 5,000 shares at $14.20. 30-day window begins today. Please confirm receipt."}),
+        evt("D-048", "comm_inbound", 4, "Groq acknowledged receipt",
+            {"body": "Received — we will review internally and respond within the window."}),
+    ]
+
+    # D-049 SpaceX — last inbound 7d ago (norm 7d, threshold 14d).
+    # Silence crosses at day+7 alongside deadline hitting 10d — dual-dim ACT trigger.
+    events += [
+        evt("D-049", "stage_transition", 13, "Entered rofr_pending"),
+        evt("D-049", "comm_outbound", 13, "ROFR notice sent to SpaceX",
+            {"body": "Dear SpaceX Legal, ROFR notice attached for 2,000 shares at $185.50. 30-day window."}),
+        evt("D-049", "comm_inbound", 7, "SpaceX acknowledged — in review",
+            {"body": "Received. Reviewing internally and will advise on election before the window closes."}),
+    ]
+
+    # D-050 Stripe — last inbound 4d ago (norm 5d, threshold 10d).
+    # Buyer has prior_breakage=1; deadline progression is the leading signal.
+    events += [
+        evt("D-050", "stage_transition", 12, "Entered rofr_pending"),
+        evt("D-050", "comm_outbound", 12, "ROFR notice sent to Stripe",
+            {"body": "Dear Stripe Legal, ROFR notice attached for 6,000 shares at $42.00. 30-day window from today."}),
+        evt("D-050", "comm_inbound", 4, "Stripe: in legal review",
+            {"body": "Received. Our legal team is reviewing and will respond before the deadline."}),
+    ]
+
+    # D-051 Databricks — last inbound 7d ago (norm 5d, threshold 10d).
+    # Silence crosses at day+3 (leading signal), deadline 10d at day+4, both combining by day+4.
+    events += [
+        evt("D-051", "stage_transition", 16, "Entered rofr_pending"),
+        evt("D-051", "comm_outbound", 16, "ROFR notice sent to Databricks",
+            {"body": "Dear Databricks Legal, ROFR notice attached for 3,000 shares at $95.00. 30-day window."}),
+        evt("D-051", "comm_inbound", 7, "Databricks acknowledged — reviewing",
+            {"body": "Received. We are reviewing internally and will respond before the window closes."}),
+    ]
+
     # Add stage_transition events for remaining deals that don't have them
     stage_transitions = [
         ("D-002", "rofr_cleared", 1),
@@ -773,7 +1023,7 @@ def seed(reset: bool = False) -> None:
     total_events = len(events) + len(hist_events)
     logger.info("seed.complete", deals=total_deals, events=total_events, issuers=len(ISSUERS))
     print(f"Seeded {total_deals} deals ({len(hist_deals)} historical), {total_events} events, {len(ISSUERS)} issuers.")
-    assert len(deals) == 40, f"Expected 40 live deals, got {len(deals)}"
+    assert len(deals) == 51, f"Expected 51 live deals, got {len(deals)}"
     assert len(hist_deals) == 4, f"Expected 4 historical deals, got {len(hist_deals)}"
 
 

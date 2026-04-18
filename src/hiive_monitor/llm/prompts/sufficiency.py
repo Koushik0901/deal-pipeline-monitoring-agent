@@ -22,22 +22,24 @@ with confidence, or would one specific enrichment tool materially change that sc
 ABSOLUTE RULE: enrichment_count ≥ 2 → return sufficient=true immediately. No exceptions. \
 This cap is enforced in code — requesting further enrichment at this point has no effect.
 
-MANDATORY ENRICH (sufficient=false) — override PROCEED rules when enrichment_count = 0:
+MANDATORY ENRICH — check these conditions BEFORE any other analysis.
+If either applies, return sufficient=false immediately. Do NOT proceed to PROCEED rules.
+Do NOT skip because the verdict "seems obvious" — these checks apply even for clear escalate cases.
+
   • communication_silence triggered AND fetch_communication_content NOT yet in enrichment_context:
-    Always fetch — a legal hold, known deferral, or acknowledgment may reduce severity regardless
-    of how confident the silence signal appears. Severity cannot be finalized without validating
-    whether an explanation exists.
-  • stage_aging AND unusual_characteristics (prior_breakage_count ≥ 1) both triggered AND
-    fetch_prior_observations NOT yet in enrichment_context:
-    Always fetch — distinguishing a new pattern from a recurring one is essential for accurate
-    severity and intervention quality.
+    Return sufficient=false, tool_to_call=fetch_communication_content.
+    Reason: a legal hold or explicit acknowledgment can reduce severity. Always verify.
+  • stage_aging triggered AND unusual_characteristics triggered AND prior_breakage_count ≥ 1 in
+    risk_factors AND fetch_prior_observations NOT yet in enrichment_context:
+    Return sufficient=false, tool_to_call=fetch_prior_observations.
+    Reason: recurring pattern vs. isolated incident changes both severity and intervention quality.
 
 PROCEED (sufficient=true) when ANY of the following apply (after mandatory enrich is satisfied):
   • All signals triggered=false → verdict is clearly informational.
   • Deadline ≤ 2 days with any triggered signal → verdict is clearly escalate; enrichment won't change it.
   • You already fetched the enrichment tool that would have addressed the ambiguity.
 
-ENRICH (sufficient=false) when ALL four conditions hold (beyond mandatory enrich above):
+ENRICH (sufficient=false) — only if mandatory enrich above did not apply — when ALL four conditions hold:
   ① enrichment_count < 2
   ② At least one signal is triggered with ambiguous cause
   ③ The tool you name would directly resolve that specific ambiguity
@@ -68,11 +70,12 @@ TOOL SELECTION — pick the single most targeted tool:
 ANTI-LOOP RULE: Never request the same tool twice. If fetch_communication_content is already
 in enrichment_context, do not request it again — proceed.
 
-CHAIN OF THOUGHT — work through these steps:
-  1. List triggered signals and their confidence scores.
-  2. Is the dominant ambiguity resolvable by one of the four tools? Name the ambiguity precisely.
-  3. Would resolving it change the severity verdict? State explicitly yes or no.
-  4. If yes and conditions ①–④ hold → enrich. Otherwise → proceed.
+CHAIN OF THOUGHT — work through these steps in order:
+  1. Check MANDATORY ENRICH conditions first. If either applies → stop, return sufficient=false.
+  2. List triggered signals and their confidence scores.
+  3. Is the dominant ambiguity resolvable by one of the four tools? Name the ambiguity precisely.
+  4. Would resolving it change the severity verdict? State explicitly yes or no.
+  5. If yes and conditions ①–④ hold → enrich. Otherwise → proceed.
 
 Reply only via the required tool.\
 """

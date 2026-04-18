@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% from "_macros.html" import shortcut_footer %}
+{% block title %}Pipeline — Hiive Deal Monitor{% endblock %}
+
+{% macro health_badge(tier, vtname='') %}
+  {% if tier == 'escalate' %}
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+  {% elif tier == 'act' %}
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+  {% elif tier == 'watch' %}
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+  {% else %}
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-medium bg-surface-container text-on-surface-variant border-[0.5px] border-on-surface-variant/10">INFO</span>
+  {% endif %}
+{% endmacro %}
+
+{# Sort button — calls PF.sort(key) client-side. Indicator shown/hidden by JS. #}
+{% macro sort_btn(label, key) %}
+<button type="button" onclick="PF.sort('{{ key }}')"
+        class="text-left transition-colors hover:text-on-surface focus-visible:outline-none focus-visible:text-on-surface">
+  {{ label }}<span id="pf-ind-{{ key }}" class="invisible ml-0.5" aria-hidden="true">↓</span>
+</button>
+{% endmacro %}
+
+{% block content %}
+<div class="pb-14">
+
+  <!-- Page header: title, counts, filter stack.
+       Vertical rhythm — tight H1→summary, medium summary→filters, generous header→table. -->
+  <header class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+
+    <!-- Title + count rhythm: tight between count+label, generous between pairs -->
+    <div class="min-w-0">
+      <h1 class="text-[1.5rem] font-semibold text-on-surface tracking-tight leading-none">Pipeline</h1>
+      <div class="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[0.8125rem] text-on-surface-variant">
+        <span class="flex items-baseline gap-1.5">
+          <span id="pf-vis" class="hidden tabular-nums"><span id="pf-count" class="text-on-surface font-medium">0</span><span class="text-outline-variant">/</span></span>
+          <span class="tabular-nums text-on-surface font-medium">{{ total }}</span>
+          <span>active</span>
+        </span>
+        <span class="flex items-baseline gap-1.5">
+          <span class="tabular-nums text-error font-medium">{{ counts_by_tier.escalate }}</span>
+          <span>escalate</span>
+        </span>
+        <span class="flex items-baseline gap-1.5">
+          <span class="tabular-nums text-primary-container font-medium">{{ counts_by_tier.act }}</span>
+          <span>act</span>
+        </span>
+        <span class="flex items-baseline gap-1.5">
+          <span class="tabular-nums text-tertiary font-medium">{{ counts_by_tier.watch }}</span>
+          <span>watch</span>
+        </span>
+        <span class="flex items-baseline gap-1.5">
+          <span class="tabular-nums font-medium">{{ counts_by_tier.informational }}</span>
+          <span>healthy</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Filter stack: primary search / divider / secondary refinement / tertiary clear -->
+    <div id="pipeline-controls" class="flex flex-wrap items-center gap-x-3 gap-y-2 lg:justify-end">
+
+      <!-- Primary: search (wider, keyboard-hint kbd trailing) -->
+      <div class="relative">
+        <label for="pf-q" class="sr-only">Search deals</label>
+        <input id="pf-q" type="search" placeholder="Search deals"
+               oninput="PF.filter()"
+               autocomplete="off"
+               class="h-7 pl-2 pr-7 w-48 sm:w-56 text-[0.8125rem] text-on-surface bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-[4px] focus:border-primary-container focus:outline-none placeholder:text-on-surface-variant/60">
+        <kbd id="pf-q-hint" class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 px-1 py-[1px] rounded-[3px] border-[0.5px] border-outline-variant/50 bg-surface-container text-[0.625rem] text-on-surface-variant font-sans leading-none hidden sm:inline-block">/</kbd>
+      </div>
+
+      <!-- Divider between primary and secondary filter groups -->
+      <span aria-hidden="true" class="hidden sm:inline-block w-px h-5 bg-outline-variant/40"></span>
+
+      <!-- Secondary: refinement selects — slightly recessed bg to sit below search -->
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="pf-tier" class="sr-only">Filter by health</label>
+        <select id="pf-tier" onchange="PF.filter()"
+                class="pf-select h-7 pl-2 text-[0.8125rem] text-on-surface bg-surface-container border-[0.5px] border-outline-variant/40 rounded-[4px] cursor-pointer">
+          <option value="">All health</option>
+          <option value="escalate">Escalate</option>
+          <option value="act">Act</option>
+          <option value="watch">Watch</option>
+          <option value="informational">Healthy</option>
+        </select>
+
+        <label for="pf-stage" class="sr-only">Filter by stage</label>
+        <select id="pf-stage" onchange="PF.filter()"
+                class="pf-select h-7 pl-2 text-[0.8125rem] text-on-surface bg-surface-container border-[0.5px] border-outline-variant/40 rounded-[4px] cursor-pointer">
+          <option value="">All stages</option>
+          {% for s in all_stages %}
+          <option value="{{ s }}">{{ s | replace('_', ' ') | title }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="pf-issuer" class="sr-only">Filter by issuer</label>
+        <select id="pf-issuer" onchange="PF.filter()"
+                class="pf-select h-7 pl-2 text-[0.8125rem] text-on-surface bg-surface-container border-[0.5px] border-outline-variant/40 rounded-[4px] cursor-pointer">
+          <option value="">All issuers</option>
+          {% for i in all_issuers %}
+          <option value="{{ i }}">{{ i | title }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="pf-responsible" class="sr-only">Filter by responsible party</label>
+        <select id="pf-responsible" onchange="PF.filter()"
+                class="pf-select h-7 pl-2 text-[0.8125rem] text-on-surface bg-surface-container border-[0.5px] border-outline-variant/40 rounded-[4px] cursor-pointer">
+          <option value="">All parties</option>
+          {% for p in all_responsible %}
+          <option value="{{ p }}">{{ p | replace('_', ' ') | title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Tertiary: clear — only shown when filters are active -->
+      <button id="pf-clear" type="button" onclick="PF.clear()"
+              class="hidden h-7 px-2 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">Clear</button>
+    </div>
+  </header>
+
+  {% if items %}
+  <!-- Dense pipeline table — all rows always rendered; JS controls visibility -->
+  <div role="table" aria-label="Active deals pipeline"
+       class="bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-lg overflow-hidden">
+
+    <!-- Column headers — desktop only; cards on mobile don't need labels -->
+    <div role="rowgroup" class="hidden md:block">
+      <div role="row"
+           class="grid grid-cols-[minmax(180px,1.4fr)_1fr_0.7fr_0.7fr_1.1fr_0.8fr_2fr_0.4fr] gap-3 px-3 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 text-[0.625rem] font-medium uppercase tracking-[0.05em]">
+        <div role="columnheader" class="text-on-surface-variant">Deal</div>
+        <div role="columnheader" class="text-on-surface-variant">{{ sort_btn('Stage / age', 'stage_age') }}</div>
+        <div role="columnheader" class="text-on-surface-variant">{{ sort_btn('ROFR', 'deadline') }}</div>
+        <div role="columnheader" class="text-on-surface-variant">{{ sort_btn('Last inbound', 'last_comm') }}</div>
+        <div role="columnheader" class="text-on-surface-variant">Owed by</div>
+        <div role="columnheader" class="text-on-surface-variant">{{ sort_btn('Health', 'health') }}</div>
+        <div role="columnheader" class="text-on-surface-variant">Reasons</div>
+        <div role="columnheader" class="text-on-surface-variant text-right">Flag</div>
+      </div>
+    </div>
+
+    <!-- Mobile-only sort row — selects collapse columns into a single sort picker -->
+    <div class="md:hidden px-3 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 flex items-center gap-2 text-[0.75rem]">
+      <label for="pf-sort-mobile" class="text-on-surface-variant">Sort</label>
+      <select id="pf-sort-mobile"
+              onchange="PF.sort(this.value)"
+              class="pf-select h-7 pl-2 text-[0.75rem] text-on-surface bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-[4px] cursor-pointer flex-1">
+        <option value="health">Worst health first</option>
+        <option value="stage_age">Longest in stage</option>
+        <option value="deadline">Soonest ROFR</option>
+        <option value="last_comm">Longest silence</option>
+      </select>
+    </div>
+
+    <!-- Data rows: all rendered; non-matching URL params get hidden class initially -->
+    <div role="rowgroup" id="pf-rowgroup">
+    {% for item in items %}
+    {% set d = item.deal %}
+    {% set s = item.signals %}
+    {% set tier_rank = 0 if item.health.tier == 'escalate' else 1 if item.health.tier == 'act' else 2 if item.health.tier == 'watch' else 3 %}
+    {% set initial_hidden = (tier and item.health.tier != tier) or (stage and d.stage != stage) or (issuer and d.issuer_id != issuer) or (responsible and (d.responsible_party or '') != responsible) %}
+    <a role="row"
+       data-pipeline-row
+       data-tier="{{ item.health.tier }}"
+       data-tier-rank="{{ tier_rank }}"
+       data-stage="{{ d.stage }}"
+       data-issuer="{{ d.issuer_id }}"
+       data-responsible="{{ d.responsible_party or '' }}"
+       data-search="{{ ((item.issuer.name or d.issuer_id) ~ ' ' ~ d.deal_id) | lower }}"
+       data-ratio="{{ '%.3f' | format(s.stage_aging_ratio) }}"
+       data-rofr="{{ s.days_to_rofr if s.days_to_rofr is not none else '9999' }}"
+       data-comm="{{ s.days_since_last_inbound if s.days_since_last_inbound is not none else '-1' }}"
+       href="/deals/{{ d.deal_id }}"
+       class="flex flex-col gap-1.5 px-3 py-3 md:grid md:grid-cols-[minmax(180px,1.4fr)_1fr_0.7fr_0.7fr_1.1fr_0.8fr_2fr_0.4fr] md:gap-3 md:py-2 md:items-center border-b-[0.5px] border-outline-variant/50 last:border-b-0 hover:bg-surface-container-low transition-colors{% if initial_hidden %} hidden{% endif %}">
+
+      <!-- ══ MOBILE CARD ══ (< md) ════════════════════════════════════════════════ -->
+      <!-- Top row: issuer + deal id  /  health + flag -->
+      <div class="md:hidden flex items-start justify-between gap-3">
+        <div class="flex flex-col min-w-0">
+          <span class="text-[0.875rem] font-semibold text-on-surface truncate">{{ (item.issuer.name or d.issuer_id) | title }}</span>
+          <span class="text-[0.6875rem] text-on-surface-variant font-mono tabular-nums">{{ d.deal_id }}</span>
+        </div>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          {{ health_badge(item.health.tier) }}
+          {% if item.has_open_intervention %}
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-[4px] bg-primary-fixed text-primary-container text-[0.5625rem] font-bold" title="Agent drafted an intervention">IV</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Middle row: compact status summary — flex-wrap chips separated by · -->
+      <div class="md:hidden flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[0.75rem] tabular-nums">
+        <span class="text-on-surface">{{ d.stage | replace('_', ' ') | title }}</span>
+        <span class="text-outline-variant">·</span>
+        <span class="text-on-surface-variant">
+          {{ s.days_in_stage }}d
+          {% if s.stage_aging_ratio >= 2.0 %}<span class="text-error">({{ s.stage_aging_ratio }}×)</span>
+          {% elif s.stage_aging_ratio >= 1.5 %}<span class="text-tertiary">({{ s.stage_aging_ratio }}×)</span>
+          {% endif %}
+        </span>
+        {% if s.days_to_rofr is not none %}
+        <span class="text-outline-variant">·</span>
+        <span class="{% if s.days_to_rofr < 0 or s.days_to_rofr <= 2 %}text-error font-medium{% elif s.days_to_rofr <= 10 %}text-tertiary{% else %}text-on-surface-variant{% endif %}">ROFR {% if s.days_to_rofr < 0 %}expired{% else %}{{ s.days_to_rofr }}d{% endif %}</span>
+        {% endif %}
+        {% if s.days_since_last_inbound is not none %}
+        <span class="text-outline-variant">·</span>
+        <span class="{% if s.days_since_last_inbound >= (2 * s.typical_response_days) %}text-error{% else %}text-on-surface-variant{% endif %}">silent {{ s.days_since_last_inbound }}d</span>
+        {% endif %}
+        {% if d.responsible_party %}
+        <span class="text-outline-variant">·</span>
+        <span class="text-on-surface-variant">{{ d.responsible_party | replace('_', ' ') }}</span>
+        {% endif %}
+      </div>
+
+      <!-- Bottom row: reasons (muted) -->
+      {% if item.health.reasons %}
+      <div class="md:hidden text-[0.75rem] text-on-surface-variant leading-snug line-clamp-2">
+        {{ item.health.reasons | join('; ') }}
+      </div>
+      {% endif %}
+
+      <!-- ══ DESKTOP CELLS ══ (≥ md) ══════════════════════════════════════════════
+           `hidden md:contents` — wrapper vanishes at md+, children become direct grid cells. -->
+      <div class="hidden md:contents">
+
+        <!-- Deal: issuer + deal id -->
+        <div role="cell" class="flex flex-col min-w-0">
+          <span class="text-[0.875rem] font-semibold text-on-surface truncate">{{ (item.issuer.name or d.issuer_id) | title }}</span>
+          <span style="view-transition-name: dealid-{{ d.deal_id }}" class="text-[0.6875rem] text-on-surface-variant font-mono tabular-nums">{{ d.deal_id }}</span>
+        </div>
+
+        <!-- Stage + age ratio -->
+        <div role="cell" class="flex flex-col min-w-0">
+          <span class="text-[0.8125rem] text-on-surface truncate">{{ d.stage | replace('_', ' ') | title }}</span>
+          <span class="text-[0.6875rem] text-on-surface-variant tabular-nums">
+            {{ s.days_in_stage }}d
+            {%- if s.stage_aging_ratio >= 1.5 %}
+            <span class="{% if s.stage_aging_ratio >= 2.0 %}text-error{% else %}text-tertiary{% endif %}">· {{ s.stage_aging_ratio }}×</span>
+            {%- else %}
+            <span>· {{ s.stage_aging_ratio }}×</span>
+            {%- endif %}
+          </span>
+        </div>
+
+        <!-- ROFR countdown -->
+        <div role="cell" class="text-[0.8125rem] tabular-nums">
+          {% if s.days_to_rofr is none %}
+          <span class="text-on-surface-variant">—</span>
+          {% elif s.days_to_rofr < 0 %}
+          <span class="text-error font-medium">Expired {{ s.days_to_rofr|abs }}d ago</span>
+          {% elif s.days_to_rofr <= 2 %}
+          <span class="text-error font-medium">{{ s.days_to_rofr }}d left</span>
+          {% elif s.days_to_rofr <= 10 %}
+          <span class="text-tertiary">{{ s.days_to_rofr }}d left</span>
+          {% else %}
+          <span class="text-on-surface">{{ s.days_to_rofr }}d</span>
+          {% endif %}
+        </div>
+
+        <!-- Last inbound -->
+        <div role="cell" class="text-[0.8125rem] tabular-nums">
+          {% if s.days_since_last_inbound is none %}
+          <span class="text-on-surface-variant">never</span>
+          {% elif s.days_since_last_inbound >= (2 * s.typical_response_days) %}
+          <span class="text-error">{{ s.days_since_last_inbound }}d ago</span>
+          {% else %}
+          <span class="text-on-surface">{{ s.days_since_last_inbound }}d ago</span>
+          {% endif %}
+        </div>
+
+        <!-- Responsible party -->
+        <div role="cell" class="text-[0.8125rem] text-on-surface-variant truncate">
+          {% set rp = d.responsible_party or '—' %}
+          {{ rp | replace('_', ' ') | title }}
+        </div>
+
+        <!-- Health badge -->
+        <div role="cell" class="flex items-center gap-1.5">
+          {{ health_badge(item.health.tier, 'sev-' ~ d.deal_id) }}
+          {% if s.blocker_count > 0 %}
+          <span class="text-[0.625rem] text-on-surface-variant">· {{ s.blocker_count }} blk</span>
+          {% endif %}
+        </div>
+
+        <!-- Reasons (compact signal summary) -->
+        <div role="cell" class="text-[0.75rem] text-on-surface-variant leading-snug line-clamp-2 pr-2">
+          {{ item.health.reasons | join('; ') }}
+        </div>
+
+        <!-- Agent flag indicator -->
+        <div role="cell" class="flex items-center justify-end">
+          {% if item.has_open_intervention %}
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-[4px] bg-primary-fixed text-primary-container text-[0.5625rem] font-bold" title="Agent drafted an intervention — see Brief">IV</span>
+          {% elif item.agent_flag %}
+          <span class="text-[0.625rem] text-on-surface-variant uppercase tracking-[0.05em]">{{ item.agent_flag[:4] }}</span>
+          {% else %}
+          <span class="text-outline-variant">·</span>
+          {% endif %}
+        </div>
+
+      </div><!-- /hidden md:contents -->
+
+    </a>
+    {% endfor %}
+    </div><!-- /rowgroup -->
+
+    <!-- Shown by JS when all rows are filtered out -->
+    <div id="pf-empty" class="hidden px-6 py-16 text-center">
+      <p class="text-[0.8125rem] text-on-surface font-medium">No deals match these filters</p>
+      <p class="text-[0.8125rem] text-on-surface-variant mt-1">Adjust the filters above to see more results.</p>
+      <button type="button" onclick="PF.clear()"
+              class="mt-3 text-[0.8125rem] text-on-surface-variant hover:text-on-surface underline transition-colors">
+        Clear all filters
+      </button>
+    </div>
+
+  </div>
+
+  {% else %}
+  <!-- No deals in database at all -->
+  <div class="bg-surface-container-lowest border-[0.5px] border-outline-variant/50 rounded-lg px-6 py-16 text-center">
+    <p class="text-[0.8125rem] text-on-surface-variant">No active deals in the pipeline yet. Advance the simulation to populate deals.</p>
+  </div>
+  {% endif %}
+
+</div>
+
+{% if items %}
+<script>
+(function() {
+  var rows = Array.from(document.querySelectorAll('[data-pipeline-row]'));
+  var rowgroup = document.getElementById('pf-rowgroup');
+  var emptyEl  = document.getElementById('pf-empty');
+  var countEl  = document.getElementById('pf-count');
+  var visEl    = document.getElementById('pf-vis');
+  var clearBtn = document.getElementById('pf-clear');
+
+  // Default sort directions: true = descending (worst first), false = ascending
+  var currentSort = '{{ sort | safe }}';
+  var sortDesc = { health: true, stage_age: true, deadline: false, last_comm: true };
+  var sortActive = false; // true after first explicit sort click
+
+  function getFilterState() {
+    return {
+      q:           (document.getElementById('pf-q') || {}).value || '',
+      tier:        document.getElementById('pf-tier').value,
+      stage:       document.getElementById('pf-stage').value,
+      issuer:      document.getElementById('pf-issuer').value,
+      responsible: document.getElementById('pf-responsible').value,
+    };
+  }
+
+  function matchRow(row, f) {
+    if (f.tier        && row.dataset.tier        !== f.tier)        return false;
+    if (f.stage       && row.dataset.stage       !== f.stage)       return false;
+    if (f.issuer      && row.dataset.issuer      !== f.issuer)      return false;
+    if (f.responsible && row.dataset.responsible !== f.responsible) return false;
+    if (f.q && !row.dataset.search.includes(f.q.toLowerCase()))     return false;
+    return true;
+  }
+
+  function applyFilter() {
+    var f = getFilterState();
+    var visible = 0;
+    rows.forEach(function(row) {
+      var show = matchRow(row, f);
+      row.classList.toggle('hidden', !show);
+      if (show) visible++;
+    });
+    var hasFilter = f.q || f.tier || f.stage || f.issuer || f.responsible;
+    if (countEl)  countEl.textContent = visible;
+    if (visEl)    visEl.classList.toggle('hidden', !hasFilter);
+    if (clearBtn) clearBtn.classList.toggle('hidden', !hasFilter);
+    if (emptyEl)  emptyEl.classList.toggle('hidden', visible > 0);
+    activeIndex = -1;
+    rows.forEach(function(r) { r.style.outline = ''; });
+  }
+
+  function applySort(key) {
+    if (key === currentSort && sortActive) {
+      sortDesc[key] = !sortDesc[key];
+    }
+    currentSort = key;
+    sortActive = true;
+    var desc = sortDesc[key];
+
+    rows.sort(function(a, b) {
+      var av, bv;
+      switch (key) {
+        case 'health':
+          av = parseInt(a.dataset.tierRank, 10);
+          bv = parseInt(b.dataset.tierRank, 10);
+          if (av !== bv) return desc ? av - bv : bv - av;
+          return parseFloat(b.dataset.ratio) - parseFloat(a.dataset.ratio);
+        case 'stage_age':
+          av = parseFloat(a.dataset.ratio);
+          bv = parseFloat(b.dataset.ratio);
+          return desc ? bv - av : av - bv;
+        case 'deadline':
+          av = parseFloat(a.dataset.rofr);
+          bv = parseFloat(b.dataset.rofr);
+          return desc ? bv - av : av - bv;
+        case 'last_comm':
+          av = parseFloat(a.dataset.comm);
+          bv = parseFloat(b.dataset.comm);
+          return desc ? bv - av : av - bv;
+        default:
+          return 0;
+      }
+    });
+    rows.forEach(function(row) { rowgroup.appendChild(row); });
+    updateSortIndicators();
+  }
+
+  function clearFilters() {
+    document.getElementById('pf-q').value = '';
+    document.getElementById('pf-tier').value = '';
+    document.getElementById('pf-stage').value = '';
+    document.getElementById('pf-issuer').value = '';
+    document.getElementById('pf-responsible').value = '';
+    applyFilter();
+  }
+
+  function updateSortIndicators() {
+    ['health', 'stage_age', 'deadline', 'last_comm'].forEach(function(key) {
+      var el = document.getElementById('pf-ind-' + key);
+      if (!el) return;
+      if (key === currentSort && sortActive) {
+        el.textContent = sortDesc[key] ? '↓' : '↑';
+        el.classList.remove('invisible');
+      } else {
+        el.classList.add('invisible');
+      }
+    });
+  }
+
+  // Init: read URL params, populate filter controls, apply initial filter
+  var params = new URLSearchParams(window.location.search);
+  ['tier', 'stage', 'issuer', 'responsible'].forEach(function(key) {
+    var val = params.get(key);
+    var el  = document.getElementById('pf-' + key);
+    if (val && el) el.value = val;
+  });
+  applyFilter();
+  updateSortIndicators();
+
+  // Expose to inline onclick attributes
+  window.PF = { filter: applyFilter, sort: applySort, clear: clearFilters };
+
+  // ── Keyboard navigation (operates on visible rows only) ──────────────────
+  var activeIndex = -1;
+
+  function getVisibleRows() {
+    return rows.filter(function(r) { return !r.classList.contains('hidden'); });
+  }
+
+  function setActive(idx) {
+    var vrows = getVisibleRows();
+    vrows.forEach(function(r) { r.style.outline = ''; });
+    activeIndex = Math.max(-1, Math.min(idx, vrows.length - 1));
+    if (activeIndex >= 0) {
+      vrows[activeIndex].style.outline = '1px solid rgb(var(--c-primary-container))';
+      vrows[activeIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.target.matches('input,textarea,select,button')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var vrows = getVisibleRows();
+    switch (e.key) {
+      case 'j':
+        e.preventDefault();
+        setActive(activeIndex < 0 ? 0 : Math.min(activeIndex + 1, vrows.length - 1));
+        break;
+      case 'k':
+        e.preventDefault();
+        setActive(Math.max(0, activeIndex - 1));
+        break;
+      case 'Enter':
+        if (activeIndex >= 0) { e.preventDefault(); vrows[activeIndex].click(); }
+        break;
+      case '/':
+        e.preventDefault();
+        document.getElementById('pf-q').focus();
+        break;
+      case 'Escape':
+        if (document.activeElement === document.getElementById('pf-q')) {
+          document.getElementById('pf-q').blur();
+        } else {
+          setActive(-1);
+        }
+        break;
+    }
+  });
+
+})();
+</script>
+{{ shortcut_footer([
+  {"keys": ["j", "k"], "label": "navigate"},
+  {"keys": ["enter"], "label": "open"},
+  {"keys": ["/"], "label": "search"},
+  {"keys": ["esc"], "label": "deselect"},
+]) }}
+{% endif %}
+{% endblock %}

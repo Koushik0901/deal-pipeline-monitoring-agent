@@ -42,14 +42,22 @@ issuer relationship database.
 
 ## Communication silence thresholds
 
-Used by the communication silence risk dimension.
+Used by the communication silence risk dimension. Thresholds are applied by the LLM evaluator
+in `llm/prompts/risk_all_dimensions.py` (not as code-level checks), using a two-band rule:
 
-| Stage | Silence threshold (days) | Rationale |
+| Stage category | Silence threshold | Trigger condition |
 |---|---|---|
-| docs_pending | 3 | Docs usually collected quickly |
-| rofr_pending | 5 | Issuer deliberation takes longer |
-| signing | 3 | Signatures should move fast |
-| funding | 2 | Wire timing is critical |
+| Late stages (rofr_cleared, signing, funding) | 7 days | strictly **> 7** days |
+| All other live stages | 14 days | strictly **> 14** days |
+
+**Important:** The threshold is strictly `>` (not `≥`). A deal with exactly 7 or 14 days of
+silence does NOT trigger. Set fixture `days_ago` values to threshold + 1 to ensure triggering.
+
+**Direction modifier:** If the last communication was inbound (counterparty waiting on Hiive),
+urgency increases — the late-stage threshold drops to 5 days.
+
+In production, these thresholds would be calibrated per issuer and stage from historical
+response-time distributions in Hiive's communication database.
 
 ## Attention suppression defaults
 

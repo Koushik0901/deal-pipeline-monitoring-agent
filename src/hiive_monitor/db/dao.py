@@ -65,6 +65,22 @@ def get_deal(conn: sqlite3.Connection, deal_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def get_snoozed_deals(conn: sqlite3.Connection) -> list[dict]:
+    """Return deals currently snoozed (snoozed_until > now, not settled/broken)."""
+    now = clk.now().isoformat()
+    try:
+        rows = conn.execute(
+            """SELECT * FROM deals
+               WHERE snoozed_until IS NOT NULL AND snoozed_until > ?
+                 AND stage NOT IN ('settled', 'broken')
+               ORDER BY snoozed_until""",
+            (now,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(r) for r in rows]
+
+
 def get_all_deals(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("SELECT * FROM deals ORDER BY created_at").fetchall()
     return [dict(r) for r in rows]
@@ -245,6 +261,25 @@ def get_observations(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
         (deal_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_latest_observation_per_deal(conn: sqlite3.Connection) -> dict[str, dict]:
+    rows = conn.execute(
+        """SELECT deal_id, severity, observed_at FROM agent_observations
+           WHERE (deal_id, observed_at) IN (
+             SELECT deal_id, MAX(observed_at) FROM agent_observations GROUP BY deal_id
+           )"""
+    ).fetchall()
+    return {r["deal_id"]: dict(r) for r in rows}
+
+
+def get_latest_inbound_per_deal(conn: sqlite3.Connection) -> dict[str, str]:
+    rows = conn.execute(
+        """SELECT deal_id, MAX(occurred_at) AS last_inbound
+           FROM events WHERE event_type = 'comm_inbound'
+           GROUP BY deal_id"""
+    ).fetchall()
+    return {r["deal_id"]: r["last_inbound"] for r in rows}
 
 
 def get_observations_by_tick(conn: sqlite3.Connection, tick_id: str) -> list[dict]:

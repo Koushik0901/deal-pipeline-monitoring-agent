@@ -21,7 +21,8 @@ make demo
 ```
 
 `make demo` opens the browser at the Daily Brief with the five engineered-issue deals visible.
-`make eval` runs the 15 golden scenarios and prints the scorecard.
+`make eval` runs the 39 Tier 1 deterministic scenarios and prints the scorecard.
+`make eval-deep` runs the Tier 2 LLM-as-judge pass (requires Langfuse + `EVAL_JUDGE_MODEL` in `.env`).
 
 ## Architecture
 
@@ -33,11 +34,17 @@ FastAPI app (single process)
    │     ├── Pipeline Monitor (LangGraph StateGraph)
    │     │     └── Deal Investigator × up to 5 (LangGraph sub-graph, agentic)
    │     └── Brief Composer (Sonnet)
-   ├── Web routes: /brief, /deals/{id}, /interventions/…, /sim/advance, /status
+   ├── Web routes: /brief, /pipeline, /deals/{id}, /interventions/…, /sim/advance, /status
    └── SQLite: domain.db (7 tables) + agent_checkpoints.db (LangGraph)
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the full Mermaid diagram.
+See [`docs/architecture.md`](docs/architecture.md) for the full diagram.
+
+### UX
+
+- **Daily Brief** (`/brief`) — top 5–7 ranked items with drafted interventions and in-place approve/edit/dismiss.
+- **Pipeline view** (`/pipeline`) — book-of-deals table with deterministic health tiers; all filters, sort, and free-text search run client-side against `data-*` attributes, so retriage is keystroke-latency with no server round-trip.
+- **Deal detail** (`/deals/{id}`) — navigating from a pipeline or Brief row uses the cross-document View Transitions API: the severity badge and deal ID morph into the detail header (Chrome/Safari). Firefox falls back to a plain navigation with no broken state.
 
 ## Assumptions
 
@@ -47,5 +54,6 @@ in [`docs/assumptions.md`](docs/assumptions.md).
 ## Eval Scorecard
 
 <!-- scorecard-start -->
-Run `make eval` to generate the current scorecard.
+Latest confirmed result: **35 / 39 (89%)** — Tier 1 deterministic, 2026-04-18.
+Run `make eval` to regenerate.
 <!-- scorecard-end -->

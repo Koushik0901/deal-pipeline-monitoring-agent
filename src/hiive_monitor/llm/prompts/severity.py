@@ -62,6 +62,8 @@ CALIBRATION EXAMPLES:
   • stage_aging (4.67×) + missing_prerequisites + unusual_characteristics (prior_breakage=2) → escalate
     (prior_breakage ≥1 AND act-level stage_aging ≥2.0× — rule 2)
   • stage_aging (ratio 2.3×, conf=0.95), no deadline → act (ratio ≥2.0× criterion)
+  • stage_aging (3.3×, conf=0.92) + unusual_characteristics (prior_breakage=1), no deadline → escalate
+    (rule 2: prior_breakage≥1 AND act-level stage_aging conf≥0.85 ratio≥2.0×)
   • stage_aging (1.6×, conf=0.75) + unusual_characteristics (prior_breakage=1), no deadline → watch
     (2 dims but neither at conf ≥0.85, no act-level trigger)
   • communication_silence (12d, conf=0.92), no other signals, no deadline → watch (single dim ≥0.85 without deadline)

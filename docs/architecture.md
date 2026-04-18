@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Analyst Browser  (HTMX 2.0 + Alpine.js + Tailwind CSS)        │
-│  /brief  /deals/{id}  /queue  /sim                              │
+│  /brief  /pipeline  /deals/{id}  /sim                           │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ HTTP partial updates
 ┌──────────────────────────▼──────────────────────────────────────┐
@@ -63,6 +63,10 @@
 **Human-in-the-loop**: The agent never sends external communications. All interventions are drafts in `status='pending'`. Approve and edit both use atomic DB transactions that simultaneously update the intervention status and insert a `comm_sent_agent_recommended` event — this is the only path to marking a communication as sent.
 
 **Suppression**: Deals that received an agent-recommended communication within the last 3 ticks have their attention score multiplied by 0.2. This prevents re-nudging a party that was already contacted this tick window.
+
+**Pipeline rendering (/pipeline)**: The book-of-deals view computes deterministic health tiers from signal shape alone (no LLM call per row) and renders every live deal to the DOM. Filter and sort are applied client-side via `window.PF` against `data-*` attributes on each row — 0ms latency, no server round-trips. URL query params (`tier`, `stage`, `issuer`, `responsible`, `sort`) set the initial `hidden` class in Jinja2 so deep links and no-JS clients still work. `counts_by_tier` in the header always reflects the whole pipeline, not the filtered slice.
+
+**View Transitions (cross-document morph)**: Deal row → detail navigation uses the View Transitions API. Severity badges share `view-transition-name: sev-{deal_id}`; deal IDs share `dealid-{deal_id}`; both names appear in `_macros.html`, `pipeline.html`, and `deal_detail.html`. Chrome/Safari morph the matched elements between documents; Firefox falls back to a plain navigation. Timing and easing are tuned in `web/static/input.css` at the top level (not inside `@layer base`, which Tailwind would strip).
 
 ## Two-Tier LLM Strategy
 

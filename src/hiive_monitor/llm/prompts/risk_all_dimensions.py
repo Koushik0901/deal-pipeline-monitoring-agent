@@ -119,11 +119,10 @@ Step 1: Score individual factors:
   multi_layer_rofr=true               → strong flag (1.5 pts)  ← requires multi-party sign-off
   is_first_time_buyer=true            → moderate flag (1 pt)
   transaction_notional_usd > 5000000  → moderate flag (1 pt)   ← outsized deal size increases counterparty risk
-Step 2: Apply triggering logic:
-  Score ≥ 1.5 (any strong flag)                → triggered=true
-  Score ≥ 2.0 (two or more moderate flags)     → triggered=true
-  Score < 1.5 (one moderate flag only)         → triggered=false
-  Score = 0 (no flags)                         → triggered=false, confidence=0.97
+Step 2: Apply triggering logic based on total score:
+  Score ≥ 1.5 → triggered=true  (covers: any strong flag, OR two moderate flags 1+1=2.0, OR any combination ≥1.5)
+  Score < 1.5 → triggered=false (a single moderate flag alone is not sufficient)
+  Score = 0   → triggered=false, confidence=0.97
 
 ANTI-INFLATION GUARD: historical breakage alone (prior_breakage_count ≥ 1) indicates risk \
 pattern, not certainty. Do not use this dimension to amplify stage_aging or silence signals — \

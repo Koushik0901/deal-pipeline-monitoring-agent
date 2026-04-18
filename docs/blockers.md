@@ -65,6 +65,37 @@ connections opened on the main thread cannot be used from APScheduler's thread
 
 ---
 
+### `ChatOpenRouter` + `extra_body` incompatibility
+**What blocked:** Passing `extra_body={"usage": {"include": True}}` to the `ChatOpenRouter`
+constructor caused all LLM calls to fail with `TypeError: Chat.send() got an unexpected keyword
+argument 'extra_body'`. The `langchain-openrouter` library places `extra_body` in `model_kwargs`,
+which is forwarded verbatim to the underlying provider SDK's `Chat.send()` — a call signature that
+no provider (Anthropic, Google, or otherwise) accepts. Both Anthropic Claude and Google Gemma
+calls were affected, breaking the entire eval run.
+
+**Resolution:** Removed `extra_body` entirely from `llm/client.py::_get_llm()`. Token counts
+are available via `usage_metadata` in the LangChain response object without needing the flag.
+
+**Status:** Resolved.
+
+---
+
+### `max_length` constraints on internal LLM audit fields
+**What blocked:** Pydantic `ValidationError` raised at runtime when LLM outputs exceeded
+character limits on internal audit fields: `RiskSignal.evidence` (400 chars),
+`SeverityDecision.reasoning` (1500), `SufficiencyDecision.rationale` (300), `AttentionScore.reason`
+(240). Chain-of-thought prompting causes models to emit detailed reasoning that routinely exceeds
+these limits — the very CoT that improves accuracy also blows past the character caps.
+
+**Resolution:** Removed `max_length` from all four internal audit fields in `models/risk.py`.
+These are internal reasoning fields consumed only by the evaluation harness and audit trail;
+there is no user-facing display constraint that requires a character limit. External-facing
+intervention body fields retain their limits.
+
+**Status:** Resolved.
+
+---
+
 ## Open limitations
 
 ### Tool Correctness metric shows n/a

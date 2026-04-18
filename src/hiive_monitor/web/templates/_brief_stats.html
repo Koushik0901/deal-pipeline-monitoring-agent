@@ -4,7 +4,7 @@
 <div id="brief-stats"
      hx-get="/api/brief-stats"
      hx-trigger="refreshStats from:body, tickComplete from:body"
-     hx-swap="outerHTML"
+     hx-swap="morph:outerHTML"
      class="flex flex-col gap-3">
 
   <!-- Pipeline status -->
@@ -34,18 +34,18 @@
     <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50">
       <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">By severity</span>
     </div>
-    <div class="px-4 py-3 flex flex-col gap-2">
+    <div class="px-4 py-3 flex flex-col gap-2.5">
       <div class="flex items-center justify-between">
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
-        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ esc_count }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-error-container text-error border-[0.5px] border-error/20">ESCALATE</span>
+        <span class="text-[1rem] font-semibold tabular-nums {% if esc_count > 0 %}text-error{% else %}text-on-surface-variant{% endif %}">{{ esc_count }}</span>
       </div>
       <div class="flex items-center justify-between">
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
-        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ act_count }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/20">ACT</span>
+        <span class="text-[1rem] font-semibold tabular-nums {% if act_count > 0 %}text-primary-container{% else %}text-on-surface-variant{% endif %}">{{ act_count }}</span>
       </div>
       <div class="flex items-center justify-between">
-        <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
-        <span class="text-[0.8125rem] font-semibold text-on-surface tabular-nums">{{ watch_count }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/20">WATCH</span>
+        <span class="text-[1rem] font-semibold tabular-nums {% if watch_count > 0 %}text-tertiary{% else %}text-on-surface-variant{% endif %}">{{ watch_count }}</span>
       </div>
     </div>
   </div>

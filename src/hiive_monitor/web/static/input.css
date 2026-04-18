@@ -5,6 +5,63 @@
 @layer base {
   [x-cloak] { display: none !important; }
 
+  /* ── Easing tokens ────────────────────────────────────────────────────────
+     Named after their purpose, not their math. Use these everywhere.
+  ── */
+  :root {
+    --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);   /* Confident, decisive */
+    --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);  /* Smooth, refined */
+    --ease-in-quad:   cubic-bezier(0.55, 0, 1, 0.45);  /* Fast exit */
+  }
+
+  /* ── HTMX content fade-in ─────────────────────────────────────────────────
+     Rows inserted via outerHTML swap (approve/dismiss confirmation) fade in
+     instead of popping instantly. 30ms delay lets the paint settle first.
+  ── */
+  .htmx-added {
+    opacity: 0;
+    animation: hiive-fadein 220ms var(--ease-out-expo) 30ms forwards;
+  }
+
+  @keyframes hiive-fadein {
+    to { opacity: 1; }
+  }
+
+  /* ── All-clear checkmark draw ─────────────────────────────────────────────
+     Draws the checkmark stroke from left to right when the priority queue
+     is empty. Communicates "verified clean" rather than just "empty".
+  ── */
+  @keyframes hiive-check-draw {
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes hiive-check-appear {
+    from { opacity: 0; transform: scale(0.85); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Button press feedback ────────────────────────────────────────────────
+     Primary action buttons scale down on press — tactile, immediate.
+     80ms is below perceptual threshold for "delay" but above for "snappy".
+  ── */
+  .approve-btn:active {
+    transform: scale(0.97);
+    transition: transform 80ms var(--ease-out-quint);
+  }
+
+  /* ── Reduced motion ───────────────────────────────────────────────────────
+     Accessibility: analysts using assistive tech or who set this pref
+     see no animation at all. Do not shorten — zero is correct here.
+  ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   /* ── Light mode token values ──────────────────────────────────────────────
      All values are space-separated RGB triplets so Tailwind's opacity modifier
      syntax (bg-surface/50, border-outline-variant/50, etc.) works correctly.
@@ -117,5 +174,68 @@
     --c-error-container:             92  15  16;  /* #5c0f10 — ESCALATE badge bg (dark) */
     --c-on-error:                    70   0   4;  /* #460004 */
     --c-on-error-container:         255 180 171;  /* #ffb4ab */
+  }
+}
+
+/* ── Filter selects ───────────────────────────────────────────────────────
+   Native <select> styling: strip the platform chrome, draw our own chevron
+   via an encoded SVG. Hover lifts the background one step; focus shows a
+   primary-tinted border. Keeps native a11y + mobile picker behavior.
+── */
+@layer components {
+  .pf-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%23697b71' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 4l3 3 3-3'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.625rem 0.625rem;
+    padding-right: 1.5rem;
+    transition: background-color 100ms var(--ease-out-quint),
+                border-color 100ms var(--ease-out-quint);
+  }
+  .dark .pf-select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none' stroke='%238a9990' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 4l3 3 3-3'/></svg>");
+  }
+  .pf-select:hover:not(:focus) {
+    background-color: rgb(var(--c-surface-container-high));
+    border-color: rgb(var(--c-outline-variant));
+  }
+  .pf-select:focus {
+    outline: none;
+    border-color: rgb(var(--c-primary-container));
+    box-shadow: 0 0 0 1px rgb(var(--c-primary-container) / 0.25);
+  }
+}
+
+/* ── View Transitions ─────────────────────────────────────────────────────
+   Cross-document morphing between list rows and deal detail.
+   @view-transition and ::view-transition-* must be top-level (not in @layer).
+── */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation-duration: 160ms;
+  animation-timing-function: ease-in;
+}
+::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Named element groups (severity badge + deal ID) morph with expo-out */
+::view-transition-group(*) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
   }
 }

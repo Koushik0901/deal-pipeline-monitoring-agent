@@ -1,5 +1,33 @@
+{#
+  Keyboard shortcut hint bar — fixed at bottom of viewport.
+  `shortcuts` is a list of dicts: {"keys": ["j", "k"], "label": "navigate"}.
+  Multiple keys render as separate <kbd> chips joined by "/".
+  Callers must add `pb-14` to the main content container to prevent overlap.
+#}
+{% macro shortcut_footer(shortcuts) %}
+<div aria-hidden="true"
+     class="hidden md:flex fixed bottom-0 left-0 right-0 z-10 bg-surface-container-low/95 border-t-[0.5px] border-outline-variant/50 py-2.5 justify-center items-center">
+  <div class="flex items-center gap-5 text-[0.6875rem] text-on-surface-variant">
+    {% for s in shortcuts %}
+      {% if not loop.first %}
+      <span class="w-px h-3 bg-outline-variant/50"></span>
+      {% endif %}
+      <span class="flex items-center gap-1.5">
+        {% for k in s['keys'] %}
+          {% if not loop.first %}<span>/</span>{% endif %}
+          <kbd class="px-1.5 py-0.5 rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest text-on-surface text-[0.625rem]">{{ k }}</kbd>
+        {% endfor %}
+        <span>{{ s.label }}</span>
+      </span>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+
 {% macro intervention_row(item) %}
 <div id="iv-{{ item.intervention_id }}"
+     data-brief-row
      x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }}, snoozing: false, snoozeHours: 48, snoozeReason: "" }'
      class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
 
@@ -13,16 +41,16 @@
     <!-- Status badge -->
     <div class="col-span-2">
       {% if item.severity == 'escalate' %}
-        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10 whitespace-nowrap">ESCALATE</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-error-container text-error border-[0.5px] border-error/20 whitespace-nowrap">ESCALATE</span>
       {% elif item.severity == 'act' %}
-        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10 whitespace-nowrap">ACT</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/20 whitespace-nowrap">ACT</span>
       {% else %}
-        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap">WATCH</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/20 whitespace-nowrap">WATCH</span>
       {% endif %}
     </div>
 
     <!-- Deal ID (plain text — whole row is the link) -->
-    <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-primary-container">
+    <div style="view-transition-name: dealid-{{ item.deal_id }}" class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-primary-container">
       {{ item.deal_id }}
     </div>
 
@@ -36,9 +64,18 @@
       {% endif %}
     </div>
 
-    <!-- Risk summary -->
+    <!-- Why today — the sharpest reason this deal is in the brief.
+         Primary line: triggered-signal evidence (what needs the analyst's attention).
+         Secondary line: draft-readiness hint (the work is already done). -->
     <div class="col-span-4 min-w-0">
+      {% if item.why_today %}
+      <p class="text-[0.8125rem] font-medium text-on-surface truncate">{{ item.why_today }}</p>
+      <p class="text-[0.6875rem] text-on-surface-variant truncate mt-0.5">
+        <span class="text-outline-variant">Draft ready</span> · {{ item.draft_subject or item.draft_body[:80] }}
+      </p>
+      {% else %}
       <p class="text-[0.8125rem] text-on-surface truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
+      {% endif %}
     </div>
 
     <!-- Expand toggle — stops propagation so it doesn't navigate -->
@@ -50,7 +87,7 @@
         :aria-expanded="expanded"
         :aria-label="expanded ? 'Collapse' : 'Expand details'"
         aria-controls="detail-{{ item.intervention_id }}"
-        class="flex items-center justify-center w-6 h-6 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
+        class="expand-btn flex items-center justify-center w-6 h-6 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
       >
         <svg :class="expanded ? 'rotate-180' : ''" class="w-3.5 h-3.5 transition-transform duration-150" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 6l4 4 4-4"/>
@@ -60,7 +97,16 @@
   </div>
 
   <!-- Expanded detail panel -->
-  <div id="detail-{{ item.intervention_id }}" x-show="expanded" x-cloak class="border-t-[0.5px] border-outline-variant/50 bg-surface-container-low/40 px-4 py-4 space-y-4">
+  <div id="detail-{{ item.intervention_id }}"
+       x-show="expanded"
+       x-cloak
+       x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-150"
+       x-transition:enter-start="opacity-0 -translate-y-1"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-100"
+       x-transition:leave-start="opacity-100 translate-y-0"
+       x-transition:leave-end="opacity-0 -translate-y-1"
+       class="border-t-[0.5px] border-outline-variant/50 bg-surface-container-low/40 px-4 py-4 space-y-4">
 
     <!-- Dimensions triggered -->
     {% if item.dimensions_triggered %}
@@ -85,9 +131,17 @@
         ></button>
       </div>
 
-      <div x-show="!editing" class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface whitespace-pre-wrap leading-relaxed">{{ item.draft_body }}</div>
+      <div x-show="!editing"
+           x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-100"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface whitespace-pre-wrap leading-relaxed">{{ item.draft_body }}</div>
 
-      <div x-show="editing" x-cloak>
+      <div x-show="editing"
+           x-cloak
+           x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-100"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100">
         <textarea
           x-model="editText" rows="8"
           aria-label="Edit intervention draft"
@@ -124,8 +178,9 @@
           hx-post="/interventions/{{ item.intervention_id }}/approve"
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
+          hx-confirm="Send this intervention draft?"
           hx-on::after-request="if(event.detail.successful) announceAction('Approved — draft copied to clipboard.')"
-          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+          class="approve-btn rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
         >Approve &amp; send</button>
       </div>
 
@@ -149,7 +204,7 @@
         hx-swap="outerHTML"
         hx-confirm="Dismiss this intervention?"
         hx-on::after-request="if(event.detail.successful) announceAction('Intervention dismissed.')"
-        class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        class="dismiss-btn rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
       >Dismiss</button>
 
       <button
@@ -168,7 +223,15 @@
     </div>
 
     <!-- Snooze inline form -->
-    <div x-show="snoozing" x-cloak class="border-t-[0.5px] border-outline-variant/50 pt-3 mt-1">
+    <div x-show="snoozing"
+         x-cloak
+         x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-150"
+         x-transition:enter-start="opacity-0 -translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-1"
+         class="border-t-[0.5px] border-outline-variant/50 pt-3 mt-1">
       <div class="flex items-center gap-2 flex-wrap">
         <span class="text-[0.6875rem] text-on-surface-variant shrink-0">Snooze for</span>
         <input

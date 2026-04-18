@@ -16,19 +16,19 @@
 <div class="flex flex-wrap items-start justify-between gap-y-2 pb-4 border-b-[0.5px] border-outline-variant/50 mb-6">
   <div class="min-w-0">
     <h1 class="text-[1.1875rem] font-semibold text-on-surface tracking-tight leading-snug">
-      {{ deal.deal_id }}{% if issuer %}<span class="text-on-surface-variant font-normal"> · {{ issuer.name }}</span>{% endif %}
+      <span style="view-transition-name: dealid-{{ deal.deal_id }}">{{ deal.deal_id }}</span>{% if issuer %}<span class="text-on-surface-variant font-normal"> · {{ issuer.name }}</span>{% endif %}
     </h1>
     <div class="flex items-center flex-wrap gap-2 mt-2">
       <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium text-on-surface bg-surface-container-low border-[0.5px] border-outline-variant/50 uppercase tracking-widest">{{ deal.stage | replace('_', ' ') }}</span>
       {% if latest_obs %}
         {% if latest_obs.severity == 'escalate' %}
-          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
         {% elif latest_obs.severity == 'act' %}
-          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
         {% elif latest_obs.severity == 'watch' %}
-          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
         {% elif latest_obs.severity == 'info' %}
-          <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
         {% endif %}
       {% endif %}
       {% if issuer %}
@@ -205,15 +205,41 @@
             </div>
             {% endif %}
 
-            <!-- Dimensions triggered -->
-            {% set dims = latest_obs.reasoning_parsed.get('dimensions_triggered', []) %}
-            {% if dims %}
+            <!-- Risk dimensions — rendered as a data-dump of the raw agent output.
+                 Monospace, numeric, log-styled. Every dimension shown every tick:
+                 `true` rows surface the triggers driving severity; `false` rows prove the
+                 agent considered and ruled them out. Confidence bar uses unicode blocks so
+                 it stays aligned in the monospace column. -->
+            {% set all_signals = latest_obs.reasoning_parsed.get('all_signals', []) %}
+            {% if all_signals %}
+            {% set _dim_index = {} %}
+            {% for s in all_signals %}{% set _ = _dim_index.__setitem__(s.dimension, s) %}{% endfor %}
+            {% set triggered_count = all_signals | selectattr('triggered') | list | length %}
             <div>
-              <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest block mb-2">Dimensions Triggered</span>
-              <div class="flex flex-wrap gap-1.5">
-                {% for dim in dims %}
-                  <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.6875rem] text-on-surface-variant">{{ dim | replace('_', ' ') }}</span>
-                {% endfor %}
+              <div class="flex items-baseline justify-between mb-2">
+                <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest"
+                      title="Raw output from the agent's combined AllRiskSignals call. Each line is {dimension, triggered, confidence, evidence} as emitted by the LLM.">Risk Dimensions · raw</span>
+                <span class="text-[0.625rem] text-outline-variant tabular-nums font-mono">{{ triggered_count }}/6 triggered</span>
+              </div>
+              <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container/40 px-3 py-2 overflow-x-auto">
+                <pre class="text-[0.6875rem] leading-[1.4] text-on-surface-variant font-mono"><span class="text-outline-variant">dimension                         triggered   conf   evidence</span>
+<span class="text-outline-variant">────────────────────────────────  ─────────  ─────  ──────────────────────────────────────────</span>
+{%- for key, _ in [
+  ('deadline_proximity', 0),
+  ('communication_silence', 0),
+  ('counterparty_nonresponsiveness', 0),
+  ('stage_aging', 0),
+  ('missing_prerequisites', 0),
+  ('unusual_characteristics', 0),
+] %}
+{%- set sig = _dim_index.get(key) %}
+{%- set t = sig and sig.triggered %}
+{%- set conf = (sig.confidence if sig else 0) or 0 %}
+{%- set full = conf | round(2) %}
+{%- set filled = (conf * 5) | round(0, 'floor') | int %}
+{%- set bar = '█' * filled ~ '░' * (5 - filled) %}
+<span class="{% if t %}text-on-surface{% else %}text-outline-variant{% endif %}">{{ '%-32s' | format(key) }}  {% if sig is none %}<span class="text-outline-variant/60">—       </span>{% elif t %}<span class="text-primary-container">true    </span>{% else %}<span class="text-outline-variant">false   </span>{% endif %} <span class="tabular-nums {% if t %}text-on-surface{% else %}text-outline-variant{% endif %}">{{ '%4.2f' | format(full) }}</span> <span class="{% if t %}text-primary-container{% else %}text-outline-variant/60{% endif %}">{{ bar }}</span>  <span class="{% if t %}text-on-surface-variant{% else %}text-outline-variant/70{% endif %}">{{ (sig.evidence if sig and sig.evidence else ('—' if sig else 'not evaluated'))[:60] }}</span></span>
+{%- endfor %}</pre>
               </div>
             </div>
             {% endif %}
@@ -230,7 +256,7 @@
                 class="flex items-center gap-1.5 py-1.5 text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors mb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
               >
                 <span x-text="showChain ? '↑' : '↓'" class="font-mono" aria-hidden="true"></span>
-                <span class="uppercase tracking-widest font-medium">Enrichment steps ({{ chain|length }})</span>
+                <span class="uppercase tracking-widest font-medium" title="Information-gathering steps the agent ran to build context before making its risk assessment">Enrichment steps ({{ chain|length }})</span>
               </button>
               <div id="enrichment-chain" x-show="showChain" x-cloak class="flex flex-col gap-1.5">
                 {% for step in chain %}

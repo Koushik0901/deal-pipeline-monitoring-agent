@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import intervention_row %}
+{% from "_macros.html" import intervention_row, shortcut_footer %}
 {% block title %}Daily Brief — Hiive{% endblock %}
 
 {% block content %}
@@ -58,7 +58,7 @@
 
     <!-- Tabs + dense intervention table -->
     <div id="brief-list"
-      hx-get="/brief" hx-trigger="tickComplete from:body, refreshBriefList from:body{% if clock_mode == 'real_time' %}, every 30s{% elif not tick %}, every 5s{% endif %}" hx-swap="outerHTML" hx-select="#brief-list">
+      hx-get="/brief" hx-trigger="tickComplete from:body, refreshBriefList from:body{% if clock_mode == 'real_time' %}, every 30s{% elif not tick %}, every 5s{% endif %}" hx-swap="morph:outerHTML" hx-select="#brief-list">
     <div x-data="{ tab: 'brief' }">
 
       <!-- Tab bar -->
@@ -87,39 +87,71 @@
           :class="tab === 'handled' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
           class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
         >Handled ({{ handled_items|length }})</button>
+        {% if snoozed_deals %}
+        <button
+          role="tab"
+          :aria-selected="tab === 'snoozed'"
+          aria-controls="tab-panel-snoozed"
+          x-on:click="tab = 'snoozed'"
+          :class="tab === 'snoozed' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
+          class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
+        >Snoozed ({{ snoozed_deals|length }})</button>
+        {% endif %}
       </div>
 
       <!-- Table container -->
       <div class="border-[0.5px] border-t-0 border-outline-variant/50 rounded-b-lg bg-surface-container-lowest overflow-hidden">
 
         <!-- Column headers -->
-        <div class="grid grid-cols-12 gap-3 px-3 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest" aria-hidden="true">
-          <div class="col-span-2">Status</div>
-          <div class="hidden sm:block col-span-2">Deal ID</div>
-          <div class="col-span-5 sm:col-span-3">Target</div>
-          <div class="col-span-4">Summary</div>
-          <div class="col-span-1"></div>
+        <div role="row" class="grid grid-cols-12 gap-3 px-3 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">
+          <div role="columnheader" class="col-span-2">Status</div>
+          <div role="columnheader" class="hidden sm:block col-span-2">Deal ID</div>
+          <div role="columnheader" class="col-span-5 sm:col-span-3">Target</div>
+          <div role="columnheader" class="col-span-4">Summary</div>
+          <div role="columnheader" class="col-span-1"></div>
         </div>
 
         <!-- Priority tab panel -->
-        <div id="tab-panel-brief" role="tabpanel" x-show="tab === 'brief'">
+        <div id="tab-panel-brief" role="tabpanel" x-show="tab === 'brief'"
+             x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-150"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
           {% if priority_items %}
             {% for item in priority_items %}{{ intervention_row(item) }}{% endfor %}
           {% else %}
             <div class="px-4 py-12 text-center">
-              <p class="text-[0.8125rem] text-on-surface-variant">No priority items. Pipeline looks healthy.</p>
-              {% if not tick %}<p class="mt-1 text-[0.6875rem] text-on-surface-variant">Advance the simulation to run a tick.</p>{% endif %}
+              {% if tick %}
+              <!-- Verified-clean state: animated checkmark signals active confirmation, not just absence -->
+              <svg class="w-9 h-9 mx-auto mb-3" viewBox="0 0 36 36" fill="none" aria-hidden="true"
+                   style="animation: hiive-check-appear 300ms cubic-bezier(0.16,1,0.3,1) forwards">
+                <circle cx="18" cy="18" r="14" stroke="rgb(var(--c-primary-container))" stroke-width="1" opacity="0.2"/>
+                <polyline points="11,18 16,23 25,13" stroke="rgb(var(--c-primary-container))" stroke-width="1.5"
+                          stroke-linecap="round" stroke-linejoin="round"
+                          style="stroke-dasharray: 24; stroke-dashoffset: 24; animation: hiive-check-draw 350ms cubic-bezier(0.16,1,0.3,1) 120ms forwards"/>
+              </svg>
+              <p class="text-[0.8125rem] font-medium text-primary-container">Pipeline is clear.</p>
+              <p class="mt-1 text-[0.6875rem] text-on-surface-variant">No escalations or actions required.</p>
+              {% else %}
+              <p class="text-[0.8125rem] text-on-surface-variant">No tick run yet.</p>
+              <p class="mt-1 text-[0.6875rem] text-on-surface-variant">Advance the simulation to run a tick.</p>
+              {% endif %}
             </div>
           {% endif %}
         </div>
 
         <!-- All open tab panel -->
-        <div id="tab-panel-all" role="tabpanel" x-show="tab === 'all'" x-cloak>
+        <div id="tab-panel-all" role="tabpanel" x-show="tab === 'all'" x-cloak
+             x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-150"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
           {% include "_all_open_list.html" %}
         </div>
 
         <!-- Handled tab panel -->
-        <div id="tab-panel-handled" role="tabpanel" x-show="tab === 'handled'" x-cloak>
+        <div id="tab-panel-handled" role="tabpanel" x-show="tab === 'handled'" x-cloak
+             x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-150"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100">
           {% if handled_items %}
             {% for item in handled_items %}
             <a href="/deals/{{ item.deal_id }}"
@@ -160,13 +192,39 @@
           {% endif %}
         </div>
 
+        <!-- Snoozed tab panel -->
+        {% if snoozed_deals %}
+        <div id="tab-panel-snoozed" role="tabpanel" x-show="tab === 'snoozed'" x-cloak>
+          {% for deal in snoozed_deals %}
+          <a href="/deals/{{ deal.deal_id }}"
+             class="grid grid-cols-12 gap-3 px-3 py-2.5 items-center border-b-[0.5px] border-outline-variant/50 last:border-b-0 hover:bg-surface-container-low transition-colors">
+            <div class="col-span-2">
+              <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50 whitespace-nowrap">SNOOZED</span>
+            </div>
+            <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-on-surface-variant">
+              {{ deal.deal_id }}
+            </div>
+            <div class="col-span-5 sm:col-span-3 min-w-0">
+              <div class="text-[0.8125rem] font-medium text-on-surface truncate">{{ deal.issuer_id | upper }}</div>
+              <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ deal.stage | replace('_', ' ') }}</div>
+            </div>
+            <div class="col-span-4 min-w-0">
+              <p class="text-[0.8125rem] text-on-surface-variant truncate">{{ deal.snooze_reason or '—' }}</p>
+              <p class="text-[0.625rem] text-on-surface-variant/70 truncate">Until {{ deal.snoozed_until[:16] }}</p>
+            </div>
+            <div class="col-span-1 text-right text-[0.6875rem] text-on-surface-variant/50">→</div>
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
       </div>
     </div>
     </div><!-- /#brief-list -->
   </div>
 
   <!-- ── Right: sidebar ── -->
-  <aside class="w-full lg:w-72 lg:flex-shrink-0 lg:sticky lg:top-[3.25rem] grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-col">
+  <aside class="w-full lg:w-72 lg:flex-shrink-0 lg:sticky lg:top-[3.5rem] grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-col">
 
     {% include "_brief_stats.html" %}
 
@@ -200,4 +258,55 @@
   </aside>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if priority_items or items %}
+<script>
+(function(){
+  var activeIndex = -1;
+  function getVisibleRows() {
+    return Array.from(document.querySelectorAll('[data-brief-row]')).filter(function(el) {
+      var node = el;
+      while (node && node !== document.body) {
+        if (window.getComputedStyle(node).display === 'none') return false;
+        node = node.parentElement;
+      }
+      return true;
+    });
+  }
+  function setActive(idx) {
+    var rows = getVisibleRows();
+    rows.forEach(function(r) { r.style.outline = ''; });
+    activeIndex = Math.max(-1, Math.min(idx, rows.length - 1));
+    if (activeIndex >= 0) {
+      rows[activeIndex].style.outline = '1px solid rgb(var(--c-primary-container))';
+      rows[activeIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.target.matches('input,textarea,select,button')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var rows = getVisibleRows();
+    if (!rows.length) return;
+    switch (e.key) {
+      case 'j': e.preventDefault(); setActive(activeIndex < 0 ? 0 : Math.min(activeIndex + 1, rows.length - 1)); break;
+      case 'k': e.preventDefault(); setActive(Math.max(0, activeIndex - 1)); break;
+      case 'Enter': if (activeIndex >= 0) { e.preventDefault(); var b = rows[activeIndex].querySelector('.expand-btn'); if (b) b.click(); } break;
+      case 'a': if (activeIndex >= 0) { e.preventDefault(); var b = rows[activeIndex].querySelector('.approve-btn'); if (b) b.click(); } break;
+      case 'd': if (activeIndex >= 0) { e.preventDefault(); var b = rows[activeIndex].querySelector('.dismiss-btn'); if (b) b.click(); } break;
+      case 'Escape': setActive(-1); break;
+    }
+  });
+  document.body.addEventListener('htmx:afterSwap', function() { activeIndex = -1; });
+})();
+</script>
+{{ shortcut_footer([
+  {"keys": ["j", "k"], "label": "navigate"},
+  {"keys": ["enter"], "label": "expand"},
+  {"keys": ["a"], "label": "approve"},
+  {"keys": ["d"], "label": "dismiss"},
+  {"keys": ["esc"], "label": "deselect"},
+]) }}
+{% endif %}
 {% endblock %}
