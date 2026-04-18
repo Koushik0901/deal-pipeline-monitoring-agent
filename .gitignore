@@ -21,9 +21,13 @@ agent_checkpoints.db
 *.db-shm
 *.db-wal
 
-# Eval output (track latest.md only)
-eval_results/
+# Eval output
+eval_results/*
 !eval_results/latest.md
+!eval_results/scorecard_20260417_090000.md
+!eval_results/deep_scorecard_20260417_090000.md
+!eval_results/results_20260417_090000.json
+!eval_results/results_latest.json
 
 # Logs
 out/logs.jsonl

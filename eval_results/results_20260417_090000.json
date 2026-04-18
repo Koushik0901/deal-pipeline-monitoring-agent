@@ -1,0 +1,1825 @@
+[
+  {
+    "id": "adversarial_balanced_opposing_signals",
+    "category": "adversarial_calibration",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging"
+    ],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(5,500)=ok; price(38.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=watch, actual=act"
+      ],
+      [
+        "severity_lte",
+        true,
+        "expected<=act, actual=act"
+      ],
+      [
+        "dimension:stage_aging",
+        true,
+        "triggered=['stage_aging']"
+      ]
+    ],
+    "_trace_id": "6bced1098d6ad986918a28bf90be198c"
+  },
+  {
+    "id": "adversarial_conflicting_comm",
+    "category": "adversarial_calibration",
+    "passed": false,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "watch",
+    "actual_triggered": [
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [
+      "fetch_communication_content"
+    ],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(12,000)=ok; price(31.50)=ok",
+    "assertion_results": [
+      [
+        "severity_lte",
+        false,
+        "expected<=watch, actual=act"
+      ],
+      [
+        "enrichment_tool_called",
+        false,
+        "called=[]"
+      ]
+    ],
+    "_trace_id": "6ab6aeae1844154ca3b5c4f59a22ca26"
+  },
+  {
+    "id": "adversarial_prior_breakage_healthy_now",
+    "category": "adversarial_calibration",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "watch",
+    "actual_triggered": [],
+    "gt_triggered": [
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "deeb7790be235fc91326536e365ad861"
+  },
+  {
+    "id": "adversarial_strong_single_signal",
+    "category": "adversarial_calibration",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_not_triggered": [
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['deadline_proximity']"
+      ]
+    ],
+    "_trace_id": "fe7f0aedfc29ecff24f840c80e870865"
+  },
+  {
+    "id": "det_01_rofr_deadline_critical",
+    "category": "detection",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'stage_aging']"
+      ],
+      [
+        "dimension:communication_silence",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'stage_aging']"
+      ],
+      [
+        "intervention_type",
+        true,
+        "expected=internal_escalation, actual=internal_escalation"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:SpaceX",
+        true,
+        "not found in: Deal D-TEST-001 (SpaceX) is 28 days into rofr_pending (1.4\u00d7 the 20-day baseline) with the ROFR deadl"
+      ],
+      [
+        "body_contains:2026-04-18",
+        true,
+        "not found in: Deal D-TEST-001 (SpaceX) is 28 days into rofr_pending (1.4\u00d7 the 20-day baseline) with the ROFR deadl"
+      ]
+    ],
+    "_trace_id": "6874781485dcbcab37595c4b6ccae5cf"
+  },
+  {
+    "id": "det_02_rofr_deadline_elevated",
+    "category": "detection",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_not_triggered": [
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(8,000)=ok; price(42.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['deadline_proximity']"
+      ],
+      [
+        "dimension_not:communication_silence",
+        true,
+        "triggered=['deadline_proximity']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "138119985431d91c896cd5f6e051711d"
+  },
+  {
+    "id": "det_03_stage_aging_severe",
+    "category": "detection",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(1,500)=ok; price(510.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "dimension:stage_aging",
+        true,
+        "triggered=['counterparty_nonresponsiveness', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        true,
+        "triggered=['counterparty_nonresponsiveness', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "1b74d275ce4208e48f4a21f6a6333432"
+  },
+  {
+    "id": "det_04_communication_silence",
+    "category": "detection",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(4,000)=ok; price(34.50)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=watch, actual=act"
+      ],
+      [
+        "dimension:communication_silence",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'stage_aging']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "9754d0d475ffc6151c2d32c7da17998d"
+  },
+  {
+    "id": "det_05_missing_prerequisites",
+    "category": "detection",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(10,000)=ok; price(28.75)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "dimension:stage_aging",
+        true,
+        "triggered=['missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:missing_prerequisites",
+        true,
+        "triggered=['missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        true,
+        "triggered=['missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "ff4e52ecaa69f1d9f5858b985d28b137"
+  },
+  {
+    "id": "det_06_prior_breakage_escalation",
+    "category": "detection",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=escalate"
+      ],
+      [
+        "dimension:stage_aging",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "7fa3b3fb5e4c295546bf4d83effb02ed"
+  },
+  {
+    "id": "det_07_multi_layer_rofr_stall",
+    "category": "detection",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "779c6488ffe83418c6084f10ee8b197d"
+  },
+  {
+    "id": "det_08_healthy_deal_no_flag",
+    "category": "detection",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "e1fc8f336d3e077b3bb74cfaf6526119"
+  },
+  {
+    "id": "detection_enrichment_compounding_watch",
+    "category": "detection",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "unusual_characteristics",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(4,000)=ok; price(65.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=watch, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "29d9b21fa0ada590d9ccb4626298aab6"
+  },
+  {
+    "id": "detection_enrichment_issuer_breakage",
+    "category": "detection",
+    "passed": false,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [
+      "fetch_prior_observations"
+    ],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(3,500)=ok; price(48.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        false,
+        "expected>=escalate, actual=act"
+      ]
+    ],
+    "_trace_id": "3bbb38a803ef5d91a44902d26e2615a2"
+  },
+  {
+    "id": "edge_all_dimensions_simultaneous",
+    "category": "edge_case",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:communication_silence",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:stage_aging",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:missing_prerequisites",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity', 'missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ]
+    ],
+    "_trace_id": "12f8a6bc39748eaa6a3e85842d6cd369"
+  },
+  {
+    "id": "edge_deadline_zero_days",
+    "category": "edge_case",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_triggered": [
+      "deadline_proximity"
+    ],
+    "gt_not_triggered": [
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['deadline_proximity']"
+      ]
+    ],
+    "_trace_id": "02efaf1efbaea27b74fb8204c2c538f2"
+  },
+  {
+    "id": "edge_empty_event_history",
+    "category": "edge_case",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "watch",
+    "actual_triggered": [],
+    "gt_triggered": [
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "cdb997770835b881b93929ac3cd7feaf"
+  },
+  {
+    "id": "edge_enrichment_cap",
+    "category": "edge_case",
+    "passed": false,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "communication_silence",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [
+      "fetch_communication_content",
+      "fetch_prior_observations"
+    ],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=escalate, actual=escalate"
+      ],
+      [
+        "agent_triggers_enrichment",
+        false,
+        "enrichment_rounds=0"
+      ]
+    ],
+    "_trace_id": "44294cb3a922247b9b5cd2ad4f0afdbc"
+  },
+  {
+    "id": "edge_first_time_large_deal",
+    "category": "edge_case",
+    "passed": false,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "watch",
+    "actual_triggered": [],
+    "gt_triggered": [
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_gte",
+        false,
+        "expected>=watch, actual=informational"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        false,
+        "triggered=[]"
+      ],
+      [
+        "intervention_drafted",
+        false,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "abd47ad879eea0ea35a53b960c7248da"
+  },
+  {
+    "id": "edge_multi_layer_rofr_stall",
+    "category": "edge_case",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "watch",
+    "actual_triggered": [
+      "stage_aging",
+      "communication_silence",
+      "unusual_characteristics"
+    ],
+    "gt_triggered": [
+      "unusual_characteristics",
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "missing_prerequisites",
+      "communication_silence"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(7,500)=ok; price(510.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=watch, actual=act"
+      ],
+      [
+        "dimension:unusual_characteristics",
+        true,
+        "triggered=['communication_silence', 'stage_aging', 'unusual_characteristics']"
+      ]
+    ],
+    "_trace_id": "52b8ce7b0acea6406f1bc463cf501662"
+  },
+  {
+    "id": "edge_multiple_blockers",
+    "category": "edge_case",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(15,000)=ok; price(28.75)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "dimension:missing_prerequisites",
+        true,
+        "triggered=['missing_prerequisites', 'stage_aging', 'unusual_characteristics']"
+      ]
+    ],
+    "_trace_id": "886c91054c5cc00d5bf0b2672023d188"
+  },
+  {
+    "id": "edge_no_hallucination_probe",
+    "category": "edge_case",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:Rippling",
+        true,
+        "not found in: Deal D-EDGE-009 (Rippling) has been in rofr_pending for 28 days with the ROFR deadline expiring 2026"
+      ],
+      [
+        "body_contains:2026-04-19",
+        true,
+        "not found in: Deal D-EDGE-009 (Rippling) has been in rofr_pending for 28 days with the ROFR deadline expiring 2026"
+      ]
+    ],
+    "_trace_id": "8580840af678b9241f90d23e19cf909b"
+  },
+  {
+    "id": "edge_severity_not_inflated",
+    "category": "edge_case",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "watch",
+    "actual_triggered": [],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ]
+    ],
+    "_trace_id": "f5812efe628b492055bcdde7a75aa5a5"
+  },
+  {
+    "id": "edge_suppression_active",
+    "category": "edge_case",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "19eab7fb52d130f4ec03a426d17a7654"
+  },
+  {
+    "id": "edge_very_new_deal_healthy",
+    "category": "edge_case",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "10bc5b85af5bdae6e0c45f4a70614fdb"
+  },
+  {
+    "id": "iq_01_nudge_contains_deadline",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "intervention_type",
+        true,
+        "expected=internal_escalation, actual=internal_escalation"
+      ],
+      [
+        "body_contains:SpaceX",
+        true,
+        "not found in: Deal D-IQ-001 (SpaceX) is 28 days into rofr_pending (1.4\u00d7 the 20-day baseline) with the ROFR deadlin"
+      ],
+      [
+        "body_contains:2026-04-18",
+        true,
+        "not found in: Deal D-IQ-001 (SpaceX) is 28 days into rofr_pending (1.4\u00d7 the 20-day baseline) with the ROFR deadlin"
+      ]
+    ],
+    "_trace_id": "638efab81f90ddd105149b07c32f4982"
+  },
+  {
+    "id": "iq_02_escalation_to_ts_lead",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "39dfd5a53d660d26597a6db17633cf87"
+  },
+  {
+    "id": "iq_03_nudge_references_stage",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(6,000)=ok; price(42.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:Stripe",
+        true,
+        "not found in: Your Stripe transaction is currently in the signing stage and has been there for 8 days \u2014 twice the "
+      ]
+    ],
+    "_trace_id": "5adacd2fc399b15d22351e75811af2c6"
+  },
+  {
+    "id": "iq_04_days_in_stage_accuracy",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging"
+    ],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(4,200)=ok; price(97.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:13",
+        true,
+        "not found in: Your Plaid transaction \u2014 4,200 shares at $97.00 per share \u2014 has been in docs_pending for 13 days, wh"
+      ],
+      [
+        "body_contains:Plaid",
+        true,
+        "not found in: Your Plaid transaction \u2014 4,200 shares at $97.00 per share \u2014 has been in docs_pending for 13 days, wh"
+      ]
+    ],
+    "_trace_id": "6a0b262bf67e6536c3606a369de86d9e"
+  },
+  {
+    "id": "iq_05_stage_age_vs_blocker_age",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "stage_aging",
+      "missing_prerequisites"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(3,500)=ok; price(62.50)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:11",
+        true,
+        "not found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 day"
+      ],
+      [
+        "body_contains:8",
+        true,
+        "not found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 day"
+      ],
+      [
+        "body_contains:Figma",
+        true,
+        "not found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 day"
+      ],
+      [
+        "body_not_contains:8 days in signing",
+        true,
+        "found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 days, and we have not r"
+      ],
+      [
+        "body_not_contains:signing for 8 days",
+        true,
+        "found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 days, and we have not r"
+      ],
+      [
+        "body_not_contains:missing for 11",
+        true,
+        "found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 days, and we have not r"
+      ],
+      [
+        "body_not_contains:outstanding for 11",
+        true,
+        "found in: Your Figma transaction \u2014 3,500 shares at $62.50 per share \u2014 has been in the signing stage for 11 days, and we have not r"
+      ]
+    ],
+    "_trace_id": "9a8dcfd2bfc44985a56226ba356a23ad"
+  },
+  {
+    "id": "iq_06_escalate_routes_to_internal",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "intervention_type",
+        true,
+        "expected=internal_escalation, actual=internal_escalation"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "4d2118bf823f85dacfa8fe1f5ac7bfe6"
+  },
+  {
+    "id": "pri_01_escalate_before_act",
+    "category": "prioritization",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "dimension:deadline_proximity",
+        true,
+        "triggered=['communication_silence', 'counterparty_nonresponsiveness', 'deadline_proximity']"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ]
+    ],
+    "_trace_id": "9b280825233d1781f396f9c1c6832135"
+  },
+  {
+    "id": "pri_02_watch_only_no_draft",
+    "category": "prioritization",
+    "passed": true,
+    "severity": "watch",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "watch",
+    "gt_severity": "watch",
+    "actual_triggered": [
+      "stage_aging"
+    ],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=watch"
+      ]
+    ],
+    "_trace_id": "1e1ec92bb9783aa530af7f6de4d5d04b"
+  },
+  {
+    "id": "pri_03_informational_new_deal",
+    "category": "prioritization",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=informational, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "1fc318625852ed8898f0b567063853a7"
+  },
+  {
+    "id": "pri_04_funding_stage_healthy",
+    "category": "prioritization",
+    "passed": true,
+    "severity": null,
+    "error": null,
+    "observations": 0,
+    "interventions": 0,
+    "task_completed": false,
+    "actual_severity": null,
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "communication_silence",
+      "stage_aging",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity_lte",
+        true,
+        "expected<=watch, actual=informational"
+      ],
+      [
+        "no_intervention",
+        true,
+        "count=0"
+      ]
+    ],
+    "_trace_id": "4701f7cc00c8fa7527325f67bf8615e3"
+  },
+  {
+    "id": "regression_escalate_internal_not_nudge",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "escalate",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "escalate",
+    "gt_severity": "escalate",
+    "actual_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "counterparty_nonresponsiveness"
+    ],
+    "gt_triggered": [
+      "deadline_proximity",
+      "communication_silence"
+    ],
+    "gt_not_triggered": [
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "severity",
+        true,
+        "expected=escalate, actual=escalate"
+      ],
+      [
+        "intervention_type",
+        true,
+        "expected=internal_escalation, actual=internal_escalation"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_not_contains:Dear OpenAI",
+        true,
+        "found in: Deal D-REG-002 (OpenAI) has been in rofr_pending for 27 days (baseline 20d, 1.35\u00d7 threshold), with the ROFR deadline exp"
+      ],
+      [
+        "body_not_contains:please advise at your earliest",
+        true,
+        "found in: Deal D-REG-002 (OpenAI) has been in rofr_pending for 27 days (baseline 20d, 1.35\u00d7 threshold), with the ROFR deadline exp"
+      ]
+    ],
+    "_trace_id": "094b8c580bb7e0f299ac41b42ecc7bf6"
+  },
+  {
+    "id": "regression_intervention_not_stale",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 2,
+    "interventions": 2,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": false,
+    "factual_grounding_detail": "shares(3,800)=MISSING; price(65.00)=MISSING",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=2"
+      ],
+      [
+        "prior_pending_superseded",
+        true,
+        "prior intervention status=dismissed (expected dismissed)"
+      ]
+    ],
+    "_trace_id": "32e9698d0979b0c9e16cec4df1dbca1c"
+  },
+  {
+    "id": "regression_portfolio_min_sample",
+    "category": "detection",
+    "passed": true,
+    "severity": "informational",
+    "error": null,
+    "observations": 1,
+    "interventions": 0,
+    "task_completed": true,
+    "actual_severity": "informational",
+    "gt_severity": "informational",
+    "actual_triggered": [],
+    "gt_triggered": [],
+    "gt_not_triggered": [
+      "stage_aging",
+      "deadline_proximity",
+      "communication_silence",
+      "missing_prerequisites",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": null,
+    "factual_grounding_detail": "no outbound_nudge intervention drafted",
+    "assertion_results": [
+      [
+        "no_portfolio_signal",
+        true,
+        "signals=[]"
+      ]
+    ],
+    "_trace_id": "d607e65c4d6fd8f8c5533ee85adf9648"
+  },
+  {
+    "id": "regression_stage_age_not_zero",
+    "category": "intervention_quality",
+    "passed": true,
+    "severity": "act",
+    "error": null,
+    "observations": 1,
+    "interventions": 1,
+    "task_completed": true,
+    "actual_severity": "act",
+    "gt_severity": "act",
+    "actual_triggered": [
+      "stage_aging"
+    ],
+    "gt_triggered": [
+      "stage_aging"
+    ],
+    "gt_not_triggered": [
+      "deadline_proximity",
+      "unusual_characteristics"
+    ],
+    "actual_tools": [],
+    "expected_tools": [],
+    "factual_grounding": true,
+    "factual_grounding_detail": "shares(5,000)=ok; price(120.00)=ok",
+    "assertion_results": [
+      [
+        "severity_gte",
+        true,
+        "expected>=act, actual=act"
+      ],
+      [
+        "intervention_drafted",
+        true,
+        "count=1"
+      ],
+      [
+        "body_contains:11",
+        true,
+        "not found in: Your Stripe transaction \u2014 5,000 shares at $120.00 per share \u2014 has been in docs_pending for 11 days, "
+      ],
+      [
+        "body_contains:Stripe",
+        true,
+        "not found in: Your Stripe transaction \u2014 5,000 shares at $120.00 per share \u2014 has been in docs_pending for 11 days, "
+      ],
+      [
+        "body_not_contains:0 days",
+        true,
+        "found in: Your Stripe transaction \u2014 5,000 shares at $120.00 per share \u2014 has been in docs_pending for 11 days, which is well beyond"
+      ],
+      [
+        "body_not_contains:zero days",
+        true,
+        "found in: Your Stripe transaction \u2014 5,000 shares at $120.00 per share \u2014 has been in docs_pending for 11 days, which is well beyond"
+      ]
+    ],
+    "_trace_id": "61add1f8487a691e9cf9a3d4c3288ffc"
+  }
+]
