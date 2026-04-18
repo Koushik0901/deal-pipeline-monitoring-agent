@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from hiive_monitor import clock as clk
@@ -40,11 +40,10 @@ def snooze_deal(
     deal_id: str,
     hours: int,
     reason: str,
-) -> None:
-    """Set snoozed_until on a deal and record an audit event."""
-    from datetime import timedelta
-
-    snooze_until = (clk.now() + timedelta(hours=hours)).isoformat()
+) -> str:
+    """Set snoozed_until on a deal, record an audit event, and return the ISO snooze_until."""
+    now = clk.now()
+    snooze_until = (now + timedelta(hours=hours)).isoformat()
     conn.execute(
         "UPDATE deals SET snoozed_until = ?, snooze_reason = ? WHERE deal_id = ?",
         (snooze_until, reason, deal_id),
@@ -53,11 +52,12 @@ def snooze_deal(
         conn,
         deal_id=deal_id,
         event_type="snooze_created",
-        occurred_at=clk.now(),
+        occurred_at=now,
         summary=f"Snoozed for {hours}h: {reason}",
         payload={"hours": hours, "reason": reason, "snoozed_until": snooze_until},
     )
     conn.commit()
+    return snooze_until
 
 
 def get_deal(conn: sqlite3.Connection, deal_id: str) -> dict | None:

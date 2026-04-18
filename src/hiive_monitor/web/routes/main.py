@@ -7,6 +7,7 @@ import json
 import time
 import traceback
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -149,8 +150,8 @@ async def batch_approve_interventions(
         try:
             dao.approve_intervention_atomic(conn, iv["intervention_id"], simulated_timestamp=clk.now())
             approved_ids.append(iv["intervention_id"])
-        except Exception:
-            log.warning("batch_approve.skip", intervention_id=iv["intervention_id"])
+        except Exception as exc:
+            log.warning("batch_approve.skip", intervention_id=iv["intervention_id"], error=str(exc))
 
     conn.close()
 
@@ -196,7 +197,6 @@ async def snooze_deal(
     reason: str = Form(...),
 ):
     from hiive_monitor.config import get_settings
-
     if not get_settings().enable_ts10_snooze:
         raise HTTPException(status_code=403, detail="Snooze feature not enabled")
 
@@ -206,12 +206,10 @@ async def snooze_deal(
         conn.close()
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    dao.snooze_deal(conn, deal_id, hours=hours, reason=reason)
+    snooze_until_iso = dao.snooze_deal(conn, deal_id, hours=hours, reason=reason)
     conn.close()
 
-    from hiive_monitor import clock as clk
-    from datetime import timedelta
-    until = (clk.now() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")
+    until = datetime.fromisoformat(snooze_until_iso).strftime("%Y-%m-%d %H:%M")
     resp = HTMLResponse(
         f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">'
         f'Snoozed {deal_id} until {until} \u2014 {reason}'
