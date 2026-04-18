@@ -2,7 +2,7 @@
 
 ## Active Technologies
 
-Python 3.11+ · FastAPI · LangGraph (`langgraph-checkpoint-sqlite`) · Pydantic v2 · APScheduler · Jinja2 · HTMX (pinned) · Alpine.js (pinned) · Tailwind CSS (CLI build) · structlog · PyYAML · pytest · uv (dep manager) · OpenRouter (LLM gateway)
+Python 3.13.5 · FastAPI · LangGraph (`langgraph-checkpoint-sqlite`) · Pydantic v2 · APScheduler · Jinja2 · HTMX (pinned) · Alpine.js (pinned) · Tailwind CSS (CLI build) · structlog · PyYAML · pytest · uv (dep manager) · OpenRouter (LLM gateway)
 
 ## Project Structure
 
@@ -79,6 +79,9 @@ Source of truth: `src/hiive_monitor/llm/prompts/severity.py` and `src/hiive_moni
 
 - **Backgrounded `pytest` runs can produce empty stdout log files** under Windows Git Bash even when the process exits 0. Exit codes in completion notifications are reliable; empty output ≠ test failure. Prefer `--junitxml` to capture structured results if the text output matters.
 - `pgrep` / `ps aux` are not available in the Git Bash shipped with this setup. Use `tasklist //FI "IMAGENAME eq python.exe"` to list processes if you need to.
+- **`make eval-deep` runtime:** ~34 minutes for 39 scenarios — this is normal. Don't abort early; the rich progress bar shows per-scenario progress.
+- **`deepeval` + Python 3.13:** `deepeval>=3.9.0` requires `grpcio>=1.67.1` for cp313 wheels. If `make eval-deep` hangs on startup or fails with a build error, run `uv sync --upgrade-package grpcio` to get a compatible version. `DEEPEVAL_TELEMETRY_OPT_OUT=YES` (already in `.env` and `Makefile`) is sufficient to suppress telemetry — no other flags needed.
+- **`deep_scorecard` filename:** The deep scorecard filename uses the Tier 1 results timestamp (`results_{ts}.json`), not the actual run time. Running `make eval-deep` twice on the same Tier 1 results overwrites the same scorecard file.
 
 <!-- MANUAL ADDITIONS START -->
 
