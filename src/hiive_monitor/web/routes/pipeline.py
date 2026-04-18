@@ -43,47 +43,48 @@ async def pipeline(
     now = clk.now()
     conn = get_domain_conn()
 
-    deals = dao.get_live_deals(conn)
+    try:
+        deals = dao.get_live_deals(conn)
 
-    issuer_rows = conn.execute("SELECT * FROM issuers").fetchall()
-    issuers_by_id = {row["issuer_id"]: dict(row) for row in issuer_rows}
+        issuer_rows = conn.execute("SELECT * FROM issuers").fetchall()
+        issuers_by_id = {row["issuer_id"]: dict(row) for row in issuer_rows}
 
-    latest_obs_by_deal = dao.get_latest_observation_per_deal(conn)
-    last_inbound_by_deal = dao.get_latest_inbound_per_deal(conn)
+        latest_obs_by_deal = dao.get_latest_observation_per_deal(conn)
+        last_inbound_by_deal = dao.get_latest_inbound_per_deal(conn)
 
-    open_iv_deal_ids = {iv["deal_id"] for iv in dao.get_open_interventions(conn)}
+        open_iv_deal_ids = {iv["deal_id"] for iv in dao.get_open_interventions(conn)}
 
-    items = []
-    for deal in deals:
-        try:
-            deal["risk_factors_parsed"] = json.loads(deal.get("risk_factors") or "{}")
-        except (ValueError, TypeError):
-            deal["risk_factors_parsed"] = {}
-        try:
-            deal["blockers_parsed"] = json.loads(deal.get("blockers") or "[]")
-        except (ValueError, TypeError):
-            deal["blockers_parsed"] = []
+        items = []
+        for deal in deals:
+            try:
+                deal["risk_factors_parsed"] = json.loads(deal.get("risk_factors") or "{}")
+            except (ValueError, TypeError):
+                deal["risk_factors_parsed"] = {}
+            try:
+                deal["blockers_parsed"] = json.loads(deal.get("blockers") or "[]")
+            except (ValueError, TypeError):
+                deal["blockers_parsed"] = []
 
-        issuer_row = issuers_by_id.get(deal["issuer_id"], {})
+            issuer_row = issuers_by_id.get(deal["issuer_id"], {})
 
-        last_inbound_str = last_inbound_by_deal.get(deal["deal_id"])
-        last_inbound_at = datetime.fromisoformat(last_inbound_str) if last_inbound_str else None
+            last_inbound_str = last_inbound_by_deal.get(deal["deal_id"])
+            last_inbound_at = datetime.fromisoformat(last_inbound_str) if last_inbound_str else None
 
-        signals = compute_signals(deal, issuer_row, last_inbound_at, now)
-        health = compute_health(signals)
+            signals = compute_signals(deal, issuer_row, last_inbound_at, now)
+            health = compute_health(signals)
 
-        items.append(
-            {
-                "deal": deal,
-                "issuer": issuer_row,
-                "signals": signals,
-                "health": health,
-                "agent_flag": (latest_obs_by_deal.get(deal["deal_id"]) or {}).get("severity"),
-                "has_open_intervention": deal["deal_id"] in open_iv_deal_ids,
-            }
-        )
-
-    conn.close()
+            items.append(
+                {
+                    "deal": deal,
+                    "issuer": issuer_row,
+                    "signals": signals,
+                    "health": health,
+                    "agent_flag": (latest_obs_by_deal.get(deal["deal_id"]) or {}).get("severity"),
+                    "has_open_intervention": deal["deal_id"] in open_iv_deal_ids,
+                }
+            )
+    finally:
+        conn.close()
 
     # Book-wide tier counts — header reflects the full pipeline, not the filtered slice.
     counts_by_tier = {s.value: 0 for s in Severity}

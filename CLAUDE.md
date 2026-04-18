@@ -37,6 +37,8 @@ Python 3.11+. Follow standard conventions.
 - **`get_events` ordering:** `dao.get_events()` fetches `ORDER BY occurred_at DESC LIMIT N` then reverses → ASC. So `comm_events[-1]` is the most recent event. Fixture `days_ago` values are relative to `setup.now`.
 - **`@view-transition` CSS placement:** Must be at top-level in `input.css`, NOT inside `@layer base {}` — Tailwind silently drops it. Place after the closing `}` of the layer block.
 - **Pipeline filter is client-side:** `pipeline.py` no longer applies `tier/stage/issuer/responsible` query params to filter rendered `items` — all deals always render to DOM. `window.PF` (defined in `pipeline.html` scripts block) controls row visibility via `data-*` attributes. Jinja2 uses URL params only to set the initial `hidden` class (no-JS fallback).
+- **Jinja2 `.keys` on dicts:** `{% for k in s.keys %}` raises `TypeError: 'builtin_function_or_method' object is not iterable` — Jinja attribute lookup returns the bound `dict.keys` method before falling back to item access. Use `s['keys']` when the key name collides with a dict method.
+- **Jinja dict-mutation idiom:** Build a lookup index from a list with `{% for x in xs %}{% set _ = idx.__setitem__(x.key, x) %}{% endfor %}` — no native `update` filter.
 
 ## Key Architecture Patterns
 
@@ -45,6 +47,8 @@ Python 3.11+. Follow standard conventions.
 - **Feature flags:** Add to `Settings` in `config.py` with `enable_<feature>: bool`; default `True` for analyst-facing UI features
 - **LLM combined call:** 5 of the 6 risk dimensions are evaluated in one `AllRiskSignals` call (not 5 separate calls) via `llm/prompts/risk_all_dimensions.py`. The 6th dimension, `counterparty_nonresponsiveness`, is **deterministic** — computed outside the LLM from last-inbound timestamps. `AllRiskSignals` schema does not include it; don't try to add it there.
 - **View Transitions naming convention:** Severity badges use `view-transition-name: sev-{deal_id}`, deal ID text uses `dealid-{deal_id}`. Names must match across `_macros.html` (Brief rows), `pipeline.html` (pipeline rows), and `deal_detail.html` (page header) for the cross-document morph to fire.
+- **`reasoning_parsed.all_signals` vs `dimensions_triggered`:** `all_signals` is the full 6-dimension state (5 LLM + deterministic counterparty merged at `investigator.py:133`); `dimensions_triggered` is only the fired subset. Templates showing "what the agent considered" want `all_signals`; flag-lists want `dimensions_triggered`.
+- **Stylized selects:** Use the `.pf-select` component class (defined in `input.css` under `@layer components`) on `<select>` elements — provides SVG chevron, hover/focus states, dark-mode variant. Don't roll a new `appearance-none` dropdown; extend `.pf-select` if needed.
 
 ## Severity & Risk Rules
 

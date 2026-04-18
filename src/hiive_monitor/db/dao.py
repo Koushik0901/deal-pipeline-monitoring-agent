@@ -90,7 +90,7 @@ def get_all_deals(conn: sqlite3.Connection) -> list[dict]:
 
 
 def get_events(conn: sqlite3.Connection, deal_id: str, limit: int | None = None) -> list[dict]:
-    if limit:
+    if limit is not None:
         rows = conn.execute(
             "SELECT * FROM events WHERE deal_id = ? ORDER BY occurred_at DESC LIMIT ?",
             (deal_id, limit),
@@ -265,7 +265,7 @@ def get_observations(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
 
 def get_latest_observation_per_deal(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
-        """SELECT deal_id, severity, observed_at FROM agent_observations
+        """SELECT deal_id, severity, observed_at, reasoning FROM agent_observations
            WHERE (deal_id, observed_at) IN (
              SELECT deal_id, MAX(observed_at) FROM agent_observations GROUP BY deal_id
            )"""
@@ -350,7 +350,6 @@ def has_open_intervention(conn: sqlite3.Connection, deal_id: str) -> bool:
 def supersede_pending_interventions(conn: sqlite3.Connection, deal_id: str) -> int:
     """Dismiss any pending interventions for a deal — called when we're about to
     write a fresh one for the same deal from a later tick. Returns count dismissed."""
-    from hiive_monitor import clock as clk
     cur = conn.execute(
         "UPDATE interventions SET status = 'dismissed', dismissed_at = ? "
         "WHERE deal_id = ? AND status = 'pending'",
@@ -527,6 +526,37 @@ def get_suppressed_deal_ids(
 # ── Approval transaction (FR-LOOP-01, FR-LOOP-03) ────────────────────────────
 
 
+def _commit_intervention_atomic(
+    conn: sqlite3.Connection,
+    intervention_id: str,
+    simulated_timestamp: datetime,
+    intervention: dict,
+    status: str,
+    final_text: str,
+    summary: str,
+    extra_payload: dict | None = None,
+) -> str:
+    """Shared implementation for approve and edit atomic writes (FR-LOOP-01)."""
+    deal_id = intervention["deal_id"]
+    event_id = str(uuid.uuid4())
+    real_now = clk.now().isoformat()
+
+    with conn:
+        conn.execute(
+            "UPDATE interventions SET status = ?, final_text = ?, approved_at = ? WHERE intervention_id = ?",
+            (status, final_text, real_now, intervention_id),
+        )
+        payload = {"intervention_id": intervention_id, **(extra_payload or {})}
+        conn.execute(
+            """INSERT INTO events
+               (event_id, deal_id, event_type, occurred_at, created_at, summary, payload)
+               VALUES (?, ?, 'comm_sent_agent_recommended', ?, ?, ?, ?)""",
+            (event_id, deal_id, simulated_timestamp.isoformat(), real_now, summary, json.dumps(payload)),
+        )
+
+    return event_id
+
+
 def approve_intervention_atomic(
     conn: sqlite3.Connection,
     intervention_id: str,
@@ -534,43 +564,19 @@ def approve_intervention_atomic(
     final_text: str | None = None,
 ) -> str:
     """
-    Atomically:
-    1. Update intervention status to 'approved' (and final_text if provided).
-    2. Insert a comm_sent_agent_recommended event for the deal.
-
-    Both writes happen in a single transaction. If either fails, both roll back (FR-LOOP-01).
+    Atomically update intervention to 'approved' and emit a comm_sent_agent_recommended event.
+    Both writes happen in a single transaction (FR-LOOP-01).
     Returns the event_id of the newly created comm event.
     """
     intervention = get_intervention(conn, intervention_id)
     if not intervention:
         raise ValueError(f"Intervention {intervention_id} not found")
-
-    deal_id = intervention["deal_id"]
-    event_id = str(uuid.uuid4())
-    real_now = clk.now().isoformat()
-
-    with conn:
-        conn.execute(
-            """UPDATE interventions
-               SET status = 'approved', final_text = ?, approved_at = ?
-               WHERE intervention_id = ?""",
-            (final_text or intervention["draft_body"], real_now, intervention_id),
-        )
-        conn.execute(
-            """INSERT INTO events
-               (event_id, deal_id, event_type, occurred_at, created_at, summary, payload)
-               VALUES (?, ?, 'comm_sent_agent_recommended', ?, ?, ?, ?)""",
-            (
-                event_id,
-                deal_id,
-                simulated_timestamp.isoformat(),
-                real_now,
-                "Outreach sent via agent recommendation",
-                json.dumps({"intervention_id": intervention_id}),
-            ),
-        )
-
-    return event_id
+    return _commit_intervention_atomic(
+        conn, intervention_id, simulated_timestamp, intervention,
+        status="approved",
+        final_text=final_text or intervention["draft_body"],
+        summary="Outreach sent via agent recommendation",
+    )
 
 
 def edit_intervention_atomic(
@@ -586,33 +592,13 @@ def edit_intervention_atomic(
     intervention = get_intervention(conn, intervention_id)
     if not intervention:
         raise ValueError(f"Intervention {intervention_id} not found")
-
-    deal_id = intervention["deal_id"]
-    event_id = str(uuid.uuid4())
-    real_now = clk.now().isoformat()
-
-    with conn:
-        conn.execute(
-            """UPDATE interventions
-               SET status = 'edited', final_text = ?, approved_at = ?
-               WHERE intervention_id = ?""",
-            (final_text, real_now, intervention_id),
-        )
-        conn.execute(
-            """INSERT INTO events
-               (event_id, deal_id, event_type, occurred_at, created_at, summary, payload)
-               VALUES (?, ?, 'comm_sent_agent_recommended', ?, ?, ?, ?)""",
-            (
-                event_id,
-                deal_id,
-                simulated_timestamp.isoformat(),
-                real_now,
-                "Outreach sent via agent recommendation (analyst-edited draft)",
-                json.dumps({"intervention_id": intervention_id, "edited": True}),
-            ),
-        )
-
-    return event_id
+    return _commit_intervention_atomic(
+        conn, intervention_id, simulated_timestamp, intervention,
+        status="edited",
+        final_text=final_text,
+        summary="Outreach sent via agent recommendation (analyst-edited draft)",
+        extra_payload={"edited": True},
+    )
 
 
 # ── Intervention outcome tracking (TS08) ──────────────────────────────────────

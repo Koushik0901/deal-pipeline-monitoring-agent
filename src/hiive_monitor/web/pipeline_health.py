@@ -19,6 +19,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from hiive_monitor.models.stages import DWELL_BASELINES, Stage
+
 
 def _days_between(later: datetime, earlier: datetime) -> int:
     return (later - earlier).days
@@ -34,8 +36,12 @@ def compute_signals(
     stage_entered = datetime.fromisoformat(deal["stage_entered_at"])
     days_in_stage = max(0, _days_between(now, stage_entered))
 
+    # Stage aging uses dwell-time baseline per stage (matches agent severity.py rules).
+    # typical_response_days is kept separately for the communication-silence display in the template.
+    stage_baseline = DWELL_BASELINES.get(Stage(deal["stage"]), 5) or 5
+    stage_aging_ratio = days_in_stage / stage_baseline
+
     typical = issuer.get("typical_response_days") or 5
-    stage_aging_ratio = days_in_stage / typical if typical else 0.0
 
     days_to_rofr: int | None = None
     if deal.get("rofr_deadline"):
@@ -56,6 +62,7 @@ def compute_signals(
 
     return {
         "days_in_stage": days_in_stage,
+        "stage_baseline": stage_baseline,
         "typical_response_days": typical,
         "stage_aging_ratio": round(stage_aging_ratio, 2),
         "days_to_rofr": days_to_rofr,
@@ -76,6 +83,7 @@ def compute_health(signals: dict[str, Any]) -> dict[str, Any]:
     triggered_dims = 0
 
     ratio = signals["stage_aging_ratio"]
+    baseline = signals["stage_baseline"]
     typical = signals["typical_response_days"]
     silence = signals["days_since_last_inbound"]
     deadline = signals["days_to_rofr"]
@@ -89,7 +97,7 @@ def compute_health(signals: dict[str, Any]) -> dict[str, Any]:
     stage_aging_act_level = ratio >= 2.0
     if stage_aging_triggered:
         triggered_dims += 1
-        reasons.append(f"stage aging {ratio}\u00d7 baseline ({typical}d norm)")
+        reasons.append(f"stage aging {ratio}\u00d7 baseline ({baseline}d norm)")
 
     silence_triggered = silence is not None and silence >= 2 * typical
     if silence_triggered:

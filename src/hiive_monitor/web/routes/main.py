@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from hiive_monitor.db import dao
 from hiive_monitor.db.connection import get_domain_conn
 from hiive_monitor.logging import get_logger
+from hiive_monitor.models.risk import RiskDimension
 
 
 def _templates():
@@ -32,12 +33,12 @@ _tick_dispatch_times: dict[str, float] = {}
 # Severity-decision-tree priority: the dimensions that most commonly drive the
 # verdict come first, so the analyst reads the strongest reason before the weaker one.
 _WHY_TODAY_PRIORITY = {
-    "deadline_proximity": 1,
-    "communication_silence": 2,
-    "counterparty_nonresponsiveness": 3,
-    "stage_aging": 4,
-    "missing_prerequisites": 5,
-    "unusual_characteristics": 6,
+    RiskDimension.DEADLINE_PROXIMITY: 1,
+    RiskDimension.COMMUNICATION_SILENCE: 2,
+    RiskDimension.COUNTERPARTY_NONRESPONSIVENESS: 3,
+    RiskDimension.STAGE_AGING: 4,
+    RiskDimension.MISSING_PREREQUISITES: 5,
+    RiskDimension.UNUSUAL_CHARACTERISTICS: 6,
 }
 
 
@@ -90,16 +91,17 @@ async def daily_brief(request: Request, debug: str = ""):
     tick = dao.get_last_completed_tick(conn)
     open_ivs = dao.get_open_interventions(conn)
 
-    # Enrich each intervention with deal info
+    # Bulk fetch to avoid N+1 queries
+    deals_by_id = {d["deal_id"]: d for d in dao.get_live_deals(conn)}
+    latest_obs_by_deal = dao.get_latest_observation_per_deal(conn)
+
     items = []
     for iv in open_ivs:
-        deal = dao.get_deal(conn, iv["deal_id"])
-        obs = dao.get_observations(conn, iv["deal_id"])
-        latest_obs = obs[-1] if obs else None
-        reasoning = json.loads(latest_obs["reasoning"]) if latest_obs and latest_obs.get("reasoning") else {}
+        obs = latest_obs_by_deal.get(iv["deal_id"])
+        reasoning = json.loads(obs["reasoning"]) if obs and obs.get("reasoning") else {}
         items.append({
             **iv,
-            "deal": deal,
+            "deal": deals_by_id.get(iv["deal_id"]),
             "reasoning_summary": reasoning.get("severity_rationale", ""),
             "dimensions_triggered": reasoning.get("dimensions_triggered", []),
             "why_today": _why_today(reasoning),
@@ -198,11 +200,12 @@ async def batch_approve_interventions(
 
     conn = get_domain_conn()
     pending = dao.get_pending_interventions_by_severity(conn, severity_filter)
+    now = clk.now()
 
     approved_ids = []
     for iv in pending:
         try:
-            dao.approve_intervention_atomic(conn, iv["intervention_id"], simulated_timestamp=clk.now())
+            dao.approve_intervention_atomic(conn, iv["intervention_id"], simulated_timestamp=now)
             approved_ids.append(iv["intervention_id"])
         except Exception as exc:
             log.warning("batch_approve.skip", intervention_id=iv["intervention_id"], error=str(exc))
