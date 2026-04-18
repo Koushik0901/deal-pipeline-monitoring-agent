@@ -94,6 +94,9 @@ FastAPI  (single process)
 | **Observability** | [Langfuse](https://langfuse.com/) (optional, self-hosted) | Traces + scores per eval run; no-ops when unset. |
 | **Tests** | pytest | Integration, smoke, unit, eval tiers. |
 | **Lint** | [ruff](https://docs.astral.sh/ruff/) | Fast lint + format in one. |
+| **AI coding** | [Claude Code](https://claude.com/claude-code) | Primary building instrument — specs, prompts, graph code, evals. |
+| **Spec-driven workflow** | [Spec Kit](https://speckit.org/) | Machine-checkable contracts and YAML fixtures before any prompt was written. |
+| **Design system** | [Impeccable](https://impeccable.style/) | Linear-style density, dark mode, and View Transitions — set the bar for the UI. |
 
 ## 🚀 Quickstart
 
