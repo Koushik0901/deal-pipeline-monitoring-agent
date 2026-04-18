@@ -143,6 +143,26 @@ The demo opens the Daily Brief at <http://localhost:8000/brief> with engineered-
 - **Deal detail** (`/deals/{id}`) — cross-document View Transitions: severity badge and deal ID morph into the detail header (Chrome / Safari). Firefox falls back to plain navigation.
 - **Simulation controls** (`/sim`) — advance the clock manually, autoplay ticks, or inspect tick status.
 
+### Screens
+
+<table>
+<tr>
+<th align="center" width="33%">Daily Brief</th>
+<th align="center" width="33%">Pipeline</th>
+<th align="center" width="33%">Deal Detail</th>
+</tr>
+<tr>
+<td><img src="assets/Daily%20Brief%20Screen.png" alt="Daily Brief — light mode"></td>
+<td><img src="assets/Pipeline%20Screen.png" alt="Pipeline — light mode"></td>
+<td><img src="assets/Deal%20Screen.png" alt="Deal detail — light mode"></td>
+</tr>
+<tr>
+<td><img src="assets/Daily%20Brief%20Screen%20-%20Dark%20Mode.png" alt="Daily Brief — dark mode"></td>
+<td><img src="assets/Pipeline%20Screen%20-%20Dark%20Mode.png" alt="Pipeline — dark mode"></td>
+<td><img src="assets/Deal%20Screen%20-%20Dark%20Mode.png" alt="Deal detail — dark mode"></td>
+</tr>
+</table>
+
 ## 🎯 Six Risk Dimensions
 
 Evaluated per investigation — **5 via one combined LLM call, 1 deterministic**:
