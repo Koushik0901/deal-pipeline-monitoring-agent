@@ -1,0 +1,69 @@
+id: iq_04_days_in_stage_accuracy
+category: intervention_quality
+description: >
+  Regression guard: the drafted intervention body must cite the exact days_in_stage
+  figure from the deal snapshot (13), not zero and not a hallucinated substitute.
+  The outbound nudge prompt explicitly passes days_in_stage as a separate field and
+  instructs the model not to substitute a duration from the risk signals. If the
+  model uses 0, omits the number, or invents a different value, this scenario fails.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: plaid-iq4
+      name: Plaid
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-iq4
+      party_type: buyer
+      display_name: Harbor Street Capital
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-iq4
+      party_type: seller
+      display_name: Daniel Ortega
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-IQ-004
+    issuer_id: plaid-iq4
+    buyer_id: buyer-iq4
+    seller_id: seller-iq4
+    shares: 4200
+    price_per_share: 97.00
+    stage: docs_pending
+    stage_entered_days_ago: 13
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 13
+        summary: Docs request sent to buyer
+        payload:
+          body: "Hi Daniel, please return the NDA and accreditation letter for the Plaid transfer."
+      - event_type: comm_outbound
+        days_ago: 7
+        summary: First reminder on pending documents
+        payload:
+          body: "Following up — the Plaid transfer docs are still outstanding. Please return at your earliest."
+
+assertions:
+  severity_gte: act
+  intervention_drafted: true
+  intervention_body_contains:
+    - "13"
+    - "Plaid"
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

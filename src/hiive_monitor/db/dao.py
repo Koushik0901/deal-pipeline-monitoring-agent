@@ -312,6 +312,19 @@ def has_open_intervention(conn: sqlite3.Connection, deal_id: str) -> bool:
     return row is not None
 
 
+def supersede_pending_interventions(conn: sqlite3.Connection, deal_id: str) -> int:
+    """Dismiss any pending interventions for a deal — called when we're about to
+    write a fresh one for the same deal from a later tick. Returns count dismissed."""
+    from hiive_monitor import clock as clk
+    cur = conn.execute(
+        "UPDATE interventions SET status = 'dismissed', dismissed_at = ? "
+        "WHERE deal_id = ? AND status = 'pending'",
+        (clk.now().isoformat(), deal_id),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 def get_intervention(conn: sqlite3.Connection, intervention_id: str) -> dict | None:
     row = conn.execute(
         "SELECT * FROM interventions WHERE intervention_id = ?", (intervention_id,)
@@ -342,6 +355,20 @@ def get_open_interventions(conn: sqlite3.Connection) -> list[dict]:
                ELSE 3
              END,
              i.created_at"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_handled_interventions(conn: sqlite3.Connection) -> list[dict]:
+    """Approved, edited, and dismissed interventions ordered by most-recently handled."""
+    rows = conn.execute(
+        """SELECT i.*, d.issuer_id, d.stage, o.severity
+           FROM interventions i
+           JOIN deals d ON d.deal_id = i.deal_id
+           LEFT JOIN agent_observations o ON o.observation_id = i.observation_id
+           WHERE i.status IN ('approved', 'edited', 'dismissed')
+           ORDER BY COALESCE(i.approved_at, i.dismissed_at, i.created_at) DESC
+           LIMIT 100"""
     ).fetchall()
     return [dict(r) for r in rows]
 

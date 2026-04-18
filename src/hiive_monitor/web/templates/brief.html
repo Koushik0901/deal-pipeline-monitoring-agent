@@ -58,7 +58,7 @@
 
     <!-- Tabs + dense intervention table -->
     <div id="brief-list"
-      hx-get="/brief" hx-trigger="tickComplete from:body{% if clock_mode == 'real_time' %}, every 30s{% endif %}" hx-swap="innerHTML" hx-select="#brief-list">
+      hx-get="/brief" hx-trigger="tickComplete from:body, refreshBriefList from:body{% if clock_mode == 'real_time' %}, every 30s{% elif not tick %}, every 5s{% endif %}" hx-swap="outerHTML" hx-select="#brief-list">
     <div x-data="{ tab: 'brief' }">
 
       <!-- Tab bar -->
@@ -68,7 +68,6 @@
           :aria-selected="tab === 'brief'"
           aria-controls="tab-panel-brief"
           x-on:click="tab = 'brief'"
-          x-on:keydown.right.prevent="tab = 'all'; $nextTick(() => $el.nextElementSibling.focus())"
           :class="tab === 'brief' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
           class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
         >Priority ({{ priority_items|length }})</button>
@@ -77,10 +76,17 @@
           :aria-selected="tab === 'all'"
           aria-controls="tab-panel-all"
           x-on:click="tab = 'all'"
-          x-on:keydown.left.prevent="tab = 'brief'; $nextTick(() => $el.previousElementSibling.focus())"
           :class="tab === 'all' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
           class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
         >All open ({{ items|length }})</button>
+        <button
+          role="tab"
+          :aria-selected="tab === 'handled'"
+          aria-controls="tab-panel-handled"
+          x-on:click="tab = 'handled'"
+          :class="tab === 'handled' ? 'border-b-2 border-primary-container text-on-surface -mb-px' : 'text-on-surface-variant'"
+          class="px-4 py-2 text-[0.8125rem] font-medium hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
+        >Handled ({{ handled_items|length }})</button>
       </div>
 
       <!-- Table container -->
@@ -107,9 +113,51 @@
           {% endif %}
         </div>
 
-        <!-- All tab panel -->
+        <!-- All open tab panel -->
         <div id="tab-panel-all" role="tabpanel" x-show="tab === 'all'" x-cloak>
           {% include "_all_open_list.html" %}
+        </div>
+
+        <!-- Handled tab panel -->
+        <div id="tab-panel-handled" role="tabpanel" x-show="tab === 'handled'" x-cloak>
+          {% if handled_items %}
+            {% for item in handled_items %}
+            <a href="/deals/{{ item.deal_id }}"
+               class="grid grid-cols-12 gap-3 px-3 py-2.5 items-center border-b-[0.5px] border-outline-variant/50 last:border-b-0 hover:bg-surface-container-low transition-colors">
+              <!-- Status badge -->
+              <div class="col-span-2">
+                {% if item.status == 'approved' %}
+                  <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-secondary-container text-secondary border-[0.5px] border-secondary/10 whitespace-nowrap">APPROVED</span>
+                {% elif item.status == 'edited' %}
+                  <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-secondary-container text-secondary border-[0.5px] border-secondary/10 whitespace-nowrap">EDITED</span>
+                {% else %}
+                  <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50 whitespace-nowrap">DISMISSED</span>
+                {% endif %}
+              </div>
+              <!-- Deal ID -->
+              <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-on-surface-variant">
+                {{ item.deal_id }}
+              </div>
+              <!-- Issuer + Stage -->
+              <div class="col-span-5 sm:col-span-3 min-w-0">
+                <div class="text-[0.8125rem] font-medium text-on-surface-variant truncate">{{ item.issuer_id | upper }}</div>
+                <div class="text-[0.6875rem] text-on-surface-variant/70 truncate">{{ item.stage | replace('_', ' ') }}</div>
+              </div>
+              <!-- Draft preview -->
+              <div class="col-span-4 min-w-0">
+                <p class="text-[0.8125rem] text-on-surface-variant truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
+              </div>
+              <!-- Handled time -->
+              <div class="col-span-1 text-right text-[0.625rem] text-on-surface-variant/60 font-mono whitespace-nowrap">
+                {{ (item.approved_at or item.dismissed_at or '')[:10] }}
+              </div>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="px-4 py-12 text-center">
+              <p class="text-[0.8125rem] text-on-surface-variant">No handled items yet.</p>
+            </div>
+          {% endif %}
         </div>
 
       </div>

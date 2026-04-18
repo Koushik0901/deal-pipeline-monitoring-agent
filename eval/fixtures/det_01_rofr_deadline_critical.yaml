@@ -3,7 +3,7 @@ category: detection
 description: >
   Deal in rofr_pending with ROFR expiring in 2 days and no communication for 14 days.
   Agent must flag deadline_proximity (critical band) + communication_silence, severity=escalate,
-  and draft an outbound nudge referencing the specific deadline date.
+  and draft an internal escalation referencing the specific deadline date.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -51,7 +51,7 @@ assertions:
     - deadline_proximity
     - communication_silence
   intervention_drafted: true
-  intervention_type: outbound_nudge
+  intervention_type: internal_escalation
   intervention_body_contains:
     - "SpaceX"
     - "2026-04-18"

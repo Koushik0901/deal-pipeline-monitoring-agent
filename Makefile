@@ -18,15 +18,16 @@ seed:
 
 # ── Run ──────────────────────────────────────────────────────────────────────
 run:
-	uv run uvicorn hiive_monitor.app:app --host 0.0.0.0 --port $(PORT) --reload
+	uv run uvicorn hiive_monitor.app:app --host 127.0.0.1 --port $(PORT)
 
-# ── Eval ─────────────────────────────────────────────────────────────────────
+# ── Eval (Tier 1: run agents on fixture golden set) ──────────────────────────
 eval:
 	uv run python -m hiive_monitor.eval.runner
 
-# ── Deep Eval (LLM-as-judge + langfuse traces) ───────────────────────────────
+# ── Deep Eval (Tier 2: LLM-as-judge on saved Tier 1 results) ─────────────────
+# Run 'make eval' first to generate eval_results/results_latest.json
 eval-deep:
-	uv run python -m hiive_monitor.eval.runner --deep
+	uv run python -m hiive_monitor.eval.deepeval_runner
 
 # ── Langfuse dashboard (open-source, self-hosted) ────────────────────────────
 # Requires Docker. First run: open http://localhost:3000 and create an account,
@@ -39,11 +40,12 @@ langfuse-down:
 
 # ── Demo ─────────────────────────────────────────────────────────────────────
 # Seeds DB, runs 3 simulated ticks (fast-forwarding clock), then starts the app.
+demo: export CLOCK_MODE := simulated
 demo: seed
-	@echo "Seeded 30 deals. Running 3 simulated ticks to populate the brief..."
-	CLOCK_MODE=simulated uv run python -m hiive_monitor.seed.demo_ticks
+	@echo "Seeded 44 deals. Running 3 simulated ticks to populate the brief..."
+	uv run python -m hiive_monitor.seed.demo_ticks
 	@echo "Starting app → http://localhost:8000/brief"
-	CLOCK_MODE=simulated uv run uvicorn hiive_monitor.app:app --host 0.0.0.0 --port $(PORT)
+	uv run uvicorn hiive_monitor.app:app --host 127.0.0.1 --port $(PORT)
 
 # ── Test ─────────────────────────────────────────────────────────────────────
 test:

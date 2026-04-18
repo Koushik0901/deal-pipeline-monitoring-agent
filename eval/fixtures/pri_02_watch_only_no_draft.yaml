@@ -1,9 +1,9 @@
 id: pri_02_watch_only_no_draft
 category: prioritization
 description: >
-  Deal at watch severity: mild aging (1.5x baseline, docs_pending for 4.5 days),
-  communication recent. No deadline. Agent should flag severity=watch but NOT draft
-  an intervention (watch severity uses brief_entry, not outbound nudge).
+  Deal at watch severity: mild aging (1.5x the 4-day baseline, docs_pending for 6 days),
+  communication recent. No deadline. Agent should flag severity=watch; at watch the
+  agent drafts a brief_entry (not an outbound nudge) — no external outreach.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -28,17 +28,22 @@ setup:
     shares: 2000
     price_per_share: 48.00
     stage: docs_pending
-    stage_entered_days_ago: 5
+    stage_entered_days_ago: 6
     responsible_party: buyer
     risk_factors:
       is_first_time_buyer: false
       prior_breakage_count: 0
     events:
       - event_type: comm_outbound
-        days_ago: 2
+        days_ago: 6
         summary: Docs package sent to buyer
         payload:
           body: "Hi, transfer docs attached for the Rippling shares. Please sign and return."
+      - event_type: comm_inbound
+        days_ago: 2
+        summary: Buyer acknowledged receipt
+        payload:
+          body: "Got the docs, reviewing with counsel. Will return this week."
 
 assertions:
   severity_lte: watch

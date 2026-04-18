@@ -56,25 +56,23 @@ triggered dimensions is also empty; score 0.8 if ≤1 spurious dimension fired.
   Actual: severity=watch, dims=[] → 0.2 (off by 2 levels)
 - Expected: severity=escalate \
   Actual: severity=informational → 0.0 (maximally wrong)
-
-Return ONLY a single number from {0.0, 0.2, 0.5, 0.6, 0.8, 1.0}. No explanation, no text.
 """.strip()
 
 _TASK_DESCRIPTION = (
     "You are evaluating a deal monitoring agent that processes secondary-market private equity deals. "
     "The agent's task is complete when ALL of the following steps have been performed correctly:\n"
-    "  Step 1 — Screen the deal and compute an attention score; proceed only if score ≥ 0.6.\n"
-    "  Step 2 — Evaluate all five risk dimensions independently: stage_aging, deadline_proximity, "
+    "  Step 1 — Evaluate all five risk dimensions independently: stage_aging, deadline_proximity, "
     "communication_silence, missing_prerequisites, and unusual_characteristics.\n"
-    "  Step 3 — Assess whether the available context is sufficient to make a severity decision; "
+    "  Step 2 — Assess whether the available context is sufficient to make a severity decision; "
     "if not, call exactly the right enrichment tool (fetch_communication_content, "
     "fetch_prior_observations, or fetch_issuer_history) with the correct deal or issuer ID.\n"
-    "  Step 4 — Assign a severity level: informational, watch, act, or escalate — "
+    "  Step 3 — Assign a severity level: informational, watch, act, or escalate — "
     "calibrated to the number and weight of triggered dimensions.\n"
-    "  Step 5 — If severity is 'act' or 'escalate', draft a grounded intervention "
+    "  Step 4 — If severity is 'act' or 'escalate', draft a grounded intervention "
     "(outbound nudge or internal escalation) that references real deal facts "
     "(issuer name, deadline, share count) — no fabricated details.\n"
-    "The task is INCOMPLETE if: no observation was persisted, severity is missing, "
+    "  Step 5 — Persist the observation (confirmed by 'Observation persisted: yes' in the output).\n"
+    "The task is INCOMPLETE if: 'Observation persisted' is 'no', severity is missing, "
     "a required enrichment tool was skipped when context was insufficient, "
     "or an intervention was drafted for an informational/watch deal."
 )
@@ -88,7 +86,7 @@ def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-de
         TaskCompletionMetric,
         ToolCorrectnessMetric,
     )
-    from deepeval.metrics.argument_correctness import ArgumentCorrectnessMetric
+    from deepeval.metrics.argument_correctness.argument_correctness import ArgumentCorrectnessMetric
     from deepeval.test_case import LLMTestCaseParams
 
     if judge is None:
@@ -100,15 +98,18 @@ def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-de
         model=judge,
         threshold=0.5,
         verbose_mode=False,
+        include_reason=True,
     )
 
     tool_correctness = ToolCorrectnessMetric(
         threshold=0.5,
+        model=judge,
         verbose_mode=False,
     )
 
     argument_correctness = ArgumentCorrectnessMetric(
         threshold=0.5,
+        model=judge,
         verbose_mode=False,
     )
 
@@ -116,6 +117,7 @@ def build_metrics(judge: OpenRouterJudge | None = None):  # type: ignore[name-de
         model=judge,
         threshold=0.5,
         verbose_mode=False,
+        include_reason=True,
     )
 
     answer_correctness = GEval(

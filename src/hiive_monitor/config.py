@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     checkpoint_db_path: str = "agent_checkpoints.db"
 
     # Monitor
-    attention_threshold: float = 0.6
+    attention_threshold: float = 0.45  # lowered from 0.6 so WATCH-tier signals pass screening
     tick_interval_seconds: int = 60
-    max_investigations_per_tick: int = 5
+    max_investigations_per_tick: int = 12  # raised from 5 to surface mid-tier deals beyond the top escalations
 
     # Suppression (FR-LOOP-02)
     suppression_ticks: int = 3

@@ -1,0 +1,81 @@
+id: iq_05_stage_age_vs_blocker_age
+category: intervention_quality
+description: >
+  Regression guard: the deal has been in the signing stage for 11 days, but the
+  Transfer Agreement blocker has only been open for 8 days. These are two distinct
+  durations; the draft must cite both correctly. Conflation — e.g. saying the deal
+  has been "in signing for 8 days" or the document has been "missing for 11 days" —
+  is a factual error that erodes analyst trust. The outbound nudge prompt explicitly
+  separates days_in_stage from signal-specific durations; this scenario asserts the
+  model respects that separation.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: figma-iq5
+      name: Figma
+      typical_response_days: 4
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-iq5
+      party_type: buyer
+      display_name: Meridian Growth Fund
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-iq5
+      party_type: seller
+      display_name: Claire Nakamura
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-IQ-005
+    issuer_id: figma-iq5
+    buyer_id: buyer-iq5
+    seller_id: seller-iq5
+    shares: 3500
+    price_per_share: 62.50
+    stage: signing
+    stage_entered_days_ago: 11
+    responsible_party: seller
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    blockers:
+      - kind: pending_signature
+        description: Seller has not returned the countersigned Transfer Agreement
+        since: "2026-04-09T09:00:00Z"
+    events:
+      - event_type: comm_outbound
+        days_ago: 11
+        summary: Signature pages sent to seller
+        payload:
+          body: "Hi Claire, the Figma transfer signature pages are attached. Please countersign and return."
+      - event_type: comm_outbound
+        days_ago: 6
+        summary: Reminder on signature pages
+        payload:
+          body: "Following up on the Figma transfer signature pages. Please return at your earliest convenience."
+
+assertions:
+  severity_gte: act
+  intervention_drafted: true
+  intervention_body_contains:
+    - "11"
+    - "8"
+    - "Figma"
+  intervention_body_not_contains:
+    - "8 days in signing"
+    - "signing for 8 days"
+    - "missing for 11"
+    - "outstanding for 11"
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+    - missing_prerequisites
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+  expected_tools: []

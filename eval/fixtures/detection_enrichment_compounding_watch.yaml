@@ -1,9 +1,11 @@
 id: detection_enrichment_compounding_watch
 category: detection
 description: >
-  Three simultaneous watch-level signals that individually might not
-  cross the act threshold but together warrant act-level severity.
-  Verifies the agent enriches context and elevates severity on compounding signals.
+  Three simultaneous watch-level signals (stage_aging at 1.6x, communication_silence
+  at 1.6x since last outbound with no inbound, and unusual_characteristics from
+  first-time buyer) that individually are watch-level but together warrant act-level
+  severity. Per rules, 2+ dimensions with ≥1 at high confidence (first_time_buyer
+  is inherently high conf) → act. Verifies the agent elevates severity on compounding signals.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -30,22 +32,17 @@ setup:
     shares: 4000
     price_per_share: 65.00
     stage: docs_pending
-    stage_entered_days_ago: 6
+    stage_entered_days_ago: 8
     responsible_party: buyer
     risk_factors:
       is_first_time_buyer: true
       prior_breakage_count: 0
     events:
       - event_type: comm_outbound
-        days_ago: 6
+        days_ago: 8
         summary: Transfer docs sent to buyer
         payload:
           body: "Hi, please review and sign the Cerebras transfer documents attached."
-      - event_type: comm_outbound
-        days_ago: 4
-        summary: Follow-up to first-time buyer
-        payload:
-          body: "Following up on the docs — let me know if you have any questions."
 
 assertions:
   severity_gte: watch
@@ -56,9 +53,9 @@ ground_truth:
   dimensions_triggered:
     - stage_aging
     - unusual_characteristics
+    - communication_silence
   dimensions_not_triggered:
     - deadline_proximity
     - missing_prerequisites
-    - communication_silence
   expected_tools: []
 

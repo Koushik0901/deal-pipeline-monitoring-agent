@@ -1,0 +1,76 @@
+id: regression_intervention_not_stale
+category: intervention_quality
+description: >
+  Regression guard: when a deal carries a pending intervention drafted on a
+  prior tick whose body references a now-past deadline, the investigator must
+  supersede (dismiss) that stale draft during the current tick and write a
+  fresh intervention reflecting today's facts. If supersession fails, analysts
+  see a stale draft citing a date that has already elapsed — a trust-eroding
+  hallucination from an outdated snapshot.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: figma-reg3
+      name: Figma
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-reg3
+      party_type: buyer
+      display_name: Delta Capital
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-reg3
+      party_type: seller
+      display_name: Ava Lindberg
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-REG-003
+    issuer_id: figma-reg3
+    buyer_id: buyer-reg3
+    seller_id: seller-reg3
+    shares: 3800
+    price_per_share: 65.00
+    stage: docs_pending
+    stage_entered_days_ago: 12
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 12
+        summary: Document request sent to buyer
+        payload:
+          body: "Hi Ava, please return the Figma transfer docs."
+      - event_type: comm_outbound
+        days_ago: 6
+        summary: Reminder on pending documents
+        payload:
+          body: "Following up — Figma transfer docs are still outstanding."
+  prior_pending_intervention:
+    deal_id: D-REG-003
+    intervention_id: stale-pending-iv-reg3
+    tick_id: prior-tick-reg3
+    created_days_ago: 4
+    severity: act
+    intervention_type: outbound_nudge
+    draft_subject: "Figma transfer — docs overdue"
+    draft_body: "Hi Ava, the Figma transfer docs have been outstanding since 2026-04-05. Please return by 2026-04-13."
+
+assertions:
+  severity_gte: act
+  intervention_drafted: true
+  prior_pending_superseded: true
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+  expected_tools: []

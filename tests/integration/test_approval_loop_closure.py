@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import patch
 
 import pytest
 
@@ -52,8 +50,8 @@ def test_approve_creates_comm_event(db_path):
     seed_deal(conn, "D-0042")
     oid, iid = _seed_pending_intervention(conn)
 
-    from hiive_monitor.db import dao
     from hiive_monitor import clock as clk
+    from hiive_monitor.db import dao
 
     sim_ts = clk.now()
     event_id = dao.approve_intervention_atomic(conn, iid, simulated_timestamp=sim_ts)
@@ -92,8 +90,8 @@ def test_approve_rollback_on_event_insert_failure(db_path, monkeypatch):
     seed_deal(conn, "D-0042")
     oid, iid = _seed_pending_intervention(conn)
 
-    from hiive_monitor.db import dao
     from hiive_monitor import clock as clk
+    from hiive_monitor.db import dao
 
     # Pre-seed an event with a known UUID so the INSERT inside approve_intervention_atomic
     # will collide on the PRIMARY KEY, triggering a rollback via `with conn:`.

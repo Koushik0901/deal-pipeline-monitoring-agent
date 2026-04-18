@@ -24,6 +24,105 @@ from pydantic import BaseModel, ValidationError
 
 from hiive_monitor import logging as log_module
 from hiive_monitor.config import get_settings
+from hiive_monitor.llm import usage as usage_tracker
+
+
+def _extract_usage(response) -> dict:
+    """
+    Extract token counts and cost from an LLMResult.
+
+    Primary source: usage_metadata on the AIMessage (ChatOpenRouter surfaces all
+    fields here including reasoning tokens and cache details).
+    Cost: pulled from response_metadata["usage"]["cost"] when OpenRouter's
+    usage-accounting feature is enabled (extra_body={"usage": {"include": True}}).
+
+    Returns keys: input_tokens, output_tokens, reasoning_tokens,
+    cache_read_tokens, cache_write_tokens, actual_cost_usd (None if unavailable).
+    """
+    if not (getattr(response, "generations", None) and response.generations[0]):
+        return {}
+    first = response.generations[0][0]
+    msg = getattr(first, "message", None)
+
+    meta: dict = getattr(msg, "usage_metadata", None) or {}
+    input_tokens = int(meta.get("input_tokens") or 0)
+    output_tokens = int(meta.get("output_tokens") or 0)
+
+    out_details: dict = meta.get("output_token_details") or {}
+    in_details: dict = meta.get("input_token_details") or {}
+    reasoning_tokens = int(out_details.get("reasoning") or 0)
+    cache_read_tokens = int(in_details.get("cache_read") or 0)
+    cache_write_tokens = int(in_details.get("cache_creation") or 0)
+
+    # OpenRouter actual cost — only present when usage.include=True was sent
+    response_meta: dict = getattr(msg, "response_metadata", None) or {}
+    or_usage: dict = response_meta.get("usage") or {}
+    actual_cost_usd = or_usage.get("cost")  # float or None
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_write_tokens": cache_write_tokens,
+        "actual_cost_usd": actual_cost_usd,
+    }
+
+
+class _UsageCaptureCallback:
+    """
+    LangChain callback that extracts token usage from each LLM response and
+    records it in the process-wide usage tracker. Runs regardless of whether
+    Langfuse is enabled — cost and token aggregation is a first-class feature,
+    not an optional integration.
+    """
+
+    def __init__(self, call_name: str, tick_id: str, deal_id: str, model: str):
+        self._call_name = call_name
+        self._tick_id = tick_id
+        self._deal_id = deal_id
+        self._model = model
+        self._captured: dict | None = None
+
+    def on_llm_end(self, response, **kwargs):
+        try:
+            u = _extract_usage(response)
+            if not u or (u["input_tokens"] == 0 and u["output_tokens"] == 0):
+                return
+            self._captured = usage_tracker.record(
+                tick_id=self._tick_id,
+                model=self._model,
+                input_tokens=u["input_tokens"],
+                output_tokens=u["output_tokens"],
+                reasoning_tokens=u["reasoning_tokens"],
+                cache_read_tokens=u["cache_read_tokens"],
+                cache_write_tokens=u["cache_write_tokens"],
+                actual_cost_usd=u["actual_cost_usd"],
+                call_name=self._call_name,
+            )
+        except Exception:
+            self._captured = None
+
+    def captured(self) -> dict | None:
+        return self._captured
+
+
+_FEATURE_TAGS = {
+    "screen_deal": "screening",
+    "evaluate_all_risk_dimensions": "investigation",
+    "decide_severity": "investigation",
+    "draft_status_recommendation": "intervention_drafting",
+    "draft_brief_entry": "intervention_drafting",
+    "draft_internal_escalation": "intervention_drafting",
+    "draft_outbound_nudge": "intervention_drafting",
+    "compose_daily_brief": "brief_composition",
+}
+
+
+def _feature_for(call_name: str) -> str:
+    if call_name.startswith("assess_sufficiency"):
+        return "investigation"
+    return _FEATURE_TAGS.get(call_name, "other")
 
 
 class _LangfuseGenerationCallback:
@@ -41,7 +140,9 @@ class _LangfuseGenerationCallback:
         self._tick_id = tick_id
         self._deal_id = deal_id
         self._model = model
+        self._feature = _feature_for(call_name)
         self._gen = None
+        self._start_ts: float | None = None
 
     def on_llm_start(self, serialized, messages, **kwargs):
         try:
@@ -50,14 +151,45 @@ class _LangfuseGenerationCallback:
                 for msg_list in messages
                 for m in (msg_list if isinstance(msg_list, list) else [msg_list])
             ]
+            # Capture model invocation parameters (temperature, max_tokens, etc.)
+            invocation_params = kwargs.get("invocation_params") or {}
+            model_parameters = {
+                k: v for k, v in {
+                    "temperature": invocation_params.get("temperature"),
+                    "max_tokens": invocation_params.get("max_tokens"),
+                    "top_p": invocation_params.get("top_p"),
+                    "timeout_ms": invocation_params.get("timeout"),
+                    "stop": invocation_params.get("stop"),
+                }.items() if v is not None
+            }
+            self._start_ts = time.time()
             self._gen = self._lf.start_observation(
                 trace_context={"trace_id": self._tick_id},
                 name=self._call_name,
                 as_type="generation",
                 model=self._model,
+                model_parameters=model_parameters or None,
                 input=input_serialized,
-                metadata={"deal_id": self._deal_id, "tick_id": self._tick_id},
+                metadata={
+                    "deal_id": self._deal_id,
+                    "tick_id": self._tick_id,
+                    "feature": self._feature,
+                    "run_id": str(kwargs.get("run_id", "")),
+                    "parent_run_id": str(kwargs.get("parent_run_id") or ""),
+                    "tags": kwargs.get("tags") or [],
+                },
             )
+            # Enrich the shared tick trace with session, tags, and a descriptive
+            # name. Called per-generation but trace-level properties are
+            # last-write-wins, so this is safe across parallel investigators.
+            try:
+                self._gen.update_trace(
+                    name=f"monitor-tick/{self._tick_id[:8]}",
+                    session_id=self._tick_id,
+                    tags=[self._feature, "monitor-tick"],
+                )
+            except Exception:
+                pass
         except Exception:
             self._gen = None
 
@@ -65,19 +197,80 @@ class _LangfuseGenerationCallback:
         if self._gen is None:
             return
         try:
-            usage = {}
-            if response.llm_output:
-                usage = response.llm_output.get("token_usage", {})
+            from hiive_monitor.llm.pricing import lookup
+
+            u = _extract_usage(response)
+            input_tokens = u.get("input_tokens", 0)
+            output_tokens = u.get("output_tokens", 0)
+            reasoning_tokens = u.get("reasoning_tokens", 0)
+            cache_read_tokens = u.get("cache_read_tokens", 0)
+            cache_write_tokens = u.get("cache_write_tokens", 0)
+            actual_cost_usd = u.get("actual_cost_usd")  # real cost from OpenRouter, or None
+
             output_text = ""
             if response.generations and response.generations[0]:
                 output_text = getattr(response.generations[0][0], "text", "")
 
+            usage_details: dict | None = None
+            cost_details: dict | None = None
+
+            if input_tokens or output_tokens:
+                usage_details = {
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "total": input_tokens + output_tokens,
+                }
+                if reasoning_tokens:
+                    usage_details["output_reasoning"] = reasoning_tokens
+                if cache_read_tokens:
+                    usage_details["cache_read"] = cache_read_tokens
+                if cache_write_tokens:
+                    usage_details["cache_write"] = cache_write_tokens
+
+                in_rate, out_rate, _ = lookup(self._model)
+                if actual_cost_usd is not None:
+                    # Real cost from OpenRouter — split into input/output using per-token rates
+                    total_rate_cost = (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
+                    if total_rate_cost > 0:
+                        input_cost = round(actual_cost_usd * (input_tokens * in_rate / 1_000_000) / total_rate_cost, 8)
+                        output_cost = round(actual_cost_usd - input_cost, 8)
+                    else:
+                        input_cost = 0.0
+                        output_cost = round(actual_cost_usd, 8)
+                    cost_details = {
+                        "input": input_cost,
+                        "output": output_cost,
+                        "total": round(actual_cost_usd, 8),
+                    }
+                else:
+                    # Fallback: estimate from pricing table
+                    cost_details = {
+                        "input": round(input_tokens * in_rate / 1_000_000, 8),
+                        "output": round(output_tokens * out_rate / 1_000_000, 8),
+                        "total": round((input_tokens * in_rate + output_tokens * out_rate) / 1_000_000, 8),
+                    }
+
+            # Response-side metadata: finish reason, model name, latency
+            response_meta: dict = {}
+            if response.generations and response.generations[0]:
+                first = response.generations[0][0]
+                gen_info = getattr(first, "generation_info", None) or {}
+                msg = getattr(first, "message", None)
+                msg_meta = getattr(msg, "response_metadata", None) or {} if msg else {}
+                response_meta = {k: v for k, v in {
+                    "finish_reason": gen_info.get("finish_reason") or msg_meta.get("finish_reason"),
+                    "model_name": msg_meta.get("model_name") or msg_meta.get("model"),
+                    "cost_source": "openrouter" if actual_cost_usd is not None else "estimated",
+                }.items() if v is not None}
+
+            if getattr(self, "_start_ts", None) is not None:
+                response_meta["latency_ms"] = int((time.time() - self._start_ts) * 1000)
+
             self._gen.update(
                 output=output_text[:4000] if output_text else None,
-                usage_details={
-                    "input": usage.get("prompt_tokens", 0),
-                    "output": usage.get("completion_tokens", 0),
-                } if usage else None,
+                usage_details=usage_details,
+                cost_details=cost_details,
+                metadata=response_meta or None,
             )
             self._gen.end()
         except Exception:
@@ -214,8 +407,22 @@ def _call_with_retry(
     structured_llm = llm.with_structured_output(output_model, method="function_calling")
     last_error: Exception | None = None
 
-    lf_callbacks = _langfuse_handler(call_name, tick_id, deal_id, model)
-    invoke_cfg = {"callbacks": lf_callbacks} if lf_callbacks else {}
+    try:
+        from langchain_core.callbacks import BaseCallbackHandler
+
+        class _UsageHandler(BaseCallbackHandler, _UsageCaptureCallback):
+            def __init__(self):
+                BaseCallbackHandler.__init__(self)
+                _UsageCaptureCallback.__init__(self, call_name, tick_id, deal_id, model)
+
+        usage_cb = _UsageHandler()
+        callbacks: list = [usage_cb]
+    except Exception:
+        usage_cb = None
+        callbacks = []
+
+    callbacks += _langfuse_handler(call_name, tick_id, deal_id, model)
+    invoke_cfg = {"callbacks": callbacks} if callbacks else {}
 
     for attempt in range(1, _MAX_RETRIES + 1):
         t0 = time.monotonic()
@@ -223,16 +430,26 @@ def _call_with_retry(
             result = structured_llm.invoke(messages, config=invoke_cfg)
             latency_ms = int((time.monotonic() - t0) * 1000)
 
-            logger.info(
-                "llm.call.completed",
-                call_name=call_name,
-                model=model,
-                latency_ms=latency_ms,
-                tick_id=tick_id,
-                deal_id=deal_id,
-                attempt=attempt,
-                parse_ok=True,
-            )
+            cap = usage_cb.captured() if usage_cb is not None else None
+            log_fields = {
+                "call_name": call_name,
+                "model": model,
+                "latency_ms": latency_ms,
+                "tick_id": tick_id,
+                "deal_id": deal_id,
+                "attempt": attempt,
+                "parse_ok": True,
+            }
+            if cap:
+                log_fields.update(
+                    input_tokens=cap["input_tokens"],
+                    output_tokens=cap["output_tokens"],
+                    reasoning_tokens=cap.get("reasoning_tokens", 0) or None,
+                    cache_read_tokens=cap.get("cache_read_tokens", 0) or None,
+                    cost_usd=cap["cost_usd"],
+                    cost_source=cap.get("cost_source", "estimated"),
+                )
+            logger.info("llm.call.completed", **log_fields)
             return result  # type: ignore[return-value]
 
         except (ValidationError, OutputParserException) as ve:
@@ -307,6 +524,159 @@ def _call_with_retry(
         last_error=str(last_error),
     )
     return None
+
+
+def flush_langfuse() -> None:
+    """Flush buffered Langfuse traces. No-op when Langfuse is not configured."""
+    if not os.getenv("LANGFUSE_PUBLIC_KEY"):
+        return
+    try:
+        from langfuse import get_client
+        get_client().flush()
+    except Exception:
+        pass
+
+
+class _TickRootSpan:
+    """
+    Context manager that creates a root span for the tick so the Langfuse
+    trace has input/output populated (Langfuse derives trace I/O from the
+    root observation — `update_trace()` alone does not populate the list view).
+
+    On enter: starts a 'monitor-tick' span as the current observation with
+    trace_id=tick_id and the provided input payload. Child LLM generations
+    nest under it automatically.
+
+    On exit: callers should set `.output` before __exit__ (or pass output to
+    `.finalize(output=...)`) so the root span captures the full tick result.
+
+    No-op wrapper returned when Langfuse is not configured.
+    """
+
+    def __init__(self, tick_id: str, input_payload: dict):
+        self._tick_id = tick_id
+        self._input = input_payload
+        self._cm = None
+        self._span = None
+        self._enabled = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+
+    def __enter__(self):
+        if not self._enabled:
+            return self
+        try:
+            from langfuse import get_client
+            lf = get_client()
+            self._cm = lf.start_as_current_observation(
+                trace_context={"trace_id": self._tick_id},
+                name=f"monitor-tick/{self._tick_id[:8]}",
+                as_type="span",
+                input=self._input,
+            )
+            self._span = self._cm.__enter__()
+            try:
+                self._span.update_trace(
+                    name=f"monitor-tick/{self._tick_id[:8]}",
+                    session_id=self._tick_id,
+                    input=self._input,
+                    tags=["monitor-tick"],
+                )
+            except Exception:
+                pass
+        except Exception:
+            self._span = None
+            self._cm = None
+        return self
+
+    def finalize(self, output: dict, metadata: dict | None = None) -> None:
+        if self._span is None:
+            return
+        try:
+            self._span.update(output=output, metadata=metadata or {})
+            self._span.update_trace(output=output, metadata=metadata or {})
+        except Exception:
+            pass
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._cm is not None:
+            try:
+                self._cm.__exit__(exc_type, exc, tb)
+            except Exception:
+                pass
+        return False
+
+
+def tick_root_span(tick_id: str, input_payload: dict) -> _TickRootSpan:
+    """Return a context-managed tick root span. No-op when Langfuse disabled."""
+    return _TickRootSpan(tick_id, input_payload)
+
+
+class _ToolSpan:
+    """Context manager for an enrichment tool call nested under the tick trace.
+
+    Records input, output, and any exception as a Langfuse `tool` observation.
+    No-op when Langfuse is disabled so the investigator stays fast offline.
+    """
+
+    def __init__(self, tick_id: str, tool_name: str, input_payload: dict):
+        self._tick_id = tick_id
+        self._tool_name = tool_name
+        self._input = input_payload
+        self._cm = None
+        self._span = None
+        self._enabled = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+
+    def __enter__(self):
+        if not self._enabled:
+            return self
+        try:
+            from langfuse import get_client
+            lf = get_client()
+            self._cm = lf.start_as_current_observation(
+                trace_context={"trace_id": self._tick_id},
+                name=f"tool/{self._tool_name}",
+                as_type="tool",
+                input=self._input,
+            )
+            self._span = self._cm.__enter__()
+        except Exception:
+            self._span = None
+            self._cm = None
+        return self
+
+    def set_output(self, output) -> None:
+        if self._span is None:
+            return
+        try:
+            self._span.update(output=output)
+        except Exception:
+            pass
+
+    def set_error(self, exc: BaseException) -> None:
+        if self._span is None:
+            return
+        try:
+            self._span.update(
+                output={"error": type(exc).__name__, "message": str(exc)},
+                level="ERROR",
+                status_message=f"{type(exc).__name__}: {exc}",
+            )
+        except Exception:
+            pass
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc is not None:
+            self.set_error(exc)
+        if self._cm is not None:
+            try:
+                self._cm.__exit__(exc_type, exc, tb)
+            except Exception:
+                pass
+        return False
+
+
+def tool_span(tick_id: str, tool_name: str, input_payload: dict) -> _ToolSpan:
+    """Return a context-managed enrichment-tool span nested under the tick trace."""
+    return _ToolSpan(tick_id, tool_name, input_payload)
 
 
 def clear_cache() -> None:

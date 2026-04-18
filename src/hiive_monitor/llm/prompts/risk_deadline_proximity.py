@@ -13,11 +13,13 @@ deadline management. ROFR deadlines are hard contractual cut-offs — missing th
 
 DECISION RULE: If no ROFR deadline exists for this deal → triggered=False immediately. Stop.
 
-URGENCY BANDS (when deadline exists):
-  ≤2 days remaining  → triggered=True, confidence=0.98 (critical — intervene now)
-  3–5 days remaining → triggered=True, confidence=0.90 (urgent — draft outreach today)
-  6–10 days remaining→ triggered=True, confidence=0.75 (elevated — flag for analyst)
-  >10 days remaining → triggered=False, confidence=0.85 (monitor, no immediate action)
+URGENCY BANDS (when deadline exists; days_to_rofr may be negative if the deadline has already passed):
+  <0 days (expired) → triggered=True, confidence=0.99 (deadline has passed — immediate legal/issuer action required)
+  0 days            → triggered=True, confidence=0.98 (expires today)
+  1–2 days          → triggered=True, confidence=0.98 (critical — intervene now)
+  3–5 days          → triggered=True, confidence=0.90 (urgent — draft outreach today)
+  6–10 days         → triggered=True, confidence=0.75 (elevated — flag for analyst)
+  >10 days          → triggered=False, confidence=0.85 (monitor, no immediate action)
 
 REASONING STEPS (follow in order):
   1. Check if rofr_deadline is present. If absent or "none" → triggered=False, state "No ROFR deadline on this deal."
@@ -27,7 +29,8 @@ REASONING STEPS (follow in order):
 
 EVIDENCE REQUIREMENTS (mandatory when triggered=True):
   Must cite: issuer name, exact deadline date (YYYY-MM-DD), days remaining.
-  Format: "[Issuer] ROFR deadline [DATE] is [N] days away — [band description]."
+  Format (future): "[Issuer] ROFR deadline [DATE] is [N] days away — [band description]."
+  Format (expired, days_to_rofr < 0): "[Issuer] ROFR deadline [DATE] passed [abs(N)] day(s) ago — expired."
 
 EVIDENCE WHEN triggered=False:
   Either "No ROFR deadline on this deal." or "[Issuer] ROFR deadline [DATE] is [N] days away — no immediate pressure."

@@ -42,9 +42,9 @@
       if (btn) btn.click();
     },
     init() {
-      window.addEventListener('htmx:afterSwap', () => {
+      window.addEventListener('htmx:afterSwap', () =&gt; {
         this.rowCount = this.$el.querySelectorAll('[data-queue-row]').length;
-        if (this.activeIndex >= this.rowCount) this.activeIndex = Math.max(this.rowCount - 1, -1);
+        if (this.activeIndex &gt;= this.rowCount) this.activeIndex = Math.max(this.rowCount - 1, -1);
       });
     }
   }"

@@ -5,12 +5,12 @@ Covers: SimulatedClock injection, advance(), set_clock(), no datetime.now() in s
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from hiive_monitor import clock as clk
-from hiive_monitor.clock import SimulatedClock, RealTimeClock, set_clock
+from hiive_monitor.clock import RealTimeClock, SimulatedClock, set_clock
 
 
 def _fixed_clock(dt: datetime) -> SimulatedClock:
@@ -20,33 +20,33 @@ def _fixed_clock(dt: datetime) -> SimulatedClock:
 
 class TestSimulatedClock:
     def test_returns_injected_time(self):
-        base = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
         c = _fixed_clock(base)
         assert c.now() == base
 
     def test_advance_increments_days(self):
-        base = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
         c = _fixed_clock(base)
         c.advance(3)
         assert c.now() == base + timedelta(days=3)
 
     def test_advance_rejects_zero_or_negative(self):
-        c = _fixed_clock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+        c = _fixed_clock(datetime(2026, 1, 1, tzinfo=UTC))
         with pytest.raises(ValueError):
             c.advance(0)
         with pytest.raises(ValueError):
             c.advance(-1)
 
     def test_set_overrides_current_time(self):
-        c = _fixed_clock(datetime(2026, 1, 1, tzinfo=timezone.utc))
-        new_time = datetime(2027, 6, 15, 12, 0, tzinfo=timezone.utc)
+        c = _fixed_clock(datetime(2026, 1, 1, tzinfo=UTC))
+        new_time = datetime(2027, 6, 15, 12, 0, tzinfo=UTC)
         c.set(new_time)
         assert c.now() == new_time
 
 
 class TestSetClock:
     def test_set_clock_affects_clk_now(self):
-        base = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
         c = _fixed_clock(base)
         original = clk._clock
         try:
@@ -61,7 +61,7 @@ class TestSetClock:
         assert t.tzinfo is not None
         # Should be within the last 10 seconds of wall time
         from datetime import datetime as dt
-        assert abs((dt.now(tz=timezone.utc) - t).total_seconds()) < 10
+        assert abs((dt.now(tz=UTC) - t).total_seconds()) < 10
 
     def test_real_time_clock_advance_raises(self):
         c = RealTimeClock()
@@ -86,5 +86,5 @@ class TestClockDiscipline:
                     if f.name != "clock.py":
                         violations.append(f"{f.relative_to(src_dir.parent)}:{i}: {line.strip()}")
         assert violations == [], (
-            f"Found datetime.now() calls outside clock.py:\n" + "\n".join(violations)
+            "Found datetime.now() calls outside clock.py:\n" + "\n".join(violations)
         )

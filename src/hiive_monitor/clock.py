@@ -6,7 +6,6 @@ Enforced by tests/unit/test_no_datetime_now.py.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -30,7 +29,7 @@ class SimulatedClock:
     """Deterministic injected clock. advance(days) increments the stored time."""
 
     def __init__(self, start: datetime | None = None) -> None:
-        self._current: datetime = start or datetime(2025, 1, 15, 9, 0, 0, tzinfo=UTC)
+        self._current: datetime = start or datetime(2026, 4, 17, 9, 0, 0, tzinfo=UTC)
 
     def now(self) -> datetime:
         return self._current
@@ -54,7 +53,8 @@ _clock: Clock | None = None
 def get_clock() -> Clock:
     global _clock
     if _clock is None:
-        mode = os.getenv("CLOCK_MODE", "real_time").lower()
+        from hiive_monitor.config import get_settings
+        mode = get_settings().clock_mode.lower()
         if mode == "simulated":
             _clock = SimulatedClock()
         else:

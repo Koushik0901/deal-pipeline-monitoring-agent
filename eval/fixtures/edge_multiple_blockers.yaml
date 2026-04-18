@@ -3,10 +3,10 @@ category: edge_case
 description: >
   Deal with three simultaneous structured blockers: board approval, legal sign-off,
   and tax clearance certificate — all unresolved. Stage is issuer_notified for
-  8 days (4× the 2-day baseline). No deadline pressure. Tests that the agent
-  correctly identifies missing_prerequisites from multiple concurrent blockers
-  and escalates to at least act severity. The presence of three blockers should
-  clearly signal that required prerequisites are missing.
+  18 days (2.25x the 8-day baseline). Issuer requires multi-layer ROFR approval.
+  No deadline pressure. Tests that the agent correctly identifies missing_prerequisites
+  from multiple concurrent blockers plus stage_aging plus unusual_characteristics
+  (multi-layer ROFR), and reaches at least act severity.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -35,7 +35,7 @@ setup:
     shares: 15000
     price_per_share: 28.75
     stage: issuer_notified
-    stage_entered_days_ago: 8
+    stage_entered_days_ago: 18
     responsible_party: issuer
     risk_factors:
       is_first_time_buyer: false
@@ -44,24 +44,24 @@ setup:
     blockers:
       - kind: missing_doc
         description: Cerebras board approval documentation not provided (required before transfer)
-        since: "2026-04-08T09:00:00Z"
+        since: "2026-03-29T09:00:00Z"
       - kind: awaiting_response
         description: External legal counsel review of transfer agreement — no response received
-        since: "2026-04-09T09:00:00Z"
+        since: "2026-03-30T09:00:00Z"
       - kind: missing_doc
         description: Tax clearance certificate from seller's counsel not yet submitted
-        since: "2026-04-10T09:00:00Z"
+        since: "2026-03-31T09:00:00Z"
     events:
       - event_type: comm_outbound
-        days_ago: 8
+        days_ago: 18
         summary: Transfer notice sent with multi-item blocker list
         payload:
           body: "Cerebras legal — transfer notice attached. Three items required before we can proceed: (1) board approval, (2) legal counsel sign-off on transfer agreement, (3) seller tax clearance certificate."
       - event_type: comm_inbound
-        days_ago: 6
+        days_ago: 10
         summary: Cerebras acknowledged, items in progress
         payload:
-          body: "Received. Board meeting scheduled for next week. Legal and tax items are in progress."
+          body: "Received. Board meeting scheduled. Legal and tax items are in progress."
 
 assertions:
   dimensions_triggered:
@@ -73,8 +73,8 @@ ground_truth:
   dimensions_triggered:
     - stage_aging
     - missing_prerequisites
+    - unusual_characteristics
   dimensions_not_triggered:
     - deadline_proximity
     - communication_silence
-    - unusual_characteristics
   expected_tools: []

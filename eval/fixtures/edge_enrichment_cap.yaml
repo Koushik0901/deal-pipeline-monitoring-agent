@@ -55,10 +55,10 @@ setup:
 
 assertions:
   agent_triggers_enrichment: true
-  severity_gte: act
+  severity_gte: escalate
 
 ground_truth:
-  severity: act
+  severity: escalate
   dimensions_triggered:
     - stage_aging
     - communication_silence
@@ -68,3 +68,4 @@ ground_truth:
     - missing_prerequisites
   expected_tools:
     - fetch_communication_content
+    - fetch_prior_observations

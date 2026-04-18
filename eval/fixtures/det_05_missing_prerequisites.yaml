@@ -1,9 +1,10 @@
 id: det_05_missing_prerequisites
 category: detection
 description: >
-  Deal in issuer_notified for 10 days (5x the 2-day baseline) with two active blockers:
-  missing board approval docs and pending legal review. Agent must flag stage_aging and
-  missing_prerequisites.
+  Deal in issuer_notified for 21 days (2.1x the 10-day baseline) with two active blockers:
+  missing board approval docs and pending legal review. Issuer requires multi-layer ROFR
+  approval. Agent must flag stage_aging, missing_prerequisites, and unusual_characteristics.
+  Severity=act because three dimensions trigger without an emergency condition.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -28,7 +29,7 @@ setup:
     shares: 10000
     price_per_share: 28.75
     stage: issuer_notified
-    stage_entered_days_ago: 10
+    stage_entered_days_ago: 21
     responsible_party: issuer
     risk_factors:
       is_first_time_buyer: false
@@ -37,22 +38,28 @@ setup:
     blockers:
       - kind: missing_doc
         description: Board approval documentation not yet provided by Cerebras
-        since: "2026-04-09T09:00:00Z"
+        since: "2026-03-28T09:00:00Z"
       - kind: awaiting_response
         description: Legal review of transfer agreement pending from issuer counsel
-        since: "2026-04-10T09:00:00Z"
+        since: "2026-03-30T09:00:00Z"
     events:
       - event_type: comm_outbound
-        days_ago: 10
+        days_ago: 21
         summary: ROFR/transfer notice sent to Cerebras legal
         payload:
           body: "Dear Cerebras, notice of transfer attached. This requires board approval."
+      - event_type: comm_inbound
+        days_ago: 12
+        summary: Cerebras acknowledged, board scheduling approval meeting
+        payload:
+          body: "Received. Board meeting to address the transfer is being scheduled."
 
 assertions:
   severity_gte: act
   dimensions_triggered:
     - stage_aging
     - missing_prerequisites
+    - unusual_characteristics
   intervention_drafted: true
 
 ground_truth:
@@ -60,8 +67,8 @@ ground_truth:
   dimensions_triggered:
     - stage_aging
     - missing_prerequisites
+    - unusual_characteristics
   dimensions_not_triggered:
     - deadline_proximity
     - communication_silence
-    - unusual_characteristics
   expected_tools: []

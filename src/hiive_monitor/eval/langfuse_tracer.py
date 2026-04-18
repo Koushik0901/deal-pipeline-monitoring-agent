@@ -37,7 +37,7 @@ class EvalTracer:
             self._client = Langfuse(
                 public_key=os.environ["LANGFUSE_PUBLIC_KEY"],
                 secret_key=os.environ.get("LANGFUSE_SECRET_KEY", ""),
-                host=os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+                host=os.environ.get("LANGFUSE_HOST") or os.environ.get("LANGFUSE_BASE_URL") or "https://cloud.langfuse.com",
             )
         except Exception as e:
             print(f"WARN: langfuse init failed — tracing disabled ({e})")
@@ -76,8 +76,30 @@ class EvalTracer:
 
     # ── Per-scenario context manager ──────────────────────────────────────────
 
+    def new_trace_id(self) -> str | None:
+        """
+        Return a pre-allocated trace_id callers can pass to run_tick() as the
+        tick_id so the monitor's LLM generations and finalized trace output
+        land on the same trace that the dataset_run_item links to.
+
+        Returns None when Langfuse is disabled — callers should fall back to
+        generating a local uuid for the tick_id.
+        """
+        if not self._enabled:
+            return None
+        try:
+            from langfuse import Langfuse
+            return Langfuse.create_trace_id()
+        except Exception:
+            return None
+
     @contextlib.contextmanager
-    def scenario_run(self, scenario_id: str) -> Generator[Any, None, None]:
+    def scenario_run(
+        self,
+        scenario_id: str,
+        trace_id: str | None = None,
+        input_payload: dict | None = None,
+    ) -> Generator[Any, None, None]:
         """
         Context manager that wraps a single scenario execution.
 
@@ -98,20 +120,35 @@ class EvalTracer:
 
         try:
             from langfuse import Langfuse
-            # Unique trace per scenario+run combination
-            trace_id = Langfuse.create_trace_id()
+            # Unique trace per scenario+run combination. Caller may pre-allocate
+            # the trace_id and pass it as tick_id to run_tick() so generations
+            # nest under this same trace — enabling trace-based scoring decoupling.
+            if trace_id is None:
+                trace_id = Langfuse.create_trace_id()
             item = self._dataset_items.get(scenario_id)
 
             with self._client.start_as_current_observation(
                 trace_context={"trace_id": trace_id},
                 name=f"eval/{scenario_id}",
                 as_type="span",
+                input=input_payload,
                 metadata={
                     "scenario_id": scenario_id,
                     "run_name": self._run_name,
                     "eval_type": "tier1",
                 },
             ) as span:
+                # Populate trace-level input explicitly so it shows in the
+                # Langfuse traces list (not just nested in the root span).
+                try:
+                    span.update_trace(
+                        name=f"eval/{scenario_id}",
+                        input=input_payload,
+                        session_id=self._run_name,
+                        tags=["eval", self._run_name],
+                    )
+                except Exception:
+                    pass
                 # Link the trace to the dataset item + experiment run
                 if item is not None:
                     try:
@@ -200,24 +237,28 @@ class EvalTracer:
         layer1_passed: bool,
         enrichment_rounds: int = 0,
         llm_call_count: int = 0,
+        metric_reasons: dict[str, str] | None = None,
+        metric_verbose_logs: dict[str, str] | None = None,
+        test_case_summary: dict | None = None,
+        scenario_trace_id: str | None = None,
     ) -> None:
         """
         Emit a standalone Langfuse trace for a deepeval LLM-as-judge run.
 
         Creates one trace per scenario tagged with category + severity labels,
-        then attaches a score for every deepeval metric.
+        attaches a score for every deepeval metric, and creates a child
+        observation per metric containing the judge's full reasoning and
+        verbose logs so the Langfuse UI surfaces how the score was derived.
         """
         if not self._enabled or self._client is None:
             return
+        metric_reasons = metric_reasons or {}
+        metric_verbose_logs = metric_verbose_logs or {}
         try:
-            trace = self._client.trace(
+            with self._client.start_as_current_observation(
                 name=f"deepeval/{scenario_id}",
-                tags=[
-                    category,
-                    f"expected:{expected_severity}",
-                    f"actual:{actual_severity or 'none'}",
-                    "layer1-pass" if layer1_passed else "layer1-fail",
-                ],
+                as_type="span",
+                input=test_case_summary,
                 metadata={
                     "scenario_id": scenario_id,
                     "category": category,
@@ -226,10 +267,75 @@ class EvalTracer:
                     "enrichment_rounds": enrichment_rounds,
                     "llm_call_count": llm_call_count,
                     "layer1_passed": layer1_passed,
+                    "scenario_trace_id": scenario_trace_id,
+                    "run_name": self._run_name,
+                    "tags": [
+                        category,
+                        f"expected:{expected_severity}",
+                        f"actual:{actual_severity or 'none'}",
+                        "layer1-pass" if layer1_passed else "layer1-fail",
+                    ],
                 },
-            )
-            for metric_name, score in metric_scores.items():
-                trace.score(name=metric_name, value=score)
+            ) as span:
+                if self._run_name:
+                    try:
+                        span.update_trace(
+                            session_id=self._run_name,
+                            tags=["deepeval", self._run_name, category],
+                            metadata={
+                                "scenario_trace_id": scenario_trace_id,
+                                "scenario_id": scenario_id,
+                                "run_name": self._run_name,
+                            },
+                        )
+                    except Exception:
+                        pass
+                scenario_output: dict[str, dict] = {}
+                for metric_name, score in metric_scores.items():
+                    reason = metric_reasons.get(metric_name, "")
+                    verbose_logs = metric_verbose_logs.get(metric_name, "")
+
+                    span.score_trace(
+                        name=metric_name,
+                        value=score,
+                        comment=(reason[:900] if reason else None),
+                    )
+
+                    try:
+                        with self._client.start_as_current_observation(
+                            name=f"judge/{metric_name}",
+                            as_type="span",
+                            input=test_case_summary,
+                            output={
+                                "score": score,
+                                "reason": reason,
+                                "verbose_logs": verbose_logs,
+                            },
+                            metadata={
+                                "metric": metric_name,
+                                "score": score,
+                                "scenario_id": scenario_id,
+                            },
+                        ):
+                            pass
+                    except Exception as child_err:
+                        print(f"  WARN: judge child obs failed [{metric_name}]: {child_err}")
+
+                    scenario_output[metric_name] = {
+                        "score": score,
+                        "reason": reason,
+                    }
+
+                try:
+                    span.update(output=scenario_output)
+                    span.update_trace(
+                        name=f"deepeval/{scenario_id}",
+                        input=test_case_summary,
+                        output=scenario_output,
+                        tags=["deepeval", category],
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             print(f"  WARN: langfuse trace_scenario failed for {scenario_id}: {e}")
 
@@ -262,36 +368,36 @@ class EvalTracer:
             tc_n, tc_d = metrics.get("task_completion", (0, 0))
             pass_rate = round(tc_n / tc_d, 4) if tc_d else 0.0
 
-            run_trace = self._client.trace(
+            with self._client.start_as_current_observation(
                 name=f"eval/aggregate/{self._run_name or 'unknown'}",
-                tags=["aggregate", "tier1"],
+                as_type="span",
                 metadata={
                     "run_name": self._run_name,
                     "tier1_pass_rate": pass_rate,
                     "total_scenarios": tc_d,
                     "dimension_stats": dim_meta,
+                    "tags": ["aggregate", "tier1"],
                     **confusion_flat,
                 },
-            )
+            ) as run_span:
+                # P/R/F1 per dimension
+                for dim, stats in metrics.get("dim_stats", {}).items():
+                    for metric_name in ("precision", "recall", "f1"):
+                        val = stats.get(metric_name)
+                        if val is not None:
+                            run_span.score_trace(name=f"{metric_name}/{dim}", value=round(val, 4))
 
-            # P/R/F1 per dimension
-            for dim, stats in metrics.get("dim_stats", {}).items():
-                for metric_name in ("precision", "recall", "f1"):
-                    val = stats.get(metric_name)
-                    if val is not None:
-                        run_trace.score(name=f"{metric_name}/{dim}", value=round(val, 4))
+                # Confusion matrix diagonal (per-severity recall)
+                for sev in _SEVERITY_ORDER:
+                    row_total = sum(matrix.get(sev, {}).get(a, 0) for a in _SEVERITY_ORDER)
+                    if row_total > 0:
+                        run_span.score_trace(
+                            name=f"severity_recall/{sev}",
+                            value=round(matrix[sev][sev] / row_total, 4),
+                            comment=f"{matrix[sev][sev]}/{row_total} correct",
+                        )
 
-            # Confusion matrix diagonal (per-severity recall)
-            for sev in _SEVERITY_ORDER:
-                row_total = sum(matrix.get(sev, {}).get(a, 0) for a in _SEVERITY_ORDER)
-                if row_total > 0:
-                    run_trace.score(
-                        name=f"severity_recall/{sev}",
-                        value=round(matrix[sev][sev] / row_total, 4),
-                        comment=f"{matrix[sev][sev]}/{row_total} correct",
-                    )
-
-            run_trace.score(name="tier1_pass_rate", value=pass_rate)
+                run_span.score_trace(name="tier1_pass_rate", value=pass_rate)
 
             print(f"  Langfuse: aggregate scores emitted (run='{self._run_name}')")
         except Exception as e:

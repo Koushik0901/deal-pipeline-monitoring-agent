@@ -77,18 +77,11 @@ def _format_deal_snapshot(scenario: dict) -> str:
 def _format_actual_output(result: dict) -> str:
     """Render the agent's observation + intervention as the actual output."""
     severity = result.get("severity") or "informational"
-    dims: list[str] = []
+    # Use actual_triggered directly — includes all dims the agent fired, not just asserted ones
+    dims: list[str] = result.get("actual_triggered") or []
     interventions_count = result.get("interventions", 0)
-    enrichment_rounds = 0
-
-    for name, passed, detail in result.get("assertion_results", []):
-        if name.startswith("dimension:") and passed:
-            dims.append(name[len("dimension:"):])
-        if name == "agent_triggers_enrichment" and "enrichment_rounds=" in (detail or ""):
-            try:
-                enrichment_rounds = int(detail.split("enrichment_rounds=")[1].split()[0])
-            except (IndexError, ValueError):
-                pass
+    enrichment_rounds = len(result.get("actual_tools") or [])
+    observation_persisted = result.get("task_completed", False)
 
     if interventions_count > 0:
         intervention_note = f"Intervention drafted: yes (count={interventions_count})"
@@ -97,6 +90,7 @@ def _format_actual_output(result: dict) -> str:
 
     return (
         f"=== AGENT OUTPUT ===\n"
+        f"Observation persisted: {'yes' if observation_persisted else 'no'}\n"
         f"Severity assigned: {severity}\n"
         f"Risk dimensions triggered: {', '.join(dims) if dims else 'none'}\n"
         f"Enrichment tool calls made: {enrichment_rounds}\n"

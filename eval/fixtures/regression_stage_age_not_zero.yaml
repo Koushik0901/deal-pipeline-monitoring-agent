@@ -1,0 +1,71 @@
+id: regression_stage_age_not_zero
+category: intervention_quality
+description: >
+  Regression guard: the drafted intervention body must contain the actual
+  days_in_stage value (11) from the deal snapshot — not zero, not omitted,
+  not a hallucinated substitute. If the model writes "0 days" or skips the
+  duration entirely, downstream analysts lose a key piece of context and
+  the draft sounds robotic.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: stripe-reg1
+      name: Stripe
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-reg1
+      party_type: buyer
+      display_name: Cascade Secondary Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-reg1
+      party_type: seller
+      display_name: Marco Delaney
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-REG-001
+    issuer_id: stripe-reg1
+    buyer_id: buyer-reg1
+    seller_id: seller-reg1
+    shares: 5000
+    price_per_share: 120.00
+    stage: docs_pending
+    stage_entered_days_ago: 11
+    responsible_party: buyer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 11
+        summary: Document request sent to buyer
+        payload:
+          body: "Hi Marco, please return the signed subscription and NDA for the Stripe transfer."
+      - event_type: comm_outbound
+        days_ago: 5
+        summary: Reminder on pending documents
+        payload:
+          body: "Following up — the Stripe transfer docs are still outstanding."
+
+assertions:
+  severity_gte: act
+  intervention_drafted: true
+  intervention_body_contains:
+    - "11"
+    - "Stripe"
+  intervention_body_not_contains:
+    - "0 days"
+    - "zero days"
+
+ground_truth:
+  severity: act
+  dimensions_triggered:
+    - stage_aging
+  dimensions_not_triggered:
+    - deadline_proximity
+    - unusual_characteristics
+  expected_tools: []

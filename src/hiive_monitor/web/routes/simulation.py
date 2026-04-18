@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Query
@@ -26,7 +25,8 @@ async def _autoplay_stream(days: int, speed: float) -> AsyncGenerator[str, None]
     from hiive_monitor import clock as clk
 
     # Guard: only run in simulated mode
-    clock_mode = os.getenv("CLOCK_MODE", "real_time").lower()
+    from hiive_monitor.config import get_settings
+    clock_mode = get_settings().clock_mode.lower()
     if clock_mode != "simulated":
         yield _sse_event(
             "error",

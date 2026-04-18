@@ -3,15 +3,11 @@
      x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }}, snoozing: false, snoozeHours: 48, snoozeReason: "" }'
      class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
 
-  <!-- Compact summary row — click/keyboard to expand -->
+  <!-- Compact summary row — click navigates to deal, ↑/↓ button toggles inline expand -->
   <div
-    role="button"
     tabindex="0"
-    :aria-expanded="expanded"
-    aria-controls="detail-{{ item.intervention_id }}"
-    x-on:click="expanded = !expanded"
-    x-on:keydown.enter.prevent="expanded = !expanded"
-    x-on:keydown.space.prevent="expanded = !expanded"
+    x-on:click="window.location.href = '/deals/{{ item.deal_id }}'"
+    x-on:keydown.enter.prevent="window.location.href = '/deals/{{ item.deal_id }}'"
     class="grid grid-cols-12 gap-3 px-3 py-2.5 items-center hover:bg-surface-container-low transition-colors cursor-pointer select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-container"
   >
     <!-- Status badge -->
@@ -25,9 +21,9 @@
       {% endif %}
     </div>
 
-    <!-- Deal ID -->
-    <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium text-on-surface-variant font-mono">
-      <a href="/deals/{{ item.deal_id }}" x-on:click.stop class="hover:text-primary-container hover:underline transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container focus-visible:rounded-[2px]">{{ item.deal_id }}</a>
+    <!-- Deal ID (plain text — whole row is the link) -->
+    <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-primary-container">
+      {{ item.deal_id }}
     </div>
 
     <!-- Issuer + Stage -->
@@ -45,8 +41,22 @@
       <p class="text-[0.8125rem] text-on-surface truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
     </div>
 
-    <!-- Expand toggle -->
-    <div class="col-span-1 text-right text-[0.6875rem] text-on-surface-variant font-mono" aria-hidden="true" x-text="expanded ? '↑' : '↓'"></div>
+    <!-- Expand toggle — stops propagation so it doesn't navigate -->
+    <div class="col-span-1 text-right">
+      <button
+        type="button"
+        x-on:click.stop="expanded = !expanded"
+        x-on:keydown.enter.stop.prevent="expanded = !expanded"
+        :aria-expanded="expanded"
+        :aria-label="expanded ? 'Collapse' : 'Expand details'"
+        aria-controls="detail-{{ item.intervention_id }}"
+        class="flex items-center justify-center w-6 h-6 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
+      >
+        <svg :class="expanded ? 'rotate-180' : ''" class="w-3.5 h-3.5 transition-transform duration-150" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6l4 4 4-4"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Expanded detail panel -->
@@ -86,11 +96,21 @@
       </div>
     </div>
 
-    <!-- Reasoning -->
+    <!-- Reasoning (collapsed by default; preference persisted per-analyst) -->
     {% if item.reasoning_summary %}
-    <div>
-      <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Agent reasoning</span>
-      <p class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary }}</p>
+    <div x-data="{ showReasoning: localStorage.getItem('showReasoning') === 'true' }"
+         x-effect="localStorage.setItem('showReasoning', showReasoning)">
+      <button
+        type="button"
+        x-on:click.stop="showReasoning = !showReasoning"
+        :aria-expanded="showReasoning"
+        aria-controls="reasoning-{{ item.intervention_id }}"
+        class="flex items-center gap-1.5 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
+      >
+        <span>Agent reasoning</span>
+        <span class="font-mono normal-case tracking-normal" aria-hidden="true" x-text="showReasoning ? '↑' : '↓'"></span>
+      </button>
+      <p id="reasoning-{{ item.intervention_id }}" x-show="showReasoning" x-cloak class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary }}</p>
     </div>
     {% endif %}
 
@@ -100,10 +120,11 @@
       <div x-show="!editing">
         <button
           type="button"
+          x-on:click.stop="navigator.clipboard.writeText(editText)"
           hx-post="/interventions/{{ item.intervention_id }}/approve"
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful) announceAction('Intervention approved and sent.')"
+          hx-on::after-request="if(event.detail.successful) announceAction('Approved — draft copied to clipboard.')"
           class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
         >Approve &amp; send</button>
       </div>
@@ -111,11 +132,12 @@
       <div x-show="editing" x-cloak>
         <button
           type="button"
+          x-on:click.stop="navigator.clipboard.writeText(editText)"
           hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
           hx-vals='js:{"final_text": editText}'
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful) announceAction('Edited intervention sent.')"
+          hx-on::after-request="if(event.detail.successful) announceAction('Edited draft copied to clipboard.')"
           class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
         >Confirm edit &amp; send</button>
       </div>

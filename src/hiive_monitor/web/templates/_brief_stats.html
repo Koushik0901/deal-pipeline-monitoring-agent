@@ -3,7 +3,7 @@
 {% set watch_count = items|selectattr('severity', 'equalto', 'watch')|list|length %}
 <div id="brief-stats"
      hx-get="/api/brief-stats"
-     hx-trigger="refreshStats from:body"
+     hx-trigger="refreshStats from:body, tickComplete from:body"
      hx-swap="outerHTML"
      class="flex flex-col gap-3">
 

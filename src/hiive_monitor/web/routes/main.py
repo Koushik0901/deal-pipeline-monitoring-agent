@@ -77,18 +77,42 @@ async def daily_brief(request: Request, debug: str = ""):
         except (ValueError, TypeError):
             pass
 
+    handled_ivs = dao.get_handled_interventions(conn)
     conn.close()
 
     return _templates().TemplateResponse(
         request, "brief.html",
         {
             "items": items,
+            "handled_items": handled_ivs,
             "tick": tick,
             "now": clk.now().isoformat(),
             "debug": debug == "1",
             "clock_mode": get_settings().clock_mode,
             "portfolio_signals": portfolio_signals,
         },
+    )
+
+
+def _confirmed_row(intervention_id: str, message: str, variant: str = "approve") -> str:
+    """Inline confirmation div that replaces the row, then auto-refreshes the list after 1.5 s."""
+    check = (
+        '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor"'
+        ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        '<polyline points="2,8 6,12 14,4"/></svg>'
+    )
+    if variant == "approve":
+        cls = "flex items-center gap-2 px-4 py-3 text-[0.8125rem] text-primary-container bg-primary-fixed/40 border-b-[0.5px] border-outline-variant/50"
+        icon = check
+    else:
+        cls = "px-4 py-3 text-[0.8125rem] text-on-surface-variant border-b-[0.5px] border-outline-variant/50"
+        icon = ""
+    return (
+        f'<div id="iv-{intervention_id}" class="{cls}"'
+        f' hx-get="/brief" hx-trigger="load delay:1.5s"'
+        f' hx-target="#brief-list" hx-swap="outerHTML" hx-select="#brief-list">'
+        f'{icon}{message}'
+        f'</div>'
     )
 
 
@@ -105,11 +129,7 @@ async def approve_intervention(request: Request, intervention_id: str):
     dao.approve_intervention_atomic(conn, intervention_id, simulated_timestamp=clk.now())
     conn.close()
 
-    resp = HTMLResponse(
-        f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-primary-fixed px-4 py-3 text-[0.8125rem] text-primary-container">'
-        f'Approved and sent \u2014 {iv["deal_id"]}'
-        f'</div>'
-    )
+    resp = HTMLResponse(_confirmed_row(intervention_id, "Approved \u2014 draft copied to clipboard", "approve"))
     resp.headers["HX-Trigger"] = "refreshStats"
     return resp
 
@@ -125,9 +145,7 @@ async def dismiss_intervention(request: Request, intervention_id: str):
     dao.update_intervention_status(conn, intervention_id, status="dismissed")
     conn.close()
 
-    resp = HTMLResponse(
-        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">Dismissed \u2014 {iv["deal_id"]}</div>'
-    )
+    resp = HTMLResponse(_confirmed_row(intervention_id, f"Dismissed \u2014 {iv['deal_id']}", "dismiss"))
     resp.headers["HX-Trigger"] = "refreshStats"
     return resp
 
@@ -179,11 +197,9 @@ async def confirm_edit(request: Request, intervention_id: str, final_text: str =
     )
     conn.close()
 
-    return HTMLResponse(
-        f'<div class="rounded-[4px] border-[0.5px] border-outline-variant bg-primary-fixed px-4 py-3 text-[0.8125rem] text-primary-container">'
-        f'Edited draft sent \u2014 {iv["deal_id"]}'
-        f'</div>'
-    )
+    resp = HTMLResponse(_confirmed_row(intervention_id, "Edited draft copied to clipboard", "approve"))
+    resp.headers["HX-Trigger"] = "refreshStats"
+    return resp
 
 
 # ── Deal snooze ───────────────────────────────────────────────────────────────
@@ -224,6 +240,8 @@ async def snooze_deal(
 
 @router.get("/deals/{deal_id}")
 async def deal_detail(request: Request, deal_id: str, debug: str = ""):
+    from hiive_monitor import clock as clk
+
     conn = get_domain_conn()
     deal = dao.get_deal(conn, deal_id)
     if deal is None:
@@ -234,12 +252,63 @@ async def deal_detail(request: Request, deal_id: str, debug: str = ""):
     observations = dao.get_observations(conn, deal_id)
     interventions = dao.get_interventions(conn, deal_id)
     issuer = dao.get_issuer(conn, deal["issuer_id"])
+
+    def _load_party(pid: str | None) -> dict | None:
+        if not pid:
+            return None
+        row = conn.execute("SELECT * FROM parties WHERE party_id = ?", (pid,)).fetchone()
+        return dict(row) if row else None
+
+    buyer = _load_party(deal.get("buyer_id"))
+    seller = _load_party(deal.get("seller_id"))
     conn.close()
 
     obs_enriched = []
     for obs in observations:
         reasoning = json.loads(obs["reasoning"]) if obs.get("reasoning") else {}
         obs_enriched.append({**obs, "reasoning_parsed": reasoning})
+
+    # Derive display facts that match what the agent reasoned over.
+    now = clk.now()
+
+    def _parse(val):
+        if not val:
+            return None
+        try:
+            dt = datetime.fromisoformat(val)
+            if dt.tzinfo is None:
+                from datetime import UTC
+                dt = dt.replace(tzinfo=UTC)
+            return dt
+        except Exception:
+            return None
+
+    stage_entered_at = _parse(deal.get("stage_entered_at"))
+    days_in_stage = max(0, (now - stage_entered_at).days) if stage_entered_at else None
+
+    rofr_deadline = _parse(deal.get("rofr_deadline"))
+    days_to_rofr = (rofr_deadline - now).days if rofr_deadline else None
+    rofr_expired = days_to_rofr is not None and days_to_rofr < 0
+
+    comm_events = [e for e in events if e["event_type"] in ("comm_outbound", "comm_inbound", "comm_sent_agent_recommended")]
+    if comm_events:
+        last_comm_at = max(filter(None, (_parse(e["occurred_at"]) for e in comm_events)), default=None)
+        days_since_last_comm = max(0, (now - last_comm_at).days) if last_comm_at else None
+    else:
+        days_since_last_comm = None
+
+    try:
+        risk_factors = json.loads(deal.get("risk_factors") or "{}")
+    except (ValueError, TypeError):
+        risk_factors = {}
+    deal_size_usd = risk_factors.get("deal_size_usd")
+    if deal_size_usd is None and deal.get("shares") and deal.get("price_per_share"):
+        deal_size_usd = int(deal["shares"] * deal["price_per_share"])
+
+    try:
+        blockers = json.loads(deal.get("blockers") or "[]")
+    except (ValueError, TypeError):
+        blockers = []
 
     return _templates().TemplateResponse(
         request, "deal_detail.html",
@@ -249,6 +318,14 @@ async def deal_detail(request: Request, deal_id: str, debug: str = ""):
             "observations": obs_enriched,
             "interventions": interventions,
             "issuer": issuer,
+            "buyer": buyer,
+            "seller": seller,
+            "days_in_stage": days_in_stage,
+            "days_to_rofr": days_to_rofr,
+            "rofr_expired": rofr_expired,
+            "days_since_last_comm": days_since_last_comm,
+            "deal_size_usd": deal_size_usd,
+            "blockers": blockers,
             "debug": debug == "1",
         },
     )

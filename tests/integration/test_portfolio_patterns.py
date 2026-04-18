@@ -12,7 +12,12 @@ from tests.integration.conftest import seed_deal, seed_issuer, seed_tick
 
 def _mock_call_structured(deal_score: float = 0.3):
     from hiive_monitor.models.risk import (
-        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
+        AllRiskSignals,
+        AttentionScore,
+        RiskDimension,
+        RiskSignal,
+        Severity,
+        SeverityDecision,
         SufficiencyDecision,
     )
 

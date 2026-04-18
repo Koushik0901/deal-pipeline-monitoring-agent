@@ -1,0 +1,75 @@
+id: iq_06_escalate_routes_to_internal
+category: intervention_quality
+description: >
+  Regression guard: any deal reaching escalate severity must produce
+  intervention_type='internal_escalation', never 'outbound_nudge'. The investigator
+  routing logic explicitly maps escalate → internal_escalation regardless of
+  responsible_party. This scenario catches prompt or routing changes that
+  accidentally re-route escalations to the outbound nudge template, which would
+  send an urgent external email instead of alerting the TS lead — a material
+  operational error.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: databricks-iq6
+      name: Databricks
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-iq6
+      party_type: buyer
+      display_name: Vertex Secondary Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-iq6
+      party_type: seller
+      display_name: Priya Sundaram
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-IQ-006
+    issuer_id: databricks-iq6
+    buyer_id: buyer-iq6
+    seller_id: seller-iq6
+    shares: 6000
+    price_per_share: 145.00
+    stage: rofr_pending
+    stage_entered_days_ago: 22
+    rofr_deadline_days_from_now: 1
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 22
+        summary: ROFR notice sent to Databricks legal
+        payload:
+          body: "Dear Databricks legal team, please find attached the ROFR notice for the Sundaram transfer. Window closes 2026-04-18."
+      - event_type: comm_inbound
+        days_ago: 20
+        summary: Databricks acknowledged receipt
+        payload:
+          body: "Received. Under review."
+      - event_type: comm_outbound
+        days_ago: 14
+        summary: First follow-up on ROFR election
+        payload:
+          body: "Following up on the ROFR window. Please advise on Databricks election by end of week."
+
+assertions:
+  severity: escalate
+  intervention_drafted: true
+  intervention_type: internal_escalation
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  dimensions_not_triggered:
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

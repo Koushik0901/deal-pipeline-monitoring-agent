@@ -13,6 +13,42 @@
     <a href="/brief" class="text-sm text-neutral-400 hover:text-neutral-600">← Brief</a>
   </div>
 
+  {% if cost_summary %}
+  <div class="rounded border border-neutral-100 bg-white px-4 py-3">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-[0.625rem] font-medium text-neutral-500 uppercase tracking-widest">LLM cost — this tick</span>
+      <span class="text-[0.6875rem] text-neutral-400 tabular-nums">
+        {{ cost_summary.total_calls }} calls ·
+        {{ cost_summary.total_input_tokens }} in /
+        {{ cost_summary.total_output_tokens }} out tokens ·
+        <span class="font-semibold text-neutral-700">${{ '%.4f'|format(cost_summary.total_cost_usd) }}</span>
+      </span>
+    </div>
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="border-b border-neutral-100 text-left text-neutral-500">
+          <th class="px-2 py-1 font-medium">Model</th>
+          <th class="px-2 py-1 font-medium text-right">Calls</th>
+          <th class="px-2 py-1 font-medium text-right">Input tokens</th>
+          <th class="px-2 py-1 font-medium text-right">Output tokens</th>
+          <th class="px-2 py-1 font-medium text-right">Cost (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for model, row in cost_summary.by_model.items() %}
+        <tr class="border-b border-neutral-50">
+          <td class="px-2 py-1 font-mono text-neutral-700">{{ model }}{% if row.fallback_price %} <span class="text-neutral-400" title="price estimated from fallback rate">*</span>{% endif %}</td>
+          <td class="px-2 py-1 text-right tabular-nums text-neutral-600">{{ row.calls }}</td>
+          <td class="px-2 py-1 text-right tabular-nums text-neutral-600">{{ row.input_tokens }}</td>
+          <td class="px-2 py-1 text-right tabular-nums text-neutral-600">{{ row.output_tokens }}</td>
+          <td class="px-2 py-1 text-right tabular-nums text-neutral-900 font-semibold">${{ '%.4f'|format(row.cost_usd) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   {% if not records %}
   <div class="rounded border border-neutral-100 bg-white px-6 py-12 text-center">
     <p class="text-sm text-neutral-500">No log records found for {{ filter_label }}={{ filter_value }}.</p>

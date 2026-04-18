@@ -193,44 +193,75 @@ def _sufficiency_router(state: InvestigatorState) -> str:
 def enrich_context(state: InvestigatorState) -> dict:
     """Call one enrichment tool per round and record the step in enrichment_chain."""
     tool_name = state.get("_next_tool", "fetch_communication_content")
-    conn = get_domain_conn()
     deal_id = state["deal_id"]
     snap = state["deal_snapshot"]
+    tick_id = state["tick_id"]
 
-    try:
-        if tool_name == "fetch_communication_content":
-            data = dao.fetch_communication_content(conn, deal_id)
-            summary = f"Last {len(data)} comms: " + (
-                "; ".join(f"{c['direction']} on {c['occurred_at'][:10]}: {c['body'][:60]}" for c in data[:3])
-                if data else "none"
-            )
-        elif tool_name == "fetch_prior_observations":
-            data = dao.fetch_prior_observations(conn, deal_id)
-            summary = f"{len(data)} prior observations: " + (
-                "; ".join(f"{o['severity']}: {o['reasoning_summary'][:60]}" for o in data[:3])
-                if data else "none"
-            )
-        elif tool_name == "fetch_issuer_history":
-            data = dao.fetch_issuer_history(conn, snap.issuer_id)
-            summary = f"{len(data)} prior deals for {snap.issuer_id}: " + (
-                "; ".join(f"{d['final_stage']}: {d.get('key_signals', [])}" for d in data[:3])
-                if data else "none"
-            )
-        elif tool_name == "fetch_intervention_outcomes":
-            data = dao.fetch_intervention_outcomes(conn, snap.issuer_id)
-            summary = f"Intervention outcomes for {snap.issuer_name}: " + (
-                "; ".join(
-                    f"{o['intervention_type']} {o['followed_by_response_7d']}/{o['total_approved']} "
-                    f"responded within 7d ({o['response_rate_pct']}%)"
-                    for o in data
+    tool_input = {
+        "tool": tool_name,
+        "deal_id": deal_id,
+        "issuer_id": snap.issuer_id,
+        "rationale": state.get("_sufficiency_rationale", ""),
+    }
+
+    with llm_client.tool_span(tick_id, tool_name, tool_input) as span:
+        conn = get_domain_conn()
+        try:
+            try:
+                if tool_name == "fetch_communication_content":
+                    data = dao.fetch_communication_content(conn, deal_id)
+                    summary = f"Last {len(data)} comms: " + (
+                        "; ".join(f"{c['direction']} on {c['occurred_at'][:10]}: {c['body'][:60]}" for c in data[:3])
+                        if data else "none"
+                    )
+                elif tool_name == "fetch_prior_observations":
+                    data = dao.fetch_prior_observations(conn, deal_id)
+                    summary = f"{len(data)} prior observations: " + (
+                        "; ".join(f"{o['severity']}: {o['reasoning_summary'][:60]}" for o in data[:3])
+                        if data else "none"
+                    )
+                elif tool_name == "fetch_issuer_history":
+                    data = dao.fetch_issuer_history(conn, snap.issuer_id)
+                    summary = f"{len(data)} prior deals for {snap.issuer_id}: " + (
+                        "; ".join(f"{d['final_stage']}: {d.get('key_signals', [])}" for d in data[:3])
+                        if data else "none"
+                    )
+                elif tool_name == "fetch_intervention_outcomes":
+                    data = dao.fetch_intervention_outcomes(conn, snap.issuer_id)
+                    summary = f"Intervention outcomes for {snap.issuer_name}: " + (
+                        "; ".join(
+                            f"{o['intervention_type']} {o['followed_by_response_7d']}/{o['total_approved']} "
+                            f"responded within 7d ({o['response_rate_pct']}%)"
+                            for o in data
+                        )
+                        if data else "no prior approved interventions found"
+                    )
+                else:
+                    data = []
+                    summary = f"unknown tool: {tool_name}"
+                    log_module.get_logger().warning(
+                        "investigator.enrichment_unknown_tool",
+                        deal_id=deal_id,
+                        tool=tool_name,
+                    )
+            except Exception as exc:
+                log_module.get_logger().warning(
+                    "investigator.enrichment_failed",
+                    deal_id=deal_id,
+                    tool=tool_name,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
                 )
-                if data else "no prior approved interventions found"
-            )
-        else:
-            data = []
-            summary = "unknown tool"
-    finally:
-        conn.close()
+                span.set_error(exc)
+                data = []
+                summary = f"error fetching {tool_name}: {type(exc).__name__}: {exc}"
+        finally:
+            conn.close()
+
+        span.set_output({
+            "summary": summary,
+            "row_count": len(data) if isinstance(data, list) else 0,
+        })
 
     round_num = state.get("enrichment_count", 0) + 1
     step = EnrichmentStep(
@@ -263,7 +294,11 @@ def score_severity(state: InvestigatorState) -> dict:
     settings = get_settings()
     decision = llm_client.call_structured(
         template=SEVERITY_TEMPLATE,
-        template_vars=build_severity_prompt(state["deal_snapshot"], state.get("risk_signals", [])),
+        template_vars=build_severity_prompt(
+            state["deal_snapshot"],
+            state.get("risk_signals", []),
+            state.get("enrichment_context", {}),
+        ),
         output_model=SEVERITY_OUTPUT,
         model=settings.llm_model,
         tick_id=state["tick_id"],
@@ -336,8 +371,8 @@ def draft_intervention(state: InvestigatorState) -> dict:
         )
         if result:
             intervention = Intervention.brief(result)
-    elif (responsible == "hiive_ts") and (severity == Severity.ESCALATE):
-        # hiive_ts responsible + escalate → internal escalation note
+    elif severity == Severity.ESCALATE:
+        # escalate → always internal escalation regardless of responsible party
         result = llm_client.call_structured(
             template=ESCALATION_TEMPLATE,
             template_vars=build_escalation_prompt(snap, sev_decision, signals),
@@ -350,7 +385,7 @@ def draft_intervention(state: InvestigatorState) -> dict:
         if result:
             intervention = Intervention.escalation(result)
     else:
-        # external responsible party → outbound nudge
+        # act → outbound nudge
         result = llm_client.call_structured(
             template=OUTBOUND_TEMPLATE,
             template_vars=build_outbound_nudge_prompt(snap, sev_decision, signals),
@@ -403,18 +438,26 @@ def emit_observation(state: InvestigatorState) -> dict:
     intervention_id: str | None = None
     iv = state.get("intervention")
     if iv and oid:
-        if not dao.has_open_intervention(conn, state["deal_id"]):
-            payload = iv.payload.model_dump()
-            intervention_id = dao.insert_intervention(
-                conn,
+        # Re-investigating in a later tick → previous pending draft references
+        # stale dates/signals. Supersede it with this fresh one.
+        superseded = dao.supersede_pending_interventions(conn, state["deal_id"])
+        if superseded:
+            log_module.get_logger().info(
+                "investigator.superseded_pending",
                 deal_id=state["deal_id"],
-                observation_id=oid,
-                intervention_type=iv.intervention_type,
-                draft_body=payload.get("body", payload.get("headline", "")),
-                recipient_type=payload.get("recipient_type") or payload.get("escalate_to"),
-                draft_subject=payload.get("subject") or payload.get("headline"),
-                reasoning_ref=oid,
+                count=superseded,
             )
+        payload = iv.payload.model_dump()
+        intervention_id = dao.insert_intervention(
+            conn,
+            deal_id=state["deal_id"],
+            observation_id=oid,
+            intervention_type=iv.intervention_type,
+            draft_body=payload.get("body", payload.get("headline", "")),
+            recipient_type=payload.get("recipient_type") or payload.get("escalate_to"),
+            draft_subject=payload.get("subject") or payload.get("headline"),
+            reasoning_ref=oid,
+        )
 
     conn.commit()
     conn.close()

@@ -10,7 +10,6 @@ from tests.integration.conftest import seed_deal, seed_event, seed_issuer
 
 
 def _make_monitor_state(tick_id: str, deal_id: str, raw_score: float) -> dict:
-    from hiive_monitor.agents.graph_state import MonitorState
     return {
         "tick_id": tick_id,
         "mode": "simulated",

@@ -53,6 +53,14 @@ def configure_logging(log_format: str = "human", logs_path: str | None = None) -
     global _jsonl_path
     _jsonl_path = pathlib.Path(logs_path) if logs_path else None
 
+    # Force UTF-8 on stdout/stderr so Windows console (cp1252) does not crash
+    # the logging call when an event payload contains non-ASCII (e.g. ≤, ①).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     shared_processors = [
         structlog.contextvars.merge_contextvars,
         _add_correlation_ids,

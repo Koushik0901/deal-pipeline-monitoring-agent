@@ -1,9 +1,9 @@
 id: det_06_prior_breakage_escalation
 category: detection
 description: >
-  Deal in docs_pending for 11 days (3.7x baseline) with buyer who has 2 prior broken deals.
+  Deal in docs_pending for 16 days (2.3x the 7-day baseline) with buyer who has 2 prior broken deals.
   Same stage as prior breakages. Agent must flag unusual_characteristics (prior_breakage_count=2)
-  and stage_aging. Severity should be escalate due to prior breakage + act-level aging.
+  and stage_aging. Severity should be escalate due to prior breakage + act-level aging (rule 2).
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -30,7 +30,7 @@ setup:
     shares: 7500
     price_per_share: 14.20
     stage: docs_pending
-    stage_entered_days_ago: 11
+    stage_entered_days_ago: 16
     responsible_party: buyer
     risk_factors:
       is_first_time_buyer: false
@@ -38,15 +38,15 @@ setup:
     blockers:
       - kind: pending_signature
         description: Buyer hasn't returned executed docs — prior deal also broke at this stage
-        since: "2026-04-09T09:00:00Z"
+        since: "2026-03-31T09:00:00Z"
     events:
       - event_type: comm_outbound
-        days_ago: 11
+        days_ago: 16
         summary: Transfer docs sent to buyer
         payload:
           body: "Hi, transfer docs attached. Please sign and return within 5 business days."
       - event_type: comm_inbound
-        days_ago: 9
+        days_ago: 14
         summary: Buyer acknowledged receipt
         payload:
           body: "Got it, reviewing now."

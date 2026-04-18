@@ -18,6 +18,7 @@ class EnrichmentStep(TypedDict):
         "fetch_communication_content",
         "fetch_prior_observations",
         "fetch_issuer_history",
+        "fetch_intervention_outcomes",
     ]
     tool_rationale: str
     context_summary: str

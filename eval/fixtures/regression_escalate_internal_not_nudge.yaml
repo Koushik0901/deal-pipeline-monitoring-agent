@@ -1,0 +1,76 @@
+id: regression_escalate_internal_not_nudge
+category: intervention_quality
+description: >
+  Regression guard: any deal that reaches escalate severity must produce
+  intervention_type='internal_escalation', never 'outbound_nudge'. The investigator's
+  draft_intervention node explicitly maps escalate → internal_escalation regardless
+  of responsible_party. A routing regression here would send an urgent external
+  email instead of alerting the TS lead — a material operational error.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: openai-reg2
+      name: OpenAI
+      typical_response_days: 7
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-reg2
+      party_type: buyer
+      display_name: Polaris Ventures
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-reg2
+      party_type: seller
+      display_name: Nikhil Menon
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-REG-002
+    issuer_id: openai-reg2
+    buyer_id: buyer-reg2
+    seller_id: seller-reg2
+    shares: 4500
+    price_per_share: 215.00
+    stage: rofr_pending
+    stage_entered_days_ago: 27
+    rofr_deadline_days_from_now: 1
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 27
+        summary: ROFR notice sent to OpenAI legal
+        payload:
+          body: "Dear OpenAI legal team, ROFR notice attached for the Menon transfer. Window closes 2026-04-18."
+      - event_type: comm_inbound
+        days_ago: 24
+        summary: OpenAI acknowledged receipt
+        payload:
+          body: "Received. Under review."
+      - event_type: comm_outbound
+        days_ago: 15
+        summary: First follow-up on ROFR election
+        payload:
+          body: "Following up on the ROFR window. Please advise on OpenAI's election."
+
+assertions:
+  severity: escalate
+  intervention_drafted: true
+  intervention_type: internal_escalation
+  intervention_body_not_contains:
+    - "Dear OpenAI"
+    - "please advise at your earliest"
+
+ground_truth:
+  severity: escalate
+  dimensions_triggered:
+    - deadline_proximity
+    - communication_silence
+  dimensions_not_triggered:
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

@@ -1,0 +1,93 @@
+id: regression_portfolio_min_sample
+category: detection
+description: >
+  Regression guard: portfolio-pattern detection must NOT emit a cluster signal
+  when the baseline is too thin. Specifically: with only 2 current deals in an
+  (issuer, stage) cluster and a rolling average of 0.5, both min-sample guards
+  should fire (current_count >= 3 AND rolling_avg >= 1.0). Removing either
+  guard would flood the brief with spurious "2× cluster growth" alerts on
+  freshly-created issuers — false positives that erode trust.
+
+setup:
+  now: "2026-04-17T09:00:00Z"
+  issuers:
+    - issuer_id: acme-reg4
+      name: Acme Semis
+      typical_response_days: 5
+      rofr_window_days: 30
+      multi_layer_rofr: false
+  parties:
+    - party_id: buyer-reg4
+      party_type: buyer
+      display_name: Northfield Partners
+      is_first_time: false
+      prior_breakage_count: 0
+    - party_id: seller-reg4
+      party_type: seller
+      display_name: Harper Ito
+      is_first_time: false
+      prior_breakage_count: 0
+  deal:
+    deal_id: D-REG-004-A
+    issuer_id: acme-reg4
+    buyer_id: buyer-reg4
+    seller_id: seller-reg4
+    shares: 2000
+    price_per_share: 48.00
+    stage: rofr_pending
+    stage_entered_days_ago: 3
+    rofr_deadline_days_from_now: 27
+    responsible_party: issuer
+    risk_factors:
+      is_first_time_buyer: false
+      prior_breakage_count: 0
+    events:
+      - event_type: comm_outbound
+        days_ago: 3
+        summary: ROFR notice sent
+        payload:
+          body: "ROFR notice attached. Window closes 2026-05-14."
+  additional_deals:
+    - deal_id: D-REG-004-B
+      issuer_id: acme-reg4
+      buyer_id: buyer-reg4
+      seller_id: seller-reg4
+      shares: 1500
+      price_per_share: 48.00
+      stage: rofr_pending
+      stage_entered_days_ago: 2
+      rofr_deadline_days_from_now: 28
+      responsible_party: issuer
+  # Four prior ticks with a total of 2 observations on this cluster → rolling avg 0.5
+  # (under the min-sample threshold of 1.0 AND current_count of 2 is under threshold of 3).
+  prior_ticks:
+    - tick_id: prior-tick-reg4-1
+      days_ago: 1
+      observations:
+        - deal_id: D-REG-004-A
+          severity: informational
+    - tick_id: prior-tick-reg4-2
+      days_ago: 2
+      observations:
+        - deal_id: D-REG-004-B
+          severity: informational
+    - tick_id: prior-tick-reg4-3
+      days_ago: 3
+      observations: []
+    - tick_id: prior-tick-reg4-4
+      days_ago: 4
+      observations: []
+
+assertions:
+  no_portfolio_signal: true
+
+ground_truth:
+  severity: informational
+  dimensions_triggered: []
+  dimensions_not_triggered:
+    - stage_aging
+    - deadline_proximity
+    - communication_silence
+    - missing_prerequisites
+    - unusual_characteristics
+  expected_tools: []

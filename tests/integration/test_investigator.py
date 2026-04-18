@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 
-import pytest
-
-from tests.integration.conftest import seed_deal, seed_event, seed_issuer, seed_tick
+from tests.integration.conftest import seed_deal, seed_issuer, seed_tick
 
 
 def _make_investigator_state(deal_id: str, snapshot, tick_id: str | None = None) -> dict:
@@ -28,8 +25,8 @@ def _make_investigator_state(deal_id: str, snapshot, tick_id: str | None = None)
 
 
 def _build_snapshot(conn, deal_id: str):
-    from hiive_monitor.db import dao
     from hiive_monitor.agents.monitor import _build_snapshot as bs
+    from hiive_monitor.db import dao
     deal = dao.get_deal(conn, deal_id)
     return bs(deal, conn)
 
@@ -53,7 +50,7 @@ def test_enrichment_loop_bounded(db_path, monkeypatch):
     assess_sufficiency must return _sufficient=True without calling the LLM.
     (FR-AGENT-04, T054)
     """
-    from hiive_monitor.agents.investigator import assess_sufficiency, _MAX_ENRICHMENT_ROUNDS
+    from hiive_monitor.agents.investigator import _MAX_ENRICHMENT_ROUNDS, assess_sufficiency
 
     llm_calls: list[str] = []
 
@@ -88,11 +85,11 @@ def test_enrichment_fires_on_comm_silence(db_path):
     Tested by calling the nodes directly rather than through the full graph to avoid
     LangGraph's compiled-graph closure semantics.
     """
-    from hiive_monitor.agents.investigator import assess_sufficiency, enrich_context
+    from hiive_monitor.agents.investigator import enrich_context
     from hiive_monitor.models.risk import (
-        RiskSignal, RiskDimension, SufficiencyDecision, SeverityDecision, Severity
+        RiskDimension,
+        RiskSignal,
     )
-    import hiive_monitor.agents.investigator as _inv_mod
 
     path, conn = db_path
     seed_issuer(conn)
@@ -158,10 +155,14 @@ def test_rofr_deadline_7d(db_path, monkeypatch):
     seed_issuer(conn)
     seed_deal(conn, "D-INV-003", stage="rofr_pending", days_in_stage=3, rofr_deadline_days=7)
 
-    from hiive_monitor.models.risk import (
-        RiskDimension, RiskSignal, Severity, SeverityDecision, SufficiencyDecision
-    )
     from hiive_monitor.models.interventions import OutboundNudge
+    from hiive_monitor.models.risk import (
+        RiskDimension,
+        RiskSignal,
+        Severity,
+        SeverityDecision,
+        SufficiencyDecision,
+    )
 
     def _mock_llm(*, output_model, model, tick_id, deal_id, call_name,
                   prompt="", system="", timeout=30.0, template=None, template_vars=None):
@@ -182,7 +183,7 @@ def test_rofr_deadline_7d(db_path, monkeypatch):
                 referenced_deadline="2026-04-24",
             )
         # Risk signals: trigger deadline_proximity, all others clear
-        from hiive_monitor.models.risk import AllRiskSignals, RiskSignal
+        from hiive_monitor.models.risk import AllRiskSignals
         if output_model is AllRiskSignals:
             def _sig(dim, triggered, evidence):
                 return RiskSignal(dimension=dim, triggered=triggered, evidence=evidence, confidence=0.9)

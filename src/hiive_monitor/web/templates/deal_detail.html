@@ -35,7 +35,18 @@
         <span class="text-[0.6875rem] text-on-surface-variant">{{ deal.shares | int | format_number }} shares @ ${{ "%.2f"|format(deal.price_per_share) }}</span>
       {% endif %}
       {% if deal.rofr_deadline %}
-        <span class="text-[0.6875rem] text-on-surface-variant">ROFR: {{ deal.rofr_deadline[:10] }}</span>
+        {% if rofr_expired %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10" title="Deadline has passed">
+            ROFR EXPIRED · {{ deal.rofr_deadline[:10] }}
+            <span class="font-normal opacity-75">({{ -days_to_rofr }}d ago)</span>
+          </span>
+        {% elif days_to_rofr == 0 %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">
+            ROFR DUE TODAY · {{ deal.rofr_deadline[:10] }}
+          </span>
+        {% else %}
+          <span class="text-[0.6875rem] text-on-surface-variant">ROFR: {{ deal.rofr_deadline[:10] }}{% if days_to_rofr is not none %} <span class="opacity-75">({{ days_to_rofr }}d)</span>{% endif %}</span>
+        {% endif %}
       {% endif %}
       {% if deal.snoozed_until %}
         <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">
@@ -71,12 +82,63 @@
           <span class="text-[0.8125rem] font-medium {{ vc or 'text-on-surface' }} text-right truncate">{{ value or '—' }}</span>
         </div>
         {% endmacro %}
-        {{ fact_row("Stage entered", deal.stage_entered_at[:10] if deal.stage_entered_at else '—') }}
-        {{ fact_row("Responsible", deal.responsible_party | replace('_', ' ') if deal.responsible_party else '—') }}
-        {{ fact_row("ROFR deadline", deal.rofr_deadline[:10] if deal.rofr_deadline else 'None') }}
-        {{ fact_row("Buyer", deal.buyer_id) }}
+        {% set _resp = deal.responsible_party %}
+        {% if _resp == 'issuer' and issuer %}{% set resp_label = issuer.name + ' (issuer)' %}
+        {% elif _resp == 'buyer' and buyer %}{% set resp_label = buyer.display_name + ' (buyer)' %}
+        {% elif _resp == 'seller' and seller %}{% set resp_label = seller.display_name + ' (seller)' %}
+        {% elif _resp == 'hiive_ts' %}{% set resp_label = 'Hiive TS' %}
+        {% else %}{% set resp_label = (_resp | replace('_', ' ')) if _resp else '—' %}
+        {% endif %}
+        {{ fact_row("Stage entered", (deal.stage_entered_at[:10] ~ (' · ' ~ days_in_stage ~ 'd ago' if days_in_stage is not none else '')) if deal.stage_entered_at else '—') }}
+        {{ fact_row("Responsible", resp_label) }}
+        {% if deal.rofr_deadline %}
+          {% if rofr_expired %}
+            {{ fact_row("ROFR deadline", deal.rofr_deadline[:10] ~ ' · expired ' ~ (-days_to_rofr) ~ 'd ago', vc='text-error font-semibold') }}
+          {% elif days_to_rofr == 0 %}
+            {{ fact_row("ROFR deadline", deal.rofr_deadline[:10] ~ ' · today', vc='text-error font-semibold') }}
+          {% else %}
+            {{ fact_row("ROFR deadline", deal.rofr_deadline[:10] ~ ' · ' ~ days_to_rofr ~ 'd left') }}
+          {% endif %}
+        {% else %}
+          {{ fact_row("ROFR deadline", 'None') }}
+        {% endif %}
+        {% if days_since_last_comm is not none %}
+          {{ fact_row("Last comm", days_since_last_comm ~ 'd ago') }}
+        {% endif %}
+        {% if deal_size_usd %}
+          {{ fact_row("Deal size", '$' ~ (deal_size_usd | format_number)) }}
+        {% endif %}
+        {% set buyer_label = (buyer.display_name ~ (' · ' ~ buyer.prior_breakage_count ~ ' prior breakage' ~ ('s' if buyer.prior_breakage_count != 1 else '') if buyer.prior_breakage_count else '') ~ (' · first-time' if buyer.is_first_time else '')) if buyer else deal.buyer_id %}
+        {% set buyer_vc = 'text-error' if buyer and (buyer.prior_breakage_count or 0) >= 1 else '' %}
+        {{ fact_row("Buyer", buyer_label, vc=buyer_vc) }}
+        {% if seller %}
+          {{ fact_row("Seller", seller.display_name ~ (' · first-time' if seller.is_first_time else '')) }}
+        {% endif %}
       </div>
     </div>
+
+    {% if blockers %}
+    <!-- Active blockers -->
+    <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <div class="px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 flex items-center justify-between">
+        <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Active blockers</span>
+        <span class="text-[0.6875rem] tabular-nums text-on-surface-variant">{{ blockers | length }}</span>
+      </div>
+      <div class="flex flex-col">
+        {% for b in blockers %}
+        <div class="px-4 py-3 {% if not loop.first %}border-t-[0.5px] border-outline-variant/50{% endif %}">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="inline-flex rounded-[4px] bg-surface-container px-1.5 py-0.5 text-[0.625rem] text-on-surface-variant">{{ b.kind | replace('_', ' ') }}</span>
+            {% if b.since %}
+              <span class="text-[0.625rem] font-mono text-on-surface-variant">since {{ b.since[:10] }}</span>
+            {% endif %}
+          </div>
+          <p class="text-[0.8125rem] text-on-surface-variant leading-snug">{{ b.description }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Interventions -->
     <div class="border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">

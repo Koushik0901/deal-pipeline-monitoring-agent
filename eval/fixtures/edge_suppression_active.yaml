@@ -52,6 +52,19 @@ setup:
         summary: Agent-recommended nudge approved and sent by analyst
         payload:
           body: "Following up on the signature pages sent on April 7th. Please return the countersigned transfer agreement at your earliest convenience — we need to close this transfer by end of month."
+  # Three completed prior ticks establish the suppression window.
+  # get_suppressed_deal_ids() queries completed ticks for the cutoff timestamp;
+  # without these the isolated eval DB has no completed ticks and suppression never fires.
+  prior_ticks:
+    - tick_id: "supp-prior-tick-1"
+      days_ago: 3
+      observations: []
+    - tick_id: "supp-prior-tick-2"
+      days_ago: 2
+      observations: []
+    - tick_id: "supp-prior-tick-3"
+      days_ago: 1
+      observations: []
 
 assertions:
   no_intervention: true

@@ -62,7 +62,7 @@ ground_truth:
     - stage_aging
     - missing_prerequisites
     - unusual_characteristics
+    - communication_silence
   dimensions_not_triggered:
     - deadline_proximity
-    - communication_silence
   expected_tools: []

@@ -5,7 +5,9 @@ description: >
   indicator is healthy: issuer is responsive (comm_inbound yesterday), stage dwell
   is within baseline, no blockers, experienced buyer with zero prior breakage.
   Validates that one urgent deadline does not force escalate when the surrounding
-  picture is clean. Expected ceiling: act.
+  picture is clean. Under the rubric's ROFR ≤2d acute trigger (rule 1), this
+  deal correctly escalates regardless of surrounding health — the deadline
+  itself is the emergency.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -58,12 +60,12 @@ setup:
           body: "We are finalizing our ROFR election today and will send formal notice by end of business."
 
 assertions:
-  severity_lte: act
+  severity: escalate
   dimensions_triggered:
     - deadline_proximity
 
 ground_truth:
-  severity: act
+  severity: escalate
   dimensions_triggered:
     - deadline_proximity
   dimensions_not_triggered:

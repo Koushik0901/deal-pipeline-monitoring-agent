@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -30,6 +32,33 @@ def _clock_mode_global() -> str:
 templates.env.globals["clock_mode"] = _clock_mode_global()
 
 
+async def _bootstrap_if_empty(logger) -> None:
+    """Seed deals and run one tick on first startup so the brief is never blank."""
+    from hiive_monitor.db.connection import get_domain_conn
+
+    conn = get_domain_conn()
+    deal_count = conn.execute("SELECT COUNT(*) FROM deals").fetchone()[0]
+    completed_ticks = conn.execute(
+        "SELECT COUNT(*) FROM ticks WHERE tick_completed_at IS NOT NULL"
+    ).fetchone()[0]
+    conn.close()
+
+    loop = asyncio.get_running_loop()
+
+    if deal_count == 0:
+        from hiive_monitor.seed.seed_data import seed
+        logger.info("app.bootstrap.seed")
+        await loop.run_in_executor(None, seed)
+        logger.info("app.bootstrap.seed_done")
+
+    if completed_ticks == 0:
+        from hiive_monitor.agents.monitor import run_tick
+        tick_id = f"startup-{uuid.uuid4().hex[:8]}"
+        logger.info("app.bootstrap.tick", tick_id=tick_id)
+        await loop.run_in_executor(None, lambda: run_tick(mode="simulated", tick_id=tick_id))
+        logger.info("app.bootstrap.tick_done", tick_id=tick_id)
+
+
 def create_app() -> FastAPI:
     _cfg = get_settings()
     log_module.configure_logging(log_format=_cfg.log_format, logs_path=_cfg.logs_path)
@@ -49,6 +78,10 @@ def create_app() -> FastAPI:
             run_tick(mode="real_time")
 
         start_scheduler(_tick)
+
+        if get_settings().clock_mode == "simulated":
+            asyncio.create_task(_bootstrap_if_empty(logger))
+
         yield
 
         from hiive_monitor.scheduler import stop_scheduler

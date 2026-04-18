@@ -22,13 +22,22 @@ with confidence, or would one specific enrichment tool materially change that sc
 ABSOLUTE RULE: enrichment_count ≥ 2 → return sufficient=true immediately. No exceptions. \
 This cap is enforced in code — requesting further enrichment at this point has no effect.
 
-PROCEED (sufficient=true) when ANY of the following apply:
-  • All signals triggered=false → verdict is clearly informational.
-  • Deadline ≤ 3 days with any triggered signal → verdict is clearly escalate; enrichment won't change it.
-  • You already fetched the enrichment tool that would have addressed the ambiguity.
-  • The severity verdict would be the same no matter what any tool returns.
+MANDATORY ENRICH (sufficient=false) — override PROCEED rules when enrichment_count = 0:
+  • communication_silence triggered AND fetch_communication_content NOT yet in enrichment_context:
+    Always fetch — a legal hold, known deferral, or acknowledgment may reduce severity regardless
+    of how confident the silence signal appears. Severity cannot be finalized without validating
+    whether an explanation exists.
+  • stage_aging AND unusual_characteristics (prior_breakage_count ≥ 1) both triggered AND
+    fetch_prior_observations NOT yet in enrichment_context:
+    Always fetch — distinguishing a new pattern from a recurring one is essential for accurate
+    severity and intervention quality.
 
-ENRICH (sufficient=false) ONLY when ALL four conditions hold:
+PROCEED (sufficient=true) when ANY of the following apply (after mandatory enrich is satisfied):
+  • All signals triggered=false → verdict is clearly informational.
+  • Deadline ≤ 2 days with any triggered signal → verdict is clearly escalate; enrichment won't change it.
+  • You already fetched the enrichment tool that would have addressed the ambiguity.
+
+ENRICH (sufficient=false) when ALL four conditions hold (beyond mandatory enrich above):
   ① enrichment_count < 2
   ② At least one signal is triggered with ambiguous cause
   ③ The tool you name would directly resolve that specific ambiguity
@@ -90,7 +99,6 @@ SUFFICIENCY_TEMPLATE = ChatPromptTemplate.from_messages([
     ("human", _HUMAN),
 ])
 
-SUFFICIENCY_SYSTEM = _SYSTEM
 SUFFICIENCY_OUTPUT = SufficiencyDecision
 
 

@@ -39,6 +39,8 @@ class DealSnapshot(BaseModel):
     recent_events: list[EventRef]
     days_since_last_comm: int | None
     missing_documents: list[str] = []  # TS06: required docs not yet received (empty if feature off)
+    shares: int | None = None
+    price_per_share: float | None = None
 
 
 class AttentionScoreWithSuppression(BaseModel):

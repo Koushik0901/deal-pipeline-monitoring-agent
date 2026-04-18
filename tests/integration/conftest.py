@@ -7,10 +7,8 @@ import pathlib
 import sqlite3
 import tempfile
 import uuid
-from datetime import datetime, timezone
 
 import pytest
-
 
 _SCHEMA = pathlib.Path(__file__).parent.parent.parent / "src" / "hiive_monitor" / "db" / "schema.sql"
 

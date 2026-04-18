@@ -56,7 +56,8 @@ def _build_snapshot(deal: dict, conn) -> DealSnapshot:
     days_in_stage = max(0, (now - stage_entered_at).days)
 
     rofr_deadline = _parse_dt(deal["rofr_deadline"]) if deal.get("rofr_deadline") else None
-    days_to_rofr = max(0, (rofr_deadline - now).days) if rofr_deadline else None
+    # Signed — negative means already expired. Clamping to 0 loses that distinction.
+    days_to_rofr = (rofr_deadline - now).days if rofr_deadline else None
 
     blockers_raw = json.loads(deal.get("blockers") or "[]")
     blockers = []
@@ -120,6 +121,8 @@ def _build_snapshot(deal: dict, conn) -> DealSnapshot:
         recent_events=recent_events,
         days_since_last_comm=days_since_last_comm,
         missing_documents=missing_documents,
+        shares=deal.get("shares"),
+        price_per_share=deal.get("price_per_share"),
     )
 
 
@@ -239,15 +242,18 @@ def select_investigation_queue(state: MonitorState) -> dict:
     Pick deals above threshold (0.6) by suppressed score, capped at top 5.
     Ties broken by days_to_rofr ascending then days_in_stage descending (FR-001a).
     """
-    threshold = get_settings().attention_threshold
+    settings = get_settings()
+    threshold = settings.attention_threshold
     eligible = {
         deal_id: score
         for deal_id, score in state["suppressed_scores"].items()
         if score >= threshold
     }
 
-    # Sort: highest score first, cap at 5
-    ranked = sorted(eligible.keys(), key=lambda d: eligible[d], reverse=True)[:5]
+    # Sort: highest score first, cap at configured limit
+    ranked = sorted(eligible.keys(), key=lambda d: eligible[d], reverse=True)[
+        : settings.max_investigations_per_tick
+    ]
 
     log_module.get_logger().info(
         "monitor.queue_selected",
@@ -313,7 +319,7 @@ def fan_out_investigators(state: MonitorState) -> dict:
     deals_to_investigate = [
         deal_map[did] for did in state["investigation_queue"] if did in deal_map
     ]
-    max_workers = min(len(deals_to_investigate), 5) or 1
+    max_workers = min(len(deals_to_investigate), 8) or 1
 
     results: list[InvestigatorResult] = []
     errors: list[ErrorRecord] = []
@@ -364,6 +370,23 @@ def close_tick(state: MonitorState) -> dict:
         errors=len(errors),
     )
 
+    # Emit per-model token + cost summary for this tick so the cost of one full
+    # monitoring cycle is visible without needing Langfuse.
+    from hiive_monitor.llm import usage as usage_tracker
+    per_model = usage_tracker.snapshot_tick(state["tick_id"])
+    totals = usage_tracker.tick_totals(state["tick_id"])
+    if per_model:
+        log_module.get_logger().info(
+            "monitor.tick_cost_summary",
+            tick_id=state["tick_id"],
+            total_calls=totals["calls"],
+            total_input_tokens=totals["input_tokens"],
+            total_output_tokens=totals["output_tokens"],
+            total_cost_usd=totals["cost_usd"],
+            by_model=per_model,
+        )
+    usage_tracker.evict_tick(state["tick_id"])
+
     try:
         compose_daily_brief(state["tick_id"])
     except Exception as exc:
@@ -374,6 +397,30 @@ def close_tick(state: MonitorState) -> dict:
 
     llm_client.evict_tick(state["tick_id"])
     return {}
+
+
+def _collect_tick_outputs(tick_id: str) -> dict:
+    """
+    Collect observations + interventions for the tick so they can be set as the
+    Langfuse trace output (enabling trace-based scoring without rerunning the pipeline).
+    """
+    conn = get_domain_conn()
+    try:
+        observations = dao.get_observations_by_tick(conn, tick_id)
+        iv_rows = conn.execute(
+            """SELECT i.* FROM interventions i
+               JOIN agent_observations o ON o.observation_id = i.observation_id
+               WHERE o.tick_id = ?""",
+            (tick_id,),
+        ).fetchall()
+        interventions = [dict(r) for r in iv_rows]
+    finally:
+        conn.close()
+    return {
+        "observations": observations,
+        "interventions": interventions,
+        "deal_ids": sorted({o.get("deal_id") for o in observations if o.get("deal_id")}),
+    }
 
 
 def detect_portfolio_patterns(state: MonitorState) -> dict:
@@ -400,10 +447,19 @@ def detect_portfolio_patterns(state: MonitorState) -> dict:
     prior_tick_ids = dao.get_last_n_completed_tick_ids(conn, 3, exclude_tick_id=tick_id)
     rolling_avg = dao.get_cluster_observation_counts(conn, prior_tick_ids)
 
+    # Require enough historical signal to avoid false positives on tiny samples.
+    # With <3 prior ticks or a rolling avg <1 deal, any current spike looks like a
+    # multiplier but is really statistical noise — suppress until the baseline settles.
+    have_stable_baseline = len(prior_tick_ids) >= 3
     signals = []
     for (issuer_id, stage), current_count in current_clusters.items():
         avg = rolling_avg.get((issuer_id, stage), 0.0)
-        if avg > 0 and current_count > 2 * avg:
+        if (
+            have_stable_baseline
+            and avg >= 1.0
+            and current_count >= 3
+            and current_count > 2 * avg
+        ):
             signals.append({
                 "issuer_id": issuer_id,
                 "stage": stage,
@@ -499,6 +555,23 @@ def run_tick(mode: str = "simulated", tick_id: str | None = None) -> str:
         "errors": [],
     }
 
-    graph.invoke(initial_state)
+    # Root span makes the tick a proper top-level observation so Langfuse
+    # populates trace input/output (required for trace-based scoring).
+    with llm_client.tick_root_span(
+        tid, input_payload={"mode": mode, "tick_id": tid, "started_at": initial_state["tick_started_at"]}
+    ) as root:
+        graph.invoke(initial_state)
+        try:
+            outputs = _collect_tick_outputs(tid)
+            root.finalize(
+                output=outputs,
+                metadata={"error_count": 0, "mode": mode},
+            )
+        except Exception as exc:
+            log_module.get_logger().warning(
+                "monitor.trace_finalize_error", tick_id=tid, error=str(exc)
+            )
+
+    llm_client.flush_langfuse()
     log_module.clear_correlation_ids()
     return tid

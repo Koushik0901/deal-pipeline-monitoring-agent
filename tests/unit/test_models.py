@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from hiive_monitor.models.brief import DailyBrief, DailyBriefItem
 from hiive_monitor.models.event import Event
-from hiive_monitor.models.interventions import BriefEntry, InternalEscalation, Intervention, OutboundNudge
+from hiive_monitor.models.interventions import (
+    BriefEntry,
+    InternalEscalation,
+    Intervention,
+    OutboundNudge,
+)
 from hiive_monitor.models.risk import (
     AttentionScore,
     RiskDimension,
@@ -138,7 +143,7 @@ def test_daily_brief_roundtrip():
 
 
 def test_deal_snapshot_roundtrip():
-    now = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
     snap = DealSnapshot(
         deal_id="D-001",
         issuer_id="spacex",
@@ -162,7 +167,7 @@ def test_deal_snapshot_roundtrip():
 
 
 def test_event_roundtrip():
-    now = datetime(2026, 4, 16, 9, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 16, 9, 0, tzinfo=UTC)
     ev = Event(
         event_id="ev-001",
         deal_id="D-001",

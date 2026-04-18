@@ -56,13 +56,16 @@ DIMENSION 2 — deadline_proximity  (field: deadline_proximity, dimension="deadl
 Is there material ROFR deadline urgency?
 
 Step 1: If rofr_deadline = "none" OR days_to_rofr = "N/A" → triggered=false, confidence=0.95. Stop.
-Step 2: Map days_to_rofr to urgency band:
-  ≤ 2 days  → triggered=true, confidence=0.98 (critical)
+Step 2: Map days_to_rofr to urgency band (values may be negative — negative means the deadline has already passed):
+  < 0 days  → triggered=true, confidence=0.99 (expired — past deadline)
+  0 days    → triggered=true, confidence=0.98 (critical — expires today)
+  1–2 days  → triggered=true, confidence=0.98 (critical)
   3–5 days  → triggered=true, confidence=0.90 (urgent)
   6–10 days → triggered=true, confidence=0.75 (elevated)
   > 10 days → triggered=false, confidence=0.85
 
-EVIDENCE (triggered): "[Issuer] ROFR deadline [DATE] is [N] days away — [band]."
+EVIDENCE (triggered, future): "[Issuer] ROFR deadline [DATE] is [N] days away — [band]."
+EVIDENCE (triggered, expired): "[Issuer] ROFR deadline [DATE] passed [abs(N)] day(s) ago — expired."
 EVIDENCE (not triggered): "No ROFR deadline" OR "[Issuer] ROFR deadline [DATE] is [N] days away — not urgent."
 
 ──────────────────────────────────────────────────────────────────────────────
@@ -110,16 +113,17 @@ DIMENSION 5 — unusual_characteristics  (field: unusual_characteristics, dimens
 ──────────────────────────────────────────────────────────────────────────────
 Do structural deal characteristics compound risk beyond standard metrics?
 
-Step 1: Score individual factors from risk_factors:
-  prior_breakage_count ≥ 2 → very strong flag (2 pts)
-  prior_breakage_count = 1 → strong flag (1.5 pts)
-  is_first_time_buyer=true → moderate flag (1 pt)
-  multi_layer_rofr=true    → moderate flag (1 pt)
+Step 1: Score individual factors:
+  prior_breakage_count ≥ 2            → very strong flag (2 pts)
+  prior_breakage_count = 1            → strong flag (1.5 pts)
+  multi_layer_rofr=true               → strong flag (1.5 pts)  ← requires multi-party sign-off
+  is_first_time_buyer=true            → moderate flag (1 pt)
+  transaction_notional_usd > 5000000  → moderate flag (1 pt)   ← outsized deal size increases counterparty risk
 Step 2: Apply triggering logic:
-  Score ≥ 1.5 (any strong flag)        → triggered=true
-  Score ≥ 2.0 (two moderate flags)     → triggered=true
-  Score < 1.5 (one moderate flag only) → triggered=false
-  Score = 0 (no flags)                 → triggered=false, confidence=0.97
+  Score ≥ 1.5 (any strong flag)                → triggered=true
+  Score ≥ 2.0 (two or more moderate flags)     → triggered=true
+  Score < 1.5 (one moderate flag only)         → triggered=false
+  Score = 0 (no flags)                         → triggered=false, confidence=0.97
 
 ANTI-INFLATION GUARD: historical breakage alone (prior_breakage_count ≥ 1) indicates risk \
 pattern, not certainty. Do not use this dimension to amplify stage_aging or silence signals — \
@@ -166,6 +170,7 @@ BLOCKERS:
 
 RISK FACTORS:
   {risk_factors}
+  transaction_notional_usd: {transaction_notional_usd}
   blockers_count: {blockers_count}
 
 Populate all five dimension fields in the response.\
@@ -213,5 +218,10 @@ def build_all_dimensions_prompt(snapshot: DealSnapshot) -> dict:
         "recent_comm_events": "\n".join(recent_comm) if recent_comm else "    (none)",
         "blockers": blockers_text,
         "risk_factors": snapshot.risk_factors,
+        "transaction_notional_usd": (
+            int(snapshot.shares * snapshot.price_per_share)
+            if snapshot.shares is not None and snapshot.price_per_share is not None
+            else 0
+        ),
         "blockers_count": len(snapshot.blockers),
     }

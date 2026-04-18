@@ -1,9 +1,9 @@
 id: iq_01_nudge_contains_deadline
 category: intervention_quality
 description: >
-  Outbound nudge drafted for a ROFR-critical deal must contain: (1) the issuer name
+  Internal escalation drafted for a ROFR-critical deal must contain: (1) the issuer name
   "SpaceX", (2) the specific deadline date "2026-04-18". Validates FR-033 mandatory
-  content requirement.
+  content requirement. Escalate severity always routes to internal_escalation.
 
 setup:
   now: "2026-04-16T09:00:00Z"
@@ -43,7 +43,7 @@ setup:
 
 assertions:
   severity: escalate
-  intervention_type: outbound_nudge
+  intervention_type: internal_escalation
   intervention_body_contains:
     - "SpaceX"
     - "2026-04-18"

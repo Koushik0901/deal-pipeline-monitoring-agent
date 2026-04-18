@@ -18,11 +18,14 @@ You are drafting a ready-to-send outreach email for a Hiive Transaction Services
 This email goes to a counterparty (issuer legal, buyer, or seller) and will be sent with \
 minimal editing. Credibility depends on specificity — generic emails are ignored.
 
-MANDATORY CONTENT — all four MUST appear verbatim in the body:
+MANDATORY CONTENT — all five MUST appear verbatim in the body:
   1. The issuer's exact display name (never "[Issuer]", "the company", or any placeholder)
-  2. The current deal stage and how many days it has been in that stage
+  2. The current deal stage and exactly how many days the deal has been in that stage — use the
+     "Days in current stage" figure provided; do NOT substitute a duration from the risk signals
   3. If a ROFR deadline exists: the exact date in YYYY-MM-DD format (no month-name alternatives)
-  4. One specific action request with a concrete response timeframe (e.g. "by EOD Friday")
+  4. The exact share count and price-per-share from the deal facts. Use the formatted values
+     provided ("Shares" and "Price per share") verbatim — do not round, paraphrase, or omit.
+  5. One specific action request with a concrete response timeframe (e.g. "by EOD Friday")
 
 FORBIDDEN PHRASES — your output must contain none of these:
   • "I hope this finds you well" / "I hope this email finds you"
@@ -39,9 +42,10 @@ STRUCTURE:
   body: 3–5 sentences. Under 1200 characters total.
   recipient_type: "issuer" | "buyer" | "seller" | "hiive_ts"
 
-OUTPUT VERIFICATION GATE — before returning, answer all three:
+OUTPUT VERIFICATION GATE — before returning, answer all four:
   ✓ Does the body name the issuer exactly as provided?
   ✓ Does the body contain a specific date (not "ASAP")?
+  ✓ Does the body contain the exact share count and exact price-per-share as provided?
   ✓ Is there exactly one clear action request?
   If any answer is no, rewrite the relevant sentence before returning.
 
@@ -52,11 +56,17 @@ _OUTBOUND_HUMAN = """\
 Draft an outbound nudge for deal {deal_id}:
 
 Issuer: {issuer_name}
-Stage: {stage} ({days_in_stage} days)
+Stage: {stage}
+Days in current stage: {days_in_stage}
+Shares: {shares_text}
+Price per share: {price_text}
 {deadline_text}
 Responsible party: {responsible_party}
 Severity: {severity}
-Key risk signals: {trigger_text}{missing_docs_instruction}{deadline_instruction}
+
+Risk signals (each duration below is how long that specific condition has persisted — \
+independent of "Days in current stage" above):
+{trigger_text}{missing_docs_instruction}{deadline_instruction}
 
 Draft a concise, actionable outreach email to the {responsible_party}.\
 """
@@ -75,13 +85,21 @@ def build_outbound_nudge_prompt(
 ) -> dict:
     """Return template_vars dict for use with OUTBOUND_TEMPLATE."""
     triggered = [s for s in signals if s.triggered]
-    trigger_text = "; ".join(f"{s.dimension.value}: {s.evidence[:100]}" for s in triggered)
+    trigger_text = "\n".join(f"  - {s.dimension.value}: {s.evidence}" for s in triggered)
     if snapshot.rofr_deadline and snapshot.days_to_rofr is not None:
         deadline_date = snapshot.rofr_deadline.strftime("%Y-%m-%d")
-        deadline_text = f"ROFR deadline: {deadline_date} ({snapshot.days_to_rofr} days remaining)"
+        d = snapshot.days_to_rofr
+        if d < 0:
+            deadline_text = f"ROFR deadline: {deadline_date} (EXPIRED — passed {abs(d)} day(s) ago)"
+        elif d == 0:
+            deadline_text = f"ROFR deadline: {deadline_date} (expires today)"
+        else:
+            deadline_text = f"ROFR deadline: {deadline_date} ({d} days remaining)"
         deadline_instruction = (
             f"\nREQUIRED: Your email body MUST include the exact deadline date in ISO format: "
             f"{deadline_date} — use this exact format, do not write it as a month name."
+            + ("\nThe deadline HAS ALREADY PASSED — frame the outreach as urgent post-deadline follow-up, "
+               "not as a reminder before expiry." if d < 0 else "")
         )
     else:
         deadline_text = "No ROFR deadline"
@@ -96,11 +114,16 @@ def build_outbound_nudge_prompt(
     else:
         missing_docs_instruction = ""
 
+    shares_text = f"{snapshot.shares:,}" if snapshot.shares else "n/a"
+    price_text = f"${snapshot.price_per_share:.2f}" if snapshot.price_per_share else "n/a"
+
     return {
         "deal_id": snapshot.deal_id,
         "issuer_name": snapshot.issuer_name,
         "stage": snapshot.stage.value,
         "days_in_stage": snapshot.days_in_stage,
+        "shares_text": shares_text,
+        "price_text": price_text,
         "deadline_text": deadline_text,
         "responsible_party": snapshot.responsible_party,
         "severity": severity.severity.value,
@@ -177,7 +200,7 @@ def build_escalation_prompt(
 ) -> dict:
     """Return template_vars dict for use with ESCALATION_TEMPLATE."""
     triggered = [s for s in signals if s.triggered]
-    trigger_text = "; ".join(f"{s.dimension.value}: {s.evidence[:120]}" for s in triggered)
+    trigger_text = "\n".join(f"  - {s.dimension.value}: {s.evidence}" for s in triggered)
     return {
         "deal_id": snapshot.deal_id,
         "issuer_name": snapshot.issuer_name,

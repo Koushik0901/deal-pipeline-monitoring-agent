@@ -49,7 +49,7 @@ setup:
           body: "Palantir legal — ROFR window has opened for the Rivera transfer (12,000 shares at $31.50). Window closes May 14th. Please advise on ROFR election."
       - event_type: comm_inbound
         days_ago: 15
-        summary: Palantir legal citing legal hold — cannot respond for ~2 weeks
+        summary: Response from Palantir legal re ROFR notice
         payload:
           body: "Thank you for the notice. Please be advised that Palantir is currently under a legal hold related to an unrelated matter and our legal team is unable to respond to ROFR or transfer inquiries for approximately two weeks. We will resume normal communications around April 17th and will provide our ROFR election at that time. We have noted the May 14th deadline and it will not be affected."
       - event_type: comm_outbound

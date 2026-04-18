@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
-
 from tests.integration.conftest import seed_deal, seed_issuer
 
 
@@ -13,7 +11,12 @@ def _mock_call_structured(deal_score: float = 0.3):
     """Return a factory that yields a fixed AttentionScore for Haiku screening
     and a minimal SufficiencyDecision + SeverityDecision for the investigator."""
     from hiive_monitor.models.risk import (
-        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
+        AllRiskSignals,
+        AttentionScore,
+        RiskDimension,
+        RiskSignal,
+        Severity,
+        SeverityDecision,
         SufficiencyDecision,
     )
 
@@ -121,7 +124,12 @@ def test_crash_restart_no_duplicate_observations(db_path, monkeypatch):
 
     # Mock LLM to return above-threshold scores so all 5 deals are investigated
     from hiive_monitor.models.risk import (
-        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
+        AllRiskSignals,
+        AttentionScore,
+        RiskDimension,
+        RiskSignal,
+        Severity,
+        SeverityDecision,
         SufficiencyDecision,
     )
 
@@ -145,14 +153,14 @@ def test_crash_restart_no_duplicate_observations(db_path, monkeypatch):
             )
         return None
 
-    import hiive_monitor.agents.monitor as _mon_mod
     import hiive_monitor.agents.investigator as _inv_mod
+    import hiive_monitor.agents.monitor as _mon_mod
     monkeypatch.setattr(_mon_mod, "call_structured", _high_score_mock)
     monkeypatch.setattr(_inv_mod.llm_client, "call_structured", _high_score_mock)
 
     # Reset singletons so the mock takes effect
-    import hiive_monitor.agents.monitor as _mon
     import hiive_monitor.agents.investigator as _inv
+    import hiive_monitor.agents.monitor as _mon
     _mon._monitor_graph = None
     _inv._investigator_graph = None
     _inv._checkpointer = None

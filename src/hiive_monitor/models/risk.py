@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Severity(StrEnum):
@@ -28,7 +28,7 @@ class RiskSignal(BaseModel):
 
     dimension: RiskDimension
     triggered: bool
-    evidence: str = Field(max_length=400)
+    evidence: str
     confidence: float = Field(ge=0.0, le=1.0)
 
 
@@ -45,9 +45,40 @@ class AllRiskSignals(BaseModel):
 class SeverityDecision(BaseModel):
     """Output schema for the decide_severity LLM call."""
 
-    severity: Severity
-    reasoning: str = Field(max_length=600)
+    reasoning: str
     primary_dimensions: list[RiskDimension] = Field(max_length=3)
+    severity: Severity
+
+    @model_validator(mode="after")
+    def verdict_matches_rationale(self) -> SeverityDecision:
+        rationale_lower = self.reasoning.lower()
+        severity_name = self.severity.value.lower()
+
+        severity_keywords = {
+            "escalate": ["verdict: escalate", "verdict is escalate"],
+            "act": ["verdict: act", "verdict is act"],
+            "watch": ["verdict: watch", "verdict is watch"],
+            "informational": ["verdict: informational", "verdict is informational"],
+        }
+
+        last_mentioned = None
+        last_position = -1
+        for sev, keywords in severity_keywords.items():
+            for kw in keywords:
+                pos = rationale_lower.rfind(kw)
+                if pos > last_position:
+                    last_position = pos
+                    last_mentioned = sev
+
+        if last_mentioned is None:
+            return self
+
+        if last_mentioned != severity_name:
+            raise ValueError(
+                f"Rationale concludes '{last_mentioned}' but severity "
+                f"field is '{severity_name}' — drift detected"
+            )
+        return self
 
 
 class AttentionScore(BaseModel):
@@ -55,12 +86,12 @@ class AttentionScore(BaseModel):
 
     deal_id: str
     score: float = Field(ge=0.0, le=1.0)
-    reason: str = Field(max_length=240)
+    reason: str
 
 
 class SufficiencyDecision(BaseModel):
     """Output schema for N3 assess_sufficiency node (agentic loop control)."""
 
     sufficient: bool
-    rationale: str = Field(max_length=300)
+    rationale: str
     tool_to_call: str | None = None  # one of the four enrichment tool names, or None

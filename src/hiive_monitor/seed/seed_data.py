@@ -716,6 +716,7 @@ def seed(reset: bool = False) -> None:
 
     init_domain_db()
     conn = get_domain_conn()
+    conn.execute("PRAGMA foreign_keys = OFF")
 
     for issuer in ISSUERS:
         dao.insert_issuer(conn, issuer)

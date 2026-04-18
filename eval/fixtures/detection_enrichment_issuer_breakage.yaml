@@ -31,14 +31,14 @@ setup:
     shares: 3500
     price_per_share: 48.00
     stage: docs_pending
-    stage_entered_days_ago: 8
+    stage_entered_days_ago: 10
     responsible_party: buyer
     risk_factors:
       is_first_time_buyer: false
       prior_breakage_count: 1
     events:
       - event_type: comm_outbound
-        days_ago: 8
+        days_ago: 10
         summary: Transfer docs sent
         payload:
           body: "Hi, please review and sign the Databricks transfer documents attached."
@@ -54,10 +54,10 @@ setup:
           body: "Got the docs. We may need a few more days."
 
 assertions:
-  severity_gte: act
+  severity_gte: escalate
 
 ground_truth:
-  severity: act
+  severity: escalate
   dimensions_triggered:
     - stage_aging
     - unusual_characteristics
@@ -65,5 +65,6 @@ ground_truth:
     - deadline_proximity
     - communication_silence
     - missing_prerequisites
-  expected_tools: []
+  expected_tools:
+    - fetch_prior_observations
 
