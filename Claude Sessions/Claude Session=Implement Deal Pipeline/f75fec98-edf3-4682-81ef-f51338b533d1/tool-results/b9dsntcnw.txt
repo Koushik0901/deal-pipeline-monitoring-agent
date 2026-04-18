@@ -1,0 +1,780 @@
+ src/hiive_monitor/agents/monitor.py                | 111 ++++++++++++----
+ src/hiive_monitor/config.py                        |   2 +
+ src/hiive_monitor/db/dao.py                        | 109 +++++++++++++++-
+ src/hiive_monitor/db/migrations.py                 |  20 +++
+ src/hiive_monitor/web/routes/main.py               |  76 +++++++++++
+ .../web/templates/_all_open_list.html              |  22 +++-
+ src/hiive_monitor/web/templates/_macros.html       |  42 +++++-
+ src/hiive_monitor/web/templates/brief.html         |  29 ++++-
+ src/hiive_monitor/web/templates/deal_detail.html   |   5 +
+ tests/integration/test_portfolio_patterns.py       | 144 +++++++++++++++++++++
+ 10 files changed, 526 insertions(+), 34 deletions(-)
+---
+diff --git a/src/hiive_monitor/agents/monitor.py b/src/hiive_monitor/agents/monitor.py
+index d47ec4d..bed1194 100644
+--- a/src/hiive_monitor/agents/monitor.py
++++ b/src/hiive_monitor/agents/monitor.py
+@@ -17,7 +17,7 @@ from __future__ import annotations
+ 
+ import json
+ import uuid
+-from concurrent.futures import ThreadPoolExecutor, as_completed
++from concurrent.futures import ThreadPoolExecutor, wait
+ from datetime import UTC
+ 
+ from langgraph.graph import END, START, StateGraph
+@@ -183,16 +183,23 @@ def screen_with_SLM(state: MonitorState) -> dict:
+     scores: dict[str, float] = {}
+     errors: list[ErrorRecord] = []
+ 
+-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+-        futures = {
+-            pool.submit(_screen_one_deal, deal, tick_id, settings.slm_model): deal["deal_id"]
+-            for deal in deals_to_screen
+-        }
+-        for future in as_completed(futures):
+-            deal_id, score, error = future.result()
+-            scores[deal_id] = score
+-            if error:
+-                errors.append(error)
++    _SCREEN_TIMEOUT = 45.0
++    pool = ThreadPoolExecutor(max_workers=max_workers)
++    futures = {
++        pool.submit(_screen_one_deal, deal, tick_id, settings.slm_model): deal["deal_id"]
++        for deal in deals_to_screen
++    }
++    done, pending = wait(futures, timeout=_SCREEN_TIMEOUT)
++    pool.shutdown(wait=False, cancel_futures=True)
++    for future in pending:
++        deal_id = futures[future]
++        log_module.get_logger().warning("monitor.screen_timeout", deal_id=deal_id, tick_id=tick_id)
++        scores[deal_id] = 0.0
++    for future in done:
++        deal_id, score, error = future.result()
++        scores[deal_id] = score
++        if error:
++            errors.append(error)
+ 
+     log_module.get_logger().info(
+         "monitor.screened", tick_id=tick_id, count=len(scores), workers=max_workers
+@@ -311,17 +318,23 @@ def fan_out_investigators(state: MonitorState) -> dict:
+     results: list[InvestigatorResult] = []
+     errors: list[ErrorRecord] = []
+ 
+-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+-        futures = {
+-            pool.submit(_investigate_one_deal, deal, tick_id, graph): deal["deal_id"]
+-            for deal in deals_to_investigate
+-        }
+-        for future in as_completed(futures):
+-            result, error = future.result()
+-            if result:
+-                results.append(result)
+-            if error:
+-                errors.append(error)
++    _INVESTIGATE_TIMEOUT = 120.0
++    pool = ThreadPoolExecutor(max_workers=max_workers)
++    futures = {
++        pool.submit(_investigate_one_deal, deal, tick_id, graph): deal["deal_id"]
++        for deal in deals_to_investigate
++    }
++    done, pending = wait(futures, timeout=_INVESTIGATE_TIMEOUT)
++    pool.shutdown(wait=False, cancel_futures=True)
++    for future in pending:
++        deal_id = futures[future]
++        log_module.get_logger().warning("monitor.investigate_timeout", deal_id=deal_id, tick_id=tick_id)
++    for future in done:
++        result, error = future.result()
++        if result:
++            results.append(result)
++        if error:
++            errors.append(error)
+ 
+     log_module.get_logger().info(
+         "monitor.investigators_complete",
+@@ -363,6 +376,56 @@ def close_tick(state: MonitorState) -> dict:
+     return {}
+ 
+ 
++def detect_portfolio_patterns(state: MonitorState) -> dict:
++    """
++    Deterministic portfolio-level anomaly detection.
++
++    Groups live deals by (issuer_id, stage) and compares each cluster's size
++    to its 3-tick rolling average from prior observations. Clusters exceeding
++    2× the average are flagged and stored as JSON in ticks.signals.
++    """
++    if not get_settings().enable_ts09_portfolio_patterns:
++        return {}
++
++    tick_id = state["tick_id"]
++    live_deals = state.get("live_deals", [])
++
++    # Build current cluster counts from live deals this tick
++    current_clusters: dict[tuple[str, str], int] = {}
++    for deal in live_deals:
++        key = (deal["issuer_id"], deal["stage"])
++        current_clusters[key] = current_clusters.get(key, 0) + 1
++
++    conn = get_domain_conn()
++    prior_tick_ids = dao.get_last_n_completed_tick_ids(conn, 3, exclude_tick_id=tick_id)
++    rolling_avg = dao.get_cluster_observation_counts(conn, prior_tick_ids)
++
++    signals = []
++    for (issuer_id, stage), current_count in current_clusters.items():
++        avg = rolling_avg.get((issuer_id, stage), 0.0)
++        if avg > 0 and current_count > 2 * avg:
++            signals.append({
++                "issuer_id": issuer_id,
++                "stage": stage,
++                "current_count": current_count,
++                "rolling_avg": round(avg, 1),
++                "ratio": round(current_count / avg, 1),
++            })
++
++    signals.sort(key=lambda s: s["ratio"], reverse=True)
++
++    if signals:
++        dao.set_tick_signals(conn, tick_id, signals)
++        log_module.get_logger().info(
++            "monitor.portfolio_patterns",
++            tick_id=tick_id,
++            signals_count=len(signals),
++        )
++
++    conn.close()
++    return {}
++
++
+ # ── Graph construction ────────────────────────────────────────────────────────
+ 
+ 
+@@ -374,6 +437,7 @@ def build_monitor_graph():
+     g.add_node("select_investigation_queue", select_investigation_queue)
+     g.add_node("fan_out_investigators", fan_out_investigators)
+     g.add_node("close_tick", close_tick)
++    g.add_node("detect_portfolio_patterns", detect_portfolio_patterns)
+ 
+     g.add_edge(START, "load_live_deals")
+     g.add_edge("load_live_deals", "screen_with_SLM")
+@@ -381,7 +445,8 @@ def build_monitor_graph():
+     g.add_edge("apply_suppression", "select_investigation_queue")
+     g.add_edge("select_investigation_queue", "fan_out_investigators")
+     g.add_edge("fan_out_investigators", "close_tick")
+-    g.add_edge("close_tick", END)
++    g.add_edge("close_tick", "detect_portfolio_patterns")
++    g.add_edge("detect_portfolio_patterns", END)
+ 
+     return g.compile()
+ 
+diff --git a/src/hiive_monitor/config.py b/src/hiive_monitor/config.py
+index 2c8eaf1..29feab8 100644
+--- a/src/hiive_monitor/config.py
++++ b/src/hiive_monitor/config.py
+@@ -40,6 +40,8 @@ class Settings(BaseSettings):
+ 
+     # Feature flags
+     enable_ts06_doc_tracking: bool = False  # TS06: document collection tracking
++    enable_ts09_portfolio_patterns: bool = True  # TS09: portfolio-level cluster detection
++    enable_ts10_snooze: bool = True  # TS10: analyst deal snooze
+ 
+     # LLM limits
+     llm_timeout_seconds: float = 30.0
+diff --git a/src/hiive_monitor/db/dao.py b/src/hiive_monitor/db/dao.py
+index ff85819..721d03f 100644
+--- a/src/hiive_monitor/db/dao.py
++++ b/src/hiive_monitor/db/dao.py
+@@ -17,13 +17,49 @@ from hiive_monitor import clock as clk
+ 
+ 
+ def get_live_deals(conn: sqlite3.Connection) -> list[dict]:
+-    """Return all deals not in settled or broken stage."""
+-    rows = conn.execute(
+-        "SELECT * FROM deals WHERE stage NOT IN ('settled', 'broken') ORDER BY stage_entered_at"
+-    ).fetchall()
++    """Return all active deals, excluding settled/broken and currently snoozed ones."""
++    now = clk.now().isoformat()
++    try:
++        rows = conn.execute(
++            """SELECT * FROM deals
++               WHERE stage NOT IN ('settled', 'broken')
++                 AND (snoozed_until IS NULL OR snoozed_until < ?)
++               ORDER BY stage_entered_at""",
++            (now,),
++        ).fetchall()
++    except sqlite3.OperationalError:
++        # snoozed_until column not yet migrated — run without snooze filter
++        rows = conn.execute(
++            "SELECT * FROM deals WHERE stage NOT IN ('settled', 'broken') ORDER BY stage_entered_at"
++        ).fetchall()
+     return [dict(r) for r in rows]
+ 
+ 
++def snooze_deal(
++    conn: sqlite3.Connection,
++    deal_id: str,
++    hours: int,
++    reason: str,
++) -> None:
++    """Set snoozed_until on a deal and record an audit event."""
++    from datetime import timedelta
++
++    snooze_until = (clk.now() + timedelta(hours=hours)).isoformat()
++    conn.execute(
++        "UPDATE deals SET snoozed_until = ?, snooze_reason = ? WHERE deal_id = ?",
++        (snooze_until, reason, deal_id),
++    )
++    insert_event(
++        conn,
++        deal_id=deal_id,
++        event_type="snooze_created",
++        occurred_at=clk.now(),
++        summary=f"Snoozed for {hours}h: {reason}",
++        payload={"hours": hours, "reason": reason, "snoozed_until": snooze_until},
++    )
++    conn.commit()
++
++
+ def get_deal(conn: sqlite3.Connection, deal_id: str) -> dict | None:
+     row = conn.execute("SELECT * FROM deals WHERE deal_id = ?", (deal_id,)).fetchone()
+     return dict(row) if row else None
+@@ -118,6 +154,56 @@ def get_last_completed_tick(conn: sqlite3.Connection) -> dict | None:
+     return dict(row) if row else None
+ 
+ 
++def get_last_n_completed_tick_ids(
++    conn: sqlite3.Connection,
++    n: int,
++    exclude_tick_id: str | None = None,
++) -> list[str]:
++    """Return up to n most-recent completed tick_ids, optionally excluding one."""
++    rows = conn.execute(
++        "SELECT tick_id FROM ticks WHERE tick_completed_at IS NOT NULL ORDER BY tick_started_at DESC LIMIT ?",
++        (n + 1,),
++    ).fetchall()
++    ids = [r["tick_id"] for r in rows if r["tick_id"] != exclude_tick_id]
++    return ids[:n]
++
++
++def get_cluster_observation_counts(
++    conn: sqlite3.Connection,
++    tick_ids: list[str],
++) -> dict[tuple[str, str], float]:
++    """Return rolling-average deal count per (issuer_id, stage) for the given tick_ids."""
++    if not tick_ids:
++        return {}
++    placeholders = ",".join("?" * len(tick_ids))
++    rows = conn.execute(
++        f"""SELECT o.tick_id, d.issuer_id, d.stage, COUNT(DISTINCT o.deal_id) AS cnt
++            FROM agent_observations o
++            JOIN deals d ON d.deal_id = o.deal_id
++            WHERE o.tick_id IN ({placeholders})
++            GROUP BY o.tick_id, d.issuer_id, d.stage""",
++        tick_ids,
++    ).fetchall()
++    totals: dict[tuple[str, str], int] = {}
++    for r in rows:
++        key = (r["issuer_id"], r["stage"])
++        totals[key] = totals.get(key, 0) + r["cnt"]
++    n = len(tick_ids)
++    return {k: v / n for k, v in totals.items()}
++
++
++def set_tick_signals(conn: sqlite3.Connection, tick_id: str, signals: list[dict]) -> None:
++    """Persist portfolio pattern signals on the tick row (graceful no-op if column absent)."""
++    try:
++        conn.execute(
++            "UPDATE ticks SET signals = ? WHERE tick_id = ?",
++            (json.dumps(signals), tick_id),
++        )
++        conn.commit()
++    except sqlite3.OperationalError:
++        pass  # signals column not yet migrated
++
++
+ # ── Agent Observations ────────────────────────────────────────────────────────
+ 
+ 
+@@ -260,6 +346,21 @@ def get_open_interventions(conn: sqlite3.Connection) -> list[dict]:
+     return [dict(r) for r in rows]
+ 
+ 
++def get_pending_interventions_by_severity(
++    conn: sqlite3.Connection, severity: str
++) -> list[dict]:
++    """Pending interventions for a specific severity level — used by batch-approve."""
++    rows = conn.execute(
++        """SELECT i.*
++           FROM interventions i
++           LEFT JOIN agent_observations o ON o.observation_id = i.observation_id
++           WHERE i.status = 'pending' AND o.severity = ?
++           ORDER BY i.created_at""",
++        (severity,),
++    ).fetchall()
++    return [dict(r) for r in rows]
++
++
+ # ── Enrichment tool functions (read-only, called by N4 enrich_context) ─────
+ 
+ 
+diff --git a/src/hiive_monitor/db/migrations.py b/src/hiive_monitor/db/migrations.py
+index 5d0b2b8..c5b0d51 100644
+--- a/src/hiive_monitor/db/migrations.py
++++ b/src/hiive_monitor/db/migrations.py
+@@ -29,4 +29,24 @@ def stretch_migrations() -> None:
+         except sqlite3.OperationalError:
+             pass  # column already exists — idempotent
+ 
++    if settings.enable_ts09_portfolio_patterns:
++        try:
++            conn.execute("ALTER TABLE ticks ADD COLUMN signals TEXT")
++            conn.commit()
++            log.info("migration.ts09.applied", column="signals")
++        except sqlite3.OperationalError:
++            pass  # column already exists — idempotent
++
++    if settings.enable_ts10_snooze:
++        for col, defn in [
++            ("snoozed_until", "TEXT"),
++            ("snooze_reason", "TEXT"),
++        ]:
++            try:
++                conn.execute(f"ALTER TABLE deals ADD COLUMN {col} {defn}")
++                conn.commit()
++                log.info("migration.ts10.applied", column=col)
++            except sqlite3.OperationalError:
++                pass  # column already exists — idempotent
++
+     conn.close()
+diff --git a/src/hiive_monitor/web/routes/main.py b/src/hiive_monitor/web/routes/main.py
+index 36c29c5..6b2ce84 100644
+--- a/src/hiive_monitor/web/routes/main.py
++++ b/src/hiive_monitor/web/routes/main.py
+@@ -69,6 +69,13 @@ async def daily_brief(request: Request, debug: str = ""):
+             "reasoning_summary": reasoning.get("severity_rationale", ""),
+             "dimensions_triggered": reasoning.get("dimensions_triggered", []),
+         })
++    portfolio_signals = []
++    if tick and tick.get("signals"):
++        try:
++            portfolio_signals = json.loads(tick["signals"])
++        except (ValueError, TypeError):
++            pass
++
+     conn.close()
+ 
+     return _templates().TemplateResponse(
+@@ -79,6 +86,7 @@ async def daily_brief(request: Request, debug: str = ""):
+             "now": clk.now().isoformat(),
+             "debug": debug == "1",
+             "clock_mode": get_settings().clock_mode,
++            "portfolio_signals": portfolio_signals,
+         },
+     )
+ 
+@@ -123,6 +131,38 @@ async def dismiss_intervention(request: Request, intervention_id: str):
+     return resp
+ 
+ 
++@router.post("/interventions/batch-approve")
++async def batch_approve_interventions(
++    request: Request,
++    severity_filter: str = Form("watch"),
++):
++    from hiive_monitor import clock as clk
++
++    if severity_filter not in ("watch",):
++        raise HTTPException(status_code=400, detail="Batch approve is limited to watch severity")
++
++    conn = get_domain_conn()
++    pending = dao.get_pending_interventions_by_severity(conn, severity_filter)
++
++    approved_ids = []
++    for iv in pending:
++        try:
++            dao.approve_intervention_atomic(conn, iv["intervention_id"], simulated_timestamp=clk.now())
++            approved_ids.append(iv["intervention_id"])
++        except Exception:
++            log.warning("batch_approve.skip", intervention_id=iv["intervention_id"])
++
++    conn.close()
++
++    resp = HTMLResponse(
++        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">'
++        f'Approved {len(approved_ids)} watch intervention{"s" if len(approved_ids) != 1 else ""}.'
++        f'</div>',
++    )
++    resp.headers["HX-Trigger"] = "refreshBriefList, refreshStats"
++    return resp
++
++
+ @router.post("/interventions/{intervention_id}/confirm-edit")
+ async def confirm_edit(request: Request, intervention_id: str, final_text: str = Form(...)):
+     from hiive_monitor import clock as clk
+@@ -145,6 +185,42 @@ async def confirm_edit(request: Request, intervention_id: str, final_text: str =
+     )
+ 
+ 
++# ── Deal snooze ───────────────────────────────────────────────────────────────
++
++
++@router.post("/deals/{deal_id}/snooze")
++async def snooze_deal(
++    request: Request,
++    deal_id: str,
++    hours: int = Form(48),
++    reason: str = Form(...),
++):
++    from hiive_monitor.config import get_settings
++
++    if not get_settings().enable_ts10_snooze:
++        raise HTTPException(status_code=403, detail="Snooze feature not enabled")
++
++    conn = get_domain_conn()
++    deal = dao.get_deal(conn, deal_id)
++    if not deal:
++        conn.close()
++        raise HTTPException(status_code=404, detail="Deal not found")
++
++    dao.snooze_deal(conn, deal_id, hours=hours, reason=reason)
++    conn.close()
++
++    from hiive_monitor import clock as clk
++    from datetime import timedelta
++    until = (clk.now() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M")
++    resp = HTMLResponse(
++        f'<div class="px-4 py-2 text-[0.6875rem] text-on-surface-variant">'
++        f'Snoozed {deal_id} until {until} \u2014 {reason}'
++        f'</div>'
++    )
++    resp.headers["HX-Trigger"] = "refreshStats"
++    return resp
++
++
+ # ── Deal detail ───────────────────────────────────────────────────────────────
+ 
+ 
+diff --git a/src/hiive_monitor/web/templates/_all_open_list.html b/src/hiive_monitor/web/templates/_all_open_list.html
+index 073d109..e966cff 100644
+--- a/src/hiive_monitor/web/templates/_all_open_list.html
++++ b/src/hiive_monitor/web/templates/_all_open_list.html
+@@ -1,14 +1,15 @@
+ {% from "_macros.html" import intervention_row %}
++{% set watch_count = items | selectattr('severity', 'equalto', 'watch') | list | length %}
+ <div x-data="{
+   severity: '',
+   severities: {{ items | map(attribute='severity') | list | tojson }},
+   get noResults() {
+-    return this.severities.length > 0 && !this.severities.some(s => this.severity === '' || s === this.severity);
++    return this.severities.length &gt; 0 && !this.severities.some(s =&gt; this.severity === '' || s === this.severity);
+   }
+ }">
+ 
+-  <!-- Filter chips -->
+-  <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60">
++  <!-- Filter chips + batch action -->
++  <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60 flex-wrap">
+     <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest mr-1">Filter</span>
+     {% for chip in [('', 'All'), ('escalate', 'Escalate'), ('act', 'Act'), ('watch', 'Watch')] %}
+     <button
+@@ -19,6 +20,21 @@
+       class="inline-flex items-center px-2 py-0.5 rounded-[4px] border-[0.5px] text-[0.625rem] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-container"
+     >{{ chip[1] }}</button>
+     {% endfor %}
++
++    {% if watch_count > 0 %}
++    <div class="ml-auto" id="batch-approve-result">
++      <button
++        type="button"
++        hx-post="/interventions/batch-approve"
++        hx-vals='{"severity_filter": "watch"}'
++        hx-target="#batch-approve-result"
++        hx-swap="outerHTML"
++        hx-confirm="Approve all {{ watch_count }} watch intervention{{ 's' if watch_count != 1 else '' }}? This will send outreach for each."
++        hx-on::after-request="if(event.detail.successful) { htmx.trigger(document.body, 'refreshBriefList') }"
++        class="inline-flex items-center px-2.5 py-0.5 rounded-[4px] border-[0.5px] border-tertiary/30 bg-tertiary-fixed text-tertiary text-[0.625rem] font-medium hover:bg-tertiary/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-tertiary"
++      >Approve all Watch ({{ watch_count }})</button>
++    </div>
++    {% endif %}
+   </div>
+ 
+   <!-- Item list -->
+diff --git a/src/hiive_monitor/web/templates/_macros.html b/src/hiive_monitor/web/templates/_macros.html
+index 9d617a0..9ac8ed8 100644
+--- a/src/hiive_monitor/web/templates/_macros.html
++++ b/src/hiive_monitor/web/templates/_macros.html
+@@ -1,6 +1,6 @@
+ {% macro intervention_row(item) %}
+ <div id="iv-{{ item.intervention_id }}"
+-     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }} }'
++     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }}, snoozing: false, snoozeHours: 48, snoozeReason: "" }'
+      class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
+ 
+   <!-- Compact summary row — click/keyboard to expand -->
+@@ -130,6 +130,13 @@
+         class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+       >Dismiss</button>
+ 
++      <button
++        type="button"
++        x-on:click.stop="snoozing = !snoozing"
++        :aria-expanded="snoozing"
++        class="rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
++      >Snooze</button>
++
+       <button
+         type="button"
+         x-on:click.stop="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
+@@ -137,6 +144,39 @@
+       >Copy</button>
+ 
+     </div>
++
++    <!-- Snooze inline form -->
++    <div x-show="snoozing" x-cloak class="border-t-[0.5px] border-outline-variant/50 pt-3 mt-1">
++      <div class="flex items-center gap-2 flex-wrap">
++        <span class="text-[0.6875rem] text-on-surface-variant shrink-0">Snooze for</span>
++        <input
++          type="number"
++          x-model.number="snoozeHours"
++          min="1" max="168"
++          aria-label="Snooze hours"
++          class="w-14 rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1 text-[0.75rem] text-center text-on-surface bg-surface focus:outline-none focus:border-primary-container transition-colors"
++        />
++        <span class="text-[0.6875rem] text-on-surface-variant shrink-0">hours —</span>
++        <input
++          type="text"
++          x-model="snoozeReason"
++          placeholder="reason (required)"
++          aria-label="Snooze reason"
++          class="flex-1 min-w-[10rem] rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1 text-[0.75rem] text-on-surface bg-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container transition-colors"
++        />
++        <button
++          type="button"
++          :disabled="!snoozeReason.trim()"
++          hx-post="/deals/{{ item.deal_id }}/snooze"
++          :hx-vals='JSON.stringify({ hours: snoozeHours, reason: snoozeReason })'
++          hx-target="#iv-{{ item.intervention_id }}"
++          hx-swap="outerHTML"
++          hx-on::after-request="if(event.detail.successful) announceAction('Deal snoozed.')"
++          class="rounded-[4px] bg-surface-container px-3 py-1 text-[0.75rem] font-medium text-on-surface-variant border-[0.5px] border-outline-variant hover:text-on-surface hover:border-outline transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
++        >Confirm snooze</button>
++      </div>
++    </div>
++
+   </div>
+ 
+ </div>
+diff --git a/src/hiive_monitor/web/templates/brief.html b/src/hiive_monitor/web/templates/brief.html
+index 36ad723..6a9cef1 100644
+--- a/src/hiive_monitor/web/templates/brief.html
++++ b/src/hiive_monitor/web/templates/brief.html
+@@ -13,6 +13,31 @@
+   <!-- ── Left: main intervention list ── -->
+   <div class="flex-1 min-w-0">
+ 
++    <!-- Portfolio signals -->
++    {% if portfolio_signals %}
++    <details class="mb-4 group border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden" open>
++      <summary class="flex items-center justify-between px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 cursor-pointer select-none list-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container">
++        <div class="flex items-center gap-2">
++          <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Portfolio signals</span>
++          <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-tertiary-fixed text-tertiary text-[0.5625rem] font-bold">{{ portfolio_signals | length }}</span>
++        </div>
++        <span class="text-[0.6875rem] text-on-surface-variant font-mono group-open:rotate-180 transition-transform" aria-hidden="true">↓</span>
++      </summary>
++      <div class="divide-y-[0.5px] divide-outline-variant/50">
++        {% for sig in portfolio_signals %}
++        <div class="flex items-center gap-3 px-4 py-2.5">
++          <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.5625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap tabular-nums">{{ sig.ratio }}×</span>
++          <div class="min-w-0">
++            <span class="text-[0.8125rem] font-semibold text-on-surface">{{ sig.issuer_id | upper }}</span>
++            <span class="ml-2 text-[0.6875rem] text-on-surface-variant">{{ sig.stage | replace('_', ' ') }}</span>
++          </div>
++          <span class="ml-auto text-[0.6875rem] text-on-surface-variant tabular-nums whitespace-nowrap">{{ sig.current_count }} deals (avg {{ sig.rolling_avg }})</span>
++        </div>
++        {% endfor %}
++      </div>
++    </details>
++    {% endif %}
++
+     <!-- Section header -->
+     <div class="flex items-baseline justify-between mb-4">
+       <h1 class="text-[0.9375rem] font-semibold text-on-surface tracking-tight">Today's priorities</h1>
+@@ -33,9 +58,7 @@
+ 
+     <!-- Tabs + dense intervention table -->
+     <div id="brief-list"
+-      {% if clock_mode == 'real_time' %}
+-      hx-get="/brief" hx-trigger="every 30s" hx-swap="innerHTML" hx-select="#brief-list"
+-      {% endif %}>
++      hx-get="/brief" hx-trigger="tickComplete from:body{% if clock_mode == 'real_time' %}, every 30s{% endif %}" hx-swap="innerHTML" hx-select="#brief-list">
+     <div x-data="{ tab: 'brief' }">
+ 
+       <!-- Tab bar -->
+diff --git a/src/hiive_monitor/web/templates/deal_detail.html b/src/hiive_monitor/web/templates/deal_detail.html
+index fb47af8..a03058e 100644
+--- a/src/hiive_monitor/web/templates/deal_detail.html
++++ b/src/hiive_monitor/web/templates/deal_detail.html
+@@ -37,6 +37,11 @@
+       {% if deal.rofr_deadline %}
+         <span class="text-[0.6875rem] text-on-surface-variant">ROFR: {{ deal.rofr_deadline[:10] }}</span>
+       {% endif %}
++      {% if deal.snoozed_until %}
++        <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">
++          Snoozed until {{ deal.snoozed_until[:16] }}{% if deal.snooze_reason %} — {{ deal.snooze_reason }}{% endif %}
++        </span>
++      {% endif %}
+     </div>
+   </div>
+   <div class="flex items-center gap-3 flex-shrink-0 mt-0.5">
+diff --git a/tests/integration/test_portfolio_patterns.py b/tests/integration/test_portfolio_patterns.py
+new file mode 100644
+index 0000000..7a1b539
+--- /dev/null
++++ b/tests/integration/test_portfolio_patterns.py
+@@ -0,0 +1,144 @@
++"""Integration tests for TS09 portfolio-level pattern detection."""
++
++from __future__ import annotations
++
++import json
++import uuid
++
++import pytest
++
++from tests.integration.conftest import seed_deal, seed_issuer, seed_tick
++
++
++def _mock_call_structured(deal_score: float = 0.3):
++    from hiive_monitor.models.risk import (
++        AllRiskSignals, AttentionScore, RiskDimension, RiskSignal, Severity, SeverityDecision,
++        SufficiencyDecision,
++    )
++
++    def _call(*, output_model, model, tick_id, deal_id, call_name,
++              prompt="", system="", timeout=30.0, template=None, template_vars=None):
++        if output_model is AttentionScore:
++            return AttentionScore(deal_id=deal_id, score=deal_score, reason="mock")
++        if output_model is SufficiencyDecision:
++            return SufficiencyDecision(sufficient=True, rationale="mock", tool_to_call=None)
++        if output_model is SeverityDecision:
++            return SeverityDecision(
++                severity=Severity.INFORMATIONAL, reasoning="mock", primary_dimensions=[],
++            )
++        if output_model is AllRiskSignals:
++            def _sig(dim):
++                return RiskSignal(dimension=dim, triggered=False, evidence="mock", confidence=0.1)
++            return AllRiskSignals(
++                stage_aging=_sig(RiskDimension.STAGE_AGING),
++                deadline_proximity=_sig(RiskDimension.DEADLINE_PROXIMITY),
++                communication_silence=_sig(RiskDimension.COMMUNICATION_SILENCE),
++                missing_prerequisites=_sig(RiskDimension.MISSING_PREREQUISITES),
++                unusual_characteristics=_sig(RiskDimension.UNUSUAL_CHARACTERISTICS),
++            )
++        return None
++
++    return _call
++
++
++def _seed_prior_observation(conn, tick_id: str, deal_id: str) -> None:
++    """Seed an observation row for a past tick (simulates prior cluster activity)."""
++    conn.execute(
++        """INSERT OR IGNORE INTO agent_observations
++           (observation_id, tick_id, deal_id, observed_at, severity,
++            dimensions_evaluated, reasoning, intervention_id)
++           VALUES (?, ?, ?, datetime('now', '-1 day'), 'informational', '[]', '{}', NULL)""",
++        (str(uuid.uuid4()), tick_id, deal_id),
++    )
++    conn.commit()
++
++
++def test_portfolio_pattern_flagged_on_cluster_spike(db_path, monkeypatch):
++    """
++    When the current tick has more deals in a cluster than 2× the 3-tick rolling
++    average, detect_portfolio_patterns writes a signals entry to the tick row.
++    """
++    path, conn = db_path
++
++    import hiive_monitor.llm.client as llm_mod
++    from hiive_monitor.agents.monitor import run_tick
++
++    monkeypatch.setattr(llm_mod, "call_structured", _mock_call_structured(0.3))
++
++    # Apply TS09 migration so signals column exists
++    try:
++        conn.execute("ALTER TABLE ticks ADD COLUMN signals TEXT")
++        conn.commit()
++    except Exception:
++        pass
++
++    # Seed issuer and 3 live deals in the same (issuer, stage) cluster
++    seed_issuer(conn, "I-STRIPE", "Stripe")
++    for i in range(3):
++        seed_deal(conn, f"D-STRIPE-{i}", issuer_id="I-STRIPE", stage="rofr_pending", days_in_stage=5)
++
++    # Seed 3 prior completed ticks, each with 1 observation on the same cluster
++    for j in range(3):
++        prior_tid = f"PRIOR-TICK-{j:04d}"
++        seed_tick(conn, prior_tid)
++        _seed_prior_observation(conn, prior_tid, f"D-STRIPE-{j % 3}")
++
++    # Run current tick
++    tid = run_tick(mode="simulated")
++
++    # Fetch the completed tick and check signals
++    from hiive_monitor.db.connection import get_domain_conn
++    c = get_domain_conn()
++    try:
++        row = c.execute("SELECT signals FROM ticks WHERE tick_id = ?", (tid,)).fetchone()
++    except Exception:
++        pytest.skip("signals column not present (migration not run in test env)")
++        return
++    finally:
++        c.close()
++
++    # signals may be None if column didn't exist (graceful fallback)
++    if row is None or row["signals"] is None:
++        pytest.skip("signals column absent — stretch migration not applied in this env")
++        return
++
++    signals = json.loads(row["signals"])
++    assert len(signals) >= 1, "Expected at least one portfolio signal"
++
++    stripe_sig = next((s for s in signals if s["issuer_id"] == "I-STRIPE"), None)
++    assert stripe_sig is not None, "Expected a signal for I-STRIPE cluster"
++    assert stripe_sig["current_count"] == 3
++    assert stripe_sig["ratio"] >= 2.0
++
++
++def test_portfolio_pattern_no_signal_when_no_prior_ticks(db_path, monkeypatch):
++    """
++    With zero prior ticks, rolling avg is 0 for all clusters, so no signals fire.
++    The tick row should have NULL or empty signals.
++    """
++    path, conn = db_path
++
++    import hiive_monitor.llm.client as llm_mod
++    from hiive_monitor.agents.monitor import run_tick
++
++    monkeypatch.setattr(llm_mod, "call_structured", _mock_call_structured(0.3))
++
++    seed_issuer(conn, "I-STRIPE", "Stripe")
++    seed_deal(conn, "D-STRIPE-0", issuer_id="I-STRIPE", stage="rofr_pending", days_in_stage=5)
++
++    tid = run_tick(mode="simulated")
++
++    from hiive_monitor.db.connection import get_domain_conn
++    c = get_domain_conn()
++    try:
++        row = c.execute("SELECT signals FROM ticks WHERE tick_id = ?", (tid,)).fetchone()
++    except Exception:
++        return  # column absent, graceful — test passes
++    finally:
++        c.close()
++
++    if row is None:
++        return
++
++    signals = json.loads(row["signals"]) if row["signals"] else []
++    assert signals == [], f"Expected no signals with no prior ticks, got: {signals}"

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # LLM models — OpenRouter format (provider/model); swap via SLM_MODEL / LLM_MODEL in .env
     slm_model: str = "google/gemma-4-31b-it"
-    llm_model: str = "qwen/qwen3.6-plus"
+    llm_model: str = "anthropic/claude-sonnet-4.6:exacto"
 
     # Feature flags
     enable_ts06_doc_tracking: bool = False  # TS06: document collection tracking

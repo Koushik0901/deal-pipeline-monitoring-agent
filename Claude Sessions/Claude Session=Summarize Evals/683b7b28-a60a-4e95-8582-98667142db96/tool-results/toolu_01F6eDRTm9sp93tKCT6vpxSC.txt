@@ -1,0 +1,252 @@
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-35-    days_in_stage = max(0, _days_between(now, stage_entered))
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-36-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-37-    typical = issuer.get("typical_response_days") or 5
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:38:    stage_aging_ratio = days_in_stage / typical if typical else 0.0
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-39-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-40-    days_to_rofr: int | None = None
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-41-    if deal.get("rofr_deadline"):
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-57-    return {
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-58-        "days_in_stage": days_in_stage,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-59-        "typical_response_days": typical,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:60:        "stage_aging_ratio": round(stage_aging_ratio, 2),
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-61-        "days_to_rofr": days_to_rofr,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-62-        "days_since_last_inbound": days_since_last_inbound,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-63-        "prior_breakage_count": prior_breakage,
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-75-    reasons: list[str] = []
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-76-    triggered_dims = 0
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-77-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:78:    ratio = signals["stage_aging_ratio"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-79-    typical = signals["typical_response_days"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-80-    silence = signals["days_since_last_inbound"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-81-    deadline = signals["days_to_rofr"]
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-85-    multi_layer = signals["multi_layer_rofr"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-86-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-87-    # Dimension triggers (match severity.py thresholds)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:88:    stage_aging_triggered = ratio >= 1.5
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:89:    stage_aging_act_level = ratio >= 2.0
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:90:    if stage_aging_triggered:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-91-        triggered_dims += 1
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:92:        reasons.append(f"stage aging {ratio}\u00d7 baseline ({typical}d norm)")
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-93-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-94-    silence_triggered = silence is not None and silence >= 2 * typical
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-95-    if silence_triggered:
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-126-    # ── ESCALATE rules (severity.py rules 1-3) ───────────────────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-127-    if deadline_short or deadline_expired:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-128-        return {"tier": "escalate", "score": 1.0, "reasons": reasons}
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:129:    if prior_breakage >= 1 and stage_aging_act_level:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-130-        return {"tier": "escalate", "score": 0.95, "reasons": reasons}
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-131-    if deadline_soon and silence_triggered:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-132-        return {"tier": "escalate", "score": 0.9, "reasons": reasons}
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-134-    # ── ACT rules (severity.py rules 4-5) ────────────────────────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-135-    if deadline_soon and triggered_dims >= 1:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-136-        return {"tier": "act", "score": 0.75, "reasons": reasons}
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py:137:    if stage_aging_act_level:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-138-        return {"tier": "act", "score": 0.7, "reasons": reasons}
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-139-    if silence_triggered and triggered_dims >= 2:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\pipeline_health.py-140-        return {"tier": "act", "score": 0.65, "reasons": reasons}
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-35-    "deadline_proximity": 1,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-36-    "communication_silence": 2,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-37-    "counterparty_nonresponsiveness": 3,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py:38:    "stage_aging": 4,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-39-    "missing_prerequisites": 5,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-40-    "unusual_characteristics": 6,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\main.py-41-}
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-98-            d = s["days_to_rofr"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-99-            return (10_000 if d is None else d, health_rank)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-100-        if sort == "stage_age":
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py:101:            return (-s["stage_aging_ratio"], health_rank)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-102-        if sort == "last_comm":
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-103-            c = s["days_since_last_inbound"]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-104-            return (-(c if c is not None else -1), health_rank)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py:105:        return (health_rank, -s["stage_aging_ratio"])
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-106-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-107-    items.sort(key=sort_key)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\web\routes\pipeline.py-108-
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-49-- Expected: severity=act, dims=[deadline_proximity, communication_silence] \
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-50-  Actual: severity=act, dims=[deadline_proximity, communication_silence] → 1.0
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-51-- Expected: severity=act, dims=[deadline_proximity] \
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py:52:  Actual: severity=act, dims=[deadline_proximity, stage_aging] → 0.8 (one extra dim)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-53-- Expected: severity=escalate, dims=[deadline_proximity, communication_silence] \
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-54-  Actual: severity=act, dims=[deadline_proximity, communication_silence] → 0.5 (off by 1 level, dims OK)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-55-- Expected: severity=escalate, dims=[deadline_proximity] \
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-61-_TASK_DESCRIPTION = (
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-62-    "You are evaluating a deal monitoring agent that processes secondary-market private equity deals. "
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-63-    "The agent's task is complete when ALL of the following steps have been performed correctly:\n"
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py:64:    "  Step 1 — Evaluate all five risk dimensions independently: stage_aging, deadline_proximity, "
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-65-    "communication_silence, missing_prerequisites, and unusual_characteristics.\n"
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-66-    "  Step 2 — Assess whether the available context is sufficient to make a severity decision; "
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\deepeval_metrics.py-67-    "if not, call exactly the right enrichment tool (fetch_communication_content, "
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py:1:"""Deal stage definitions and dwell-time baselines (FR-004)."""
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-2-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-3-from __future__ import annotations
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-4-
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-18-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-19-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-20-# Expected dwell-time baselines in calendar days (docs/assumptions.md §Stage Dwell-Time Baselines).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py:21:# Aging is computed as days_in_stage / baseline — values >1.0 indicate a stall.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py:22:DWELL_BASELINES: dict[Stage, int] = {
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-23-    Stage.BID_ACCEPTED: 1,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-24-    Stage.DOCS_PENDING: 3,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-25-    Stage.ISSUER_NOTIFIED: 2,
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-27-    Stage.ROFR_CLEARED: 2,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-28-    Stage.SIGNING: 4,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-29-    Stage.FUNDING: 3,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py:30:    # Terminal stages have no meaningful baseline.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-31-    Stage.SETTLED: 0,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-32-    Stage.BROKEN: 0,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\stages.py-33-}
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-176-            return
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-177-        try:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-178-            _ALL_DIMENSIONS = [
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py:179:                "stage_aging", "deadline_proximity", "communication_silence",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-180-                "missing_prerequisites", "counterparty_nonresponsiveness",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-181-                "unusual_characteristics",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\langfuse_tracer.py-182-            ]
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-15-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-16-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-17-class RiskDimension(StrEnum):
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py:18:    STAGE_AGING = "stage_aging"
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-19-    DEADLINE_PROXIMITY = "deadline_proximity"
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-20-    COMMUNICATION_SILENCE = "communication_silence"
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-21-    MISSING_PREREQUISITES = "missing_prerequisites"
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-35-class AllRiskSignals(BaseModel):
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-36-    """Combined output schema for the single all-dimensions risk evaluation call."""
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-37-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py:38:    stage_aging: RiskSignal
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-39-    deadline_proximity: RiskSignal
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-40-    communication_silence: RiskSignal
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\models\risk.py-41-    missing_prerequisites: RiskSignal
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-40-_SEVERITY_ORDER = [s.value for s in (Severity.INFORMATIONAL, Severity.WATCH, Severity.ACT, Severity.ESCALATE)]
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-41-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-42-_ALL_DIMENSIONS = [
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py:43:    "stage_aging",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-44-    "deadline_proximity",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-45-    "communication_silence",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\eval\runner.py-46-    "missing_prerequisites",
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-114-    if all_signals:
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-115-        # Force correct dimension values defensively, then collect
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-116-        for field, dim in (
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py:117:            ("stage_aging", RiskDimension.STAGE_AGING),
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-118-            ("deadline_proximity", RiskDimension.DEADLINE_PROXIMITY),
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-119-            ("communication_silence", RiskDimension.COMMUNICATION_SILENCE),
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\agents\investigator.py-120-            ("missing_prerequisites", RiskDimension.MISSING_PREREQUISITES),
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-125-    # ── SCENARIO 2: Comm silence + first-time buyer (Stripe) ─────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-126-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-127-        "D-003", "stripe", "buyer_04", "seller_03", 1500, 42.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:128:        stage="docs_pending", stage_entered_days_ago=9,  # 3× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-129-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-130-        blockers=[{"kind": "missing_doc", "description": "Signed transfer agreement not received", "since": _iso(_ago(7))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-131-        risk_factors={"is_first_time_buyer": True, "prior_breakage_count": 0, "deal_size_usd": 63000},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-142-    # ── SCENARIO 3: Stage stall with blockers (Anthropic) ────────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-143-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-144-        "D-005", "anthropic", "buyer_02", "seller_01", 3000, 510.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:145:        stage="issuer_notified", stage_entered_days_ago=12,  # 6× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-146-        responsible_party="issuer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-147-        blockers=[
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-148-            {"kind": "awaiting_response", "description": "Anthropic legal review pending — multi-layer ROFR process", "since": _iso(_ago(10))},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-162-    # ── SCENARIO 4: Multi-layer ROFR + silence (Cerebras) ────────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-163-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-164-        "D-007", "cerebras", "buyer_06", "seller_05", 10000, 28.75,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:165:        stage="rofr_pending", stage_entered_days_ago=25,  # 1.25× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-166-        rofr_deadline_days=5,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-167-        responsible_party="issuer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-168-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 2, "multi_layer_rofr": True, "deal_size_usd": 287500},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-179-    # ── SCENARIO 5: Prior breakage + current stall (Groq) ────────────────────
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-180-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-181-        "D-009", "groq", "buyer_06", "seller_04", 7500, 14.20,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:182:        stage="docs_pending", stage_entered_days_ago=11,  # 3.7× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-183-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-184-        blockers=[{"kind": "pending_signature", "description": "Buyer hasn't returned executed docs — prior deal also broke at this stage", "since": _iso(_ago(9))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-185-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 2, "deal_size_usd": 106500},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-252-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 332500},
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-253-    ))
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-254-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:255:    # SCENARIO: Very long stage stall (45+ days in docs_pending) + first-time buyer (stage_aging + unusual_characteristics)
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-256-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-257-        "D-033", "groq", "buyer_04", "seller_03", 2000, 14.20,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:258:        stage="docs_pending", stage_entered_days_ago=47,  # 15.7× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-259-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-260-        blockers=[{"kind": "missing_doc", "description": "Accreditation docs never returned by first-time buyer", "since": _iso(_ago(45))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-261-        risk_factors={"is_first_time_buyer": True, "prior_breakage_count": 0, "deal_size_usd": 28400},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-263-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-264-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-265-        "D-034", "canva", "buyer_04", "seller_02", 4500, 34.50,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:266:        stage="docs_pending", stage_entered_days_ago=52,  # 17.3× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-267-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-268-        blockers=[{"kind": "pending_signature", "description": "Transfer agreement unsigned since stage entry — first-time buyer unresponsive", "since": _iso(_ago(50))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-269-        risk_factors={"is_first_time_buyer": True, "prior_breakage_count": 0, "deal_size_usd": 155250},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-280-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-281-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-282-        "D-036", "perplexity", "buyer_06", "seller_04", 5000, 65.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:283:        stage="signing", stage_entered_days_ago=10,  # 2.5× baseline
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-284-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-285-        blockers=[{"kind": "pending_signature", "description": "Buyer has not returned executed TA — third deal breakage pattern emerging", "since": _iso(_ago(8))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-286-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 2, "deal_size_usd": 325000},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-328-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-329-    # D-041 — Stripe silence climb.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-330-    # Today: healthy. Day+8: comm_silence triggers (10d ≥ 2× 5d response norm) → ACT.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:331:    # Day+10: stage_aging crosses 2× baseline → act-level compound.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-332-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-333-        "D-041", "stripe", "buyer_01", "seller_04", 4000, 42.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:334:        stage="docs_pending", stage_entered_days_ago=2,  # baseline 5d
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-335-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-336-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-337-    ))
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-349-    ))
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-350-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-351-    # D-043 — Perplexity prior-breakage escalation.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:352:    # Today: healthy (stage 2d < 1.5× 3d baseline).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:353:    # Day+3: stage_aging 1.67× → WATCH.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:354:    # Day+5: stage_aging 2.33× + prior_breakage=1 → ESCALATE (rule: prior_breakage + act-level).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-355-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-356-        "D-043", "perplexity", "buyer_02", "seller_03", 3000, 65.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:357:        stage="docs_pending", stage_entered_days_ago=2,  # baseline 3d
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-358-        responsible_party="buyer",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-359-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "deal_size_usd": 195000},
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-360-    ))
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-384-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-385-    # D-046 — Rippling signing stall (seller side) with active blocker.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-386-    # Today: healthy-ish (stage 1d, blocker fresh).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:387:    # Day+3: stage_aging 1.33× + 4d blocker → WATCH/ACT.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:388:    # Day+5: stage_aging 2× + 6d blocker in signing → ACT (critical-stage blocker rule).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-389-    deals.append(deal(
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-390-        "D-046", "rippling", "buyer_04", "seller_05", 3500, 48.00,
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:391:        stage="signing", stage_entered_days_ago=1,  # baseline 3d
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-392-        responsible_party="seller",
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-393-        blockers=[{"kind": "pending_signature", "description": "Seller has not yet returned countersigned TA — follow-up required", "since": _iso(_ago(1))}],
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-394-        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
+--
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-401-
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-402-    # D-047 — Anthropic docs_pending stage-aging climb, fills DAY +1.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py-403-    # Today: 7d/5d baseline = 1.4× → below 1.5× trigger → informational.
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:404:    # Day +1: 1.6× → WATCH (stage_aging, low conf).
+E:\Workspace\Hiive\deal-pipeline-monitoring-agent\src\hiive_monitor\seed\seed_data.py:405:    # Day +4: 2.2× → ACT (rule 5: stage_aging ≥ 2×).
+
+[Showing results with pagination = limit: 250]

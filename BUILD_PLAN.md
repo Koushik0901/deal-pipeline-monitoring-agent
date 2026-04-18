@@ -1,6 +1,8 @@
 # Build Plan: Deal Pipeline Monitoring Agent
 
 > **Purpose.** This document is the concrete scope and sequencing plan. It complements `PROJECT_CONTEXT.md` (what we're building and why) and `.specify/memory/constitution.md` (the principles that govern how). Read all three before planning, tasking, or implementing. When a downstream decision needs to resolve a scope question, this document is the source of truth.
+>
+> **Status.** This is a pre-implementation planning artifact. Some quantities (seed deal count, attention threshold, etc.) drifted during build — the current implementation is the authoritative reference; see [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ---
 

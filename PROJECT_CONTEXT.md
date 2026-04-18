@@ -1,6 +1,8 @@
 # Project Context: Deal Pipeline Monitoring Agent for Hiive
 
 > **Purpose of this document.** This is the single source of truth you (Claude Code) will use to build this project. It explains what Hiive is, what problem we're solving, why it matters, what "good" looks like, what data we have, what the submission has to include, and the constraints we're operating under. It deliberately does not prescribe tech stack, agent framework, or code architecture — those decisions come later. Read this end-to-end before making plans.
+>
+> **Status.** This is a pre-implementation context document. For the shipped architecture and current defaults, see [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
@@ -192,7 +194,7 @@ We don't have real Hiive data. We need realistic, convincing, varied synthetic d
 
 **Simulated time.** The agent's job is inherently temporal — it reasons about "this deal has been in this stage for 9 days." We need a way to either run against real wall-clock time (for live demo) or fast-forward (for eval scenarios). Both.
 
-**A golden evaluation set.** Specific deal scenarios where we've designed the situation and we know what the agent *should* do. "Deal X has a ROFR expiring in 48 hours with no issuer response — the agent should escalate, draft a message to issuer counsel, and mark this as high-priority in today's brief." Roughly 20–30 of these scenarios, covering different risk patterns.
+**A golden evaluation set.** Specific deal scenarios where we've designed the situation and we know what the agent *should* do. "Deal X has a ROFR expiring in 48 hours with no issuer response — the agent should escalate, draft a message to issuer counsel, and mark this as high-priority in today's brief." The final harness ships **39 such scenarios** (see `eval/fixtures/`), covering detection, prioritization, intervention quality, adversarial calibration, and edge cases.
 
 **Realistic artifacts.** Emails should look like emails Transaction Services analysts actually send. Deadlines should reflect real ROFR mechanics. Issuer names should be plausible (real companies from Hiive's public list are fine since we're not simulating anything sensitive). Communication templates should feel like a regulated financial services firm's actual templates, not generic business-speak.
 

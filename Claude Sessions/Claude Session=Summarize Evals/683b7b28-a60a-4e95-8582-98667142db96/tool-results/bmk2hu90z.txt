@@ -1,0 +1,800 @@
+diff --git a/src/hiive_monitor/db/dao.py b/src/hiive_monitor/db/dao.py
+index 6611481..536894d 100644
+--- a/src/hiive_monitor/db/dao.py
++++ b/src/hiive_monitor/db/dao.py
+@@ -65,6 +65,22 @@ def get_deal(conn: sqlite3.Connection, deal_id: str) -> dict | None:
+     return dict(row) if row else None
+ 
+ 
++def get_snoozed_deals(conn: sqlite3.Connection) -> list[dict]:
++    """Return deals currently snoozed (snoozed_until > now, not settled/broken)."""
++    now = clk.now().isoformat()
++    try:
++        rows = conn.execute(
++            """SELECT * FROM deals
++               WHERE snoozed_until IS NOT NULL AND snoozed_until > ?
++                 AND stage NOT IN ('settled', 'broken')
++               ORDER BY snoozed_until""",
++            (now,),
++        ).fetchall()
++    except sqlite3.OperationalError:
++        return []
++    return [dict(r) for r in rows]
++
++
+ def get_all_deals(conn: sqlite3.Connection) -> list[dict]:
+     rows = conn.execute("SELECT * FROM deals ORDER BY created_at").fetchall()
+     return [dict(r) for r in rows]
+@@ -247,6 +263,25 @@ def get_observations(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
+     return [dict(r) for r in rows]
+ 
+ 
++def get_latest_observation_per_deal(conn: sqlite3.Connection) -> dict[str, dict]:
++    rows = conn.execute(
++        """SELECT deal_id, severity, observed_at FROM agent_observations
++           WHERE (deal_id, observed_at) IN (
++             SELECT deal_id, MAX(observed_at) FROM agent_observations GROUP BY deal_id
++           )"""
++    ).fetchall()
++    return {r["deal_id"]: dict(r) for r in rows}
++
++
++def get_latest_inbound_per_deal(conn: sqlite3.Connection) -> dict[str, str]:
++    rows = conn.execute(
++        """SELECT deal_id, MAX(occurred_at) AS last_inbound
++           FROM events WHERE event_type = 'comm_inbound'
++           GROUP BY deal_id"""
++    ).fetchall()
++    return {r["deal_id"]: r["last_inbound"] for r in rows}
++
++
+ def get_observations_by_tick(conn: sqlite3.Connection, tick_id: str) -> list[dict]:
+     rows = conn.execute(
+         "SELECT * FROM agent_observations WHERE tick_id = ?", (tick_id,)
+diff --git a/src/hiive_monitor/llm/prompts/risk_all_dimensions.py b/src/hiive_monitor/llm/prompts/risk_all_dimensions.py
+index 3a0b794..50a3858 100644
+--- a/src/hiive_monitor/llm/prompts/risk_all_dimensions.py
++++ b/src/hiive_monitor/llm/prompts/risk_all_dimensions.py
+@@ -119,11 +119,10 @@ Step 1: Score individual factors:
+   multi_layer_rofr=true               → strong flag (1.5 pts)  ← requires multi-party sign-off
+   is_first_time_buyer=true            → moderate flag (1 pt)
+   transaction_notional_usd > 5000000  → moderate flag (1 pt)   ← outsized deal size increases counterparty risk
+-Step 2: Apply triggering logic:
+-  Score ≥ 1.5 (any strong flag)                → triggered=true
+-  Score ≥ 2.0 (two or more moderate flags)     → triggered=true
+-  Score < 1.5 (one moderate flag only)         → triggered=false
+-  Score = 0 (no flags)                         → triggered=false, confidence=0.97
++Step 2: Apply triggering logic based on total score:
++  Score ≥ 1.5 → triggered=true  (covers: any strong flag, OR two moderate flags 1+1=2.0, OR any combination ≥1.5)
++  Score < 1.5 → triggered=false (a single moderate flag alone is not sufficient)
++  Score = 0   → triggered=false, confidence=0.97
+ 
+ ANTI-INFLATION GUARD: historical breakage alone (prior_breakage_count ≥ 1) indicates risk \
+ pattern, not certainty. Do not use this dimension to amplify stage_aging or silence signals — \
+diff --git a/src/hiive_monitor/llm/prompts/severity.py b/src/hiive_monitor/llm/prompts/severity.py
+index d35c0d6..c8f7125 100644
+--- a/src/hiive_monitor/llm/prompts/severity.py
++++ b/src/hiive_monitor/llm/prompts/severity.py
+@@ -62,6 +62,8 @@ CALIBRATION EXAMPLES:
+   • stage_aging (4.67×) + missing_prerequisites + unusual_characteristics (prior_breakage=2) → escalate
+     (prior_breakage ≥1 AND act-level stage_aging ≥2.0× — rule 2)
+   • stage_aging (ratio 2.3×, conf=0.95), no deadline → act (ratio ≥2.0× criterion)
++  • stage_aging (3.3×, conf=0.92) + unusual_characteristics (prior_breakage=1), no deadline → escalate
++    (rule 2: prior_breakage≥1 AND act-level stage_aging conf≥0.85 ratio≥2.0×)
+   • stage_aging (1.6×, conf=0.75) + unusual_characteristics (prior_breakage=1), no deadline → watch
+     (2 dims but neither at conf ≥0.85, no act-level trigger)
+   • communication_silence (12d, conf=0.92), no other signals, no deadline → watch (single dim ≥0.85 without deadline)
+diff --git a/src/hiive_monitor/llm/prompts/sufficiency.py b/src/hiive_monitor/llm/prompts/sufficiency.py
+index ebd3079..c926ed6 100644
+--- a/src/hiive_monitor/llm/prompts/sufficiency.py
++++ b/src/hiive_monitor/llm/prompts/sufficiency.py
+@@ -22,22 +22,24 @@ with confidence, or would one specific enrichment tool materially change that sc
+ ABSOLUTE RULE: enrichment_count ≥ 2 → return sufficient=true immediately. No exceptions. \
+ This cap is enforced in code — requesting further enrichment at this point has no effect.
+ 
+-MANDATORY ENRICH (sufficient=false) — override PROCEED rules when enrichment_count = 0:
++MANDATORY ENRICH — check these conditions BEFORE any other analysis.
++If either applies, return sufficient=false immediately. Do NOT proceed to PROCEED rules.
++Do NOT skip because the verdict "seems obvious" — these checks apply even for clear escalate cases.
++
+   • communication_silence triggered AND fetch_communication_content NOT yet in enrichment_context:
+-    Always fetch — a legal hold, known deferral, or acknowledgment may reduce severity regardless
+-    of how confident the silence signal appears. Severity cannot be finalized without validating
+-    whether an explanation exists.
+-  • stage_aging AND unusual_characteristics (prior_breakage_count ≥ 1) both triggered AND
+-    fetch_prior_observations NOT yet in enrichment_context:
+-    Always fetch — distinguishing a new pattern from a recurring one is essential for accurate
+-    severity and intervention quality.
++    Return sufficient=false, tool_to_call=fetch_communication_content.
++    Reason: a legal hold or explicit acknowledgment can reduce severity. Always verify.
++  • stage_aging triggered AND unusual_characteristics triggered AND prior_breakage_count ≥ 1 in
++    risk_factors AND fetch_prior_observations NOT yet in enrichment_context:
++    Return sufficient=false, tool_to_call=fetch_prior_observations.
++    Reason: recurring pattern vs. isolated incident changes both severity and intervention quality.
+ 
+ PROCEED (sufficient=true) when ANY of the following apply (after mandatory enrich is satisfied):
+   • All signals triggered=false → verdict is clearly informational.
+   • Deadline ≤ 2 days with any triggered signal → verdict is clearly escalate; enrichment won't change it.
+   • You already fetched the enrichment tool that would have addressed the ambiguity.
+ 
+-ENRICH (sufficient=false) when ALL four conditions hold (beyond mandatory enrich above):
++ENRICH (sufficient=false) — only if mandatory enrich above did not apply — when ALL four conditions hold:
+   ① enrichment_count < 2
+   ② At least one signal is triggered with ambiguous cause
+   ③ The tool you name would directly resolve that specific ambiguity
+@@ -68,11 +70,12 @@ TOOL SELECTION — pick the single most targeted tool:
+ ANTI-LOOP RULE: Never request the same tool twice. If fetch_communication_content is already
+ in enrichment_context, do not request it again — proceed.
+ 
+-CHAIN OF THOUGHT — work through these steps:
+-  1. List triggered signals and their confidence scores.
+-  2. Is the dominant ambiguity resolvable by one of the four tools? Name the ambiguity precisely.
+-  3. Would resolving it change the severity verdict? State explicitly yes or no.
+-  4. If yes and conditions ①–④ hold → enrich. Otherwise → proceed.
++CHAIN OF THOUGHT — work through these steps in order:
++  1. Check MANDATORY ENRICH conditions first. If either applies → stop, return sufficient=false.
++  2. List triggered signals and their confidence scores.
++  3. Is the dominant ambiguity resolvable by one of the four tools? Name the ambiguity precisely.
++  4. Would resolving it change the severity verdict? State explicitly yes or no.
++  5. If yes and conditions ①–④ hold → enrich. Otherwise → proceed.
+ 
+ Reply only via the required tool.\
+ """
+diff --git a/src/hiive_monitor/seed/seed_data.py b/src/hiive_monitor/seed/seed_data.py
+index 27ed05f..de71168 100644
+--- a/src/hiive_monitor/seed/seed_data.py
++++ b/src/hiive_monitor/seed/seed_data.py
+@@ -320,6 +320,148 @@ def build_deals() -> list[dict]:
+         risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 112500},
+     ))
+ 
++    # ── Deals 41-46: PROGRESSION deals — engineered to climb severity as sim advances.
++    # These deals are healthy (or low) today and cross severity thresholds over the next
++    # 2-12 sim days, so advancing the simulation produces new priorities instead of just
++    # re-escalating the same set. Values are chosen against the thresholds in
++    # `llm/prompts/severity.py` and `risk_all_dimensions.py`.
++
++    # D-041 — Stripe silence climb.
++    # Today: healthy. Day+8: comm_silence triggers (10d ≥ 2× 5d response norm) → ACT.
++    # Day+10: stage_aging crosses 2× baseline → act-level compound.
++    deals.append(deal(
++        "D-041", "stripe", "buyer_01", "seller_04", 4000, 42.00,
++        stage="docs_pending", stage_entered_days_ago=2,  # baseline 5d
++        responsible_party="buyer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
++    ))
++
++    # D-042 — Canva ROFR deadline progression + silence co-trigger.
++    # Today: informational (deadline 12d, silence 6d < 10d threshold).
++    # Day+2: deadline 10d → WATCH (elevated). Day+4: silence 10d ≥ 2×5d → ACT.
++    # Day+10: deadline 2d + ongoing silence → ESCALATE (co-trigger rule).
++    deals.append(deal(
++        "D-042", "canva", "buyer_05", "seller_06", 5000, 34.50,
++        stage="rofr_pending", stage_entered_days_ago=10,
++        rofr_deadline_days=12,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 172500},
++    ))
++
++    # D-043 — Perplexity prior-breakage escalation.
++    # Today: healthy (stage 2d < 1.5× 3d baseline).
++    # Day+3: stage_aging 1.67× → WATCH.
++    # Day+5: stage_aging 2.33× + prior_breakage=1 → ESCALATE (rule: prior_breakage + act-level).
++    deals.append(deal(
++        "D-043", "perplexity", "buyer_02", "seller_03", 3000, 65.00,
++        stage="docs_pending", stage_entered_days_ago=2,  # baseline 3d
++        responsible_party="buyer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "deal_size_usd": 195000},
++    ))
++
++    # D-044 — Cerebras multi-layer ROFR slow climb.
++    # Today: informational (deadline 14d > 10, silence 3d < threshold).
++    # Day+4: deadline 10d → WATCH. Day+8: deadline 6d → ACT (urgent).
++    # Day+12: deadline 2d → ESCALATE.
++    deals.append(deal(
++        "D-044", "cerebras", "buyer_06", "seller_02", 6000, 28.75,
++        stage="rofr_pending", stage_entered_days_ago=3,
++        rofr_deadline_days=14,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "multi_layer_rofr": True, "deal_size_usd": 172500},
++    ))
++
++    # D-045 — Databricks fast deadline climb (cleanest ESCALATE demo).
++    # Today: deadline 6d → WATCH (elevated). Day+2: deadline 4d → ACT (urgent).
++    # Day+5: deadline 1d → ESCALATE.
++    deals.append(deal(
++        "D-045", "databricks", "buyer_03", "seller_01", 4500, 95.00,
++        stage="rofr_pending", stage_entered_days_ago=20,
++        rofr_deadline_days=6,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 427500},
++    ))
++
++    # D-046 — Rippling signing stall (seller side) with active blocker.
++    # Today: healthy-ish (stage 1d, blocker fresh).
++    # Day+3: stage_aging 1.33× + 4d blocker → WATCH/ACT.
++    # Day+5: stage_aging 2× + 6d blocker in signing → ACT (critical-stage blocker rule).
++    deals.append(deal(
++        "D-046", "rippling", "buyer_04", "seller_05", 3500, 48.00,
++        stage="signing", stage_entered_days_ago=1,  # baseline 3d
++        responsible_party="seller",
++        blockers=[{"kind": "pending_signature", "description": "Seller has not yet returned countersigned TA — follow-up required", "since": _iso(_ago(1))}],
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 168000},
++    ))
++
++    # ── Gap-filler progression deals (D-047 to D-051) ──
++    # These cover sim days +1, +6, +7, +9, +11 so every single Advance click surfaces a
++    # new transition rather than clustering changes on even days. Threshold math is in
++    # the inline comment for each deal.
++
++    # D-047 — Anthropic docs_pending stage-aging climb, fills DAY +1.
++    # Today: 7d/5d baseline = 1.4× → below 1.5× trigger → informational.
++    # Day +1: 1.6× → WATCH (stage_aging, low conf).
++    # Day +4: 2.2× → ACT (rule 5: stage_aging ≥ 2×).
++    deals.append(deal(
++        "D-047", "anthropic", "buyer_03", "seller_06", 2500, 510.00,
++        stage="docs_pending", stage_entered_days_ago=7,  # baseline 5d
++        responsible_party="buyer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "multi_layer_rofr": True, "deal_size_usd": 1275000},
++    ))
++
++    # D-048 — Groq slow deadline + silence climb, fills DAY +6.
++    # Today: deadline 16d > 10 and silence 4d (norm 7d, threshold 14d) → informational.
++    # Day +6: deadline 10d → WATCH (elevated).
++    # Day +10: silence 14d crosses threshold → 2 dims → ACT.
++    # Day +14: deadline 2d → ESCALATE.
++    deals.append(deal(
++        "D-048", "groq", "buyer_01", "seller_02", 5000, 14.20,
++        stage="rofr_pending", stage_entered_days_ago=4,
++        rofr_deadline_days=16,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 71000},
++    ))
++
++    # D-049 — SpaceX deadline + silence co-trigger, fills DAY +7.
++    # Today: deadline 17d, silence 7d (SpaceX norm 7d, threshold 14d) → informational.
++    # Day +7: deadline 10d → WATCH; silence 14d → 2nd dim → ACT (rule 6).
++    # Day +15: deadline 2d + ongoing silence → ESCALATE (co-trigger rule 3).
++    deals.append(deal(
++        "D-049", "spacex", "buyer_05", "seller_01", 2000, 185.50,
++        stage="rofr_pending", stage_entered_days_ago=13,
++        rofr_deadline_days=17,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 371000},
++    ))
++
++    # D-050 — Stripe prior-breakage buyer deadline progression, fills DAY +9.
++    # Today: deadline 18d → informational; buyer carries prior_breakage=1 (static).
++    # Day +9: deadline 9d → WATCH.
++    # Day +13: deadline 5d → ACT (rule 4: deadline ≤10 + triggered dim).
++    # Day +16: deadline 2d → ESCALATE.
++    deals.append(deal(
++        "D-050", "stripe", "buyer_02", "seller_03", 6000, 42.00,
++        stage="rofr_pending", stage_entered_days_ago=12,
++        rofr_deadline_days=18,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 1, "deal_size_usd": 252000},
++    ))
++
++    # D-051 — Databricks dual-threshold climb (silence then deadline), fills DAY +11.
++    # Today: deadline 14d, silence 7d (Databricks norm 5d, threshold 10d) → informational.
++    # Day +3: silence 10d → WATCH (single dim, no deadline pressure yet).
++    # Day +4: deadline 10d → 2 dims → ACT.
++    # Day +11: deadline 3d → urgent, still ACT.
++    # Day +12: deadline 2d → ESCALATE.
++    deals.append(deal(
++        "D-051", "databricks", "buyer_05", "seller_04", 3000, 95.00,
++        stage="rofr_pending", stage_entered_days_ago=16,
++        rofr_deadline_days=14,
++        responsible_party="issuer",
++        risk_factors={"is_first_time_buyer": False, "prior_breakage_count": 0, "deal_size_usd": 285000},
++    ))
++
+     return deals
+ 
+ 
+@@ -559,6 +701,114 @@ def build_events(deals: list[dict]) -> list[dict]:
+             {"body": "Hi, the Ramp transfer signature pages are attached. Please review and countersign at your earliest convenience."}),
+     ]
+ 
++    # ── Progression deals (D-041 to D-046) ──
++    # Event timestamps are chosen so that, as the sim clock advances, silence and
++    # stage-aging cross documented thresholds on specific days (see comments next to
++    # each deal in build_deals).
++
++    # D-041 Stripe — last comm 2d ago; silence will reach 10d (2× 5d norm) at day+8.
++    events += [
++        evt("D-041", "stage_transition", 2, "Entered docs_pending"),
++        evt("D-041", "comm_outbound", 2, "Transfer docs sent to buyer",
++            {"body": "Hi, attached are the Stripe transfer documents. Please review and return the signed transfer agreement at your earliest convenience."}),
++    ]
++
++    # D-042 Canva — issuer acknowledged 6d ago; deadline 12d out today.
++    events += [
++        evt("D-042", "stage_transition", 10, "Entered rofr_pending"),
++        evt("D-042", "comm_outbound", 10, "ROFR notice sent to Canva legal",
++            {"body": "Dear Canva Legal, ROFR notice attached for 5,000 shares at $34.50. 21-day window begins today."}),
++        evt("D-042", "comm_inbound", 6, "Canva acknowledged — in legal review",
++            {"body": "Received. Our legal team is reviewing and will respond before the window closes."}),
++    ]
++
++    # D-043 Perplexity — last inbound 1d ago; stage 2d (well under 3d baseline today).
++    events += [
++        evt("D-043", "stage_transition", 2, "Entered docs_pending"),
++        evt("D-043", "comm_outbound", 2, "Transfer docs sent to buyer",
++            {"body": "Hi, the Perplexity transfer docs are attached. Please sign and return."}),
++        evt("D-043", "comm_inbound", 1, "Buyer acknowledged — reviewing with counsel",
++            {"body": "Got it — reviewing with my attorney. Back to you shortly."}),
++    ]
++
++    # D-044 Cerebras — last outbound 3d ago; deadline 14d out.
++    events += [
++        evt("D-044", "stage_transition", 3, "Entered rofr_pending"),
++        evt("D-044", "comm_outbound", 3, "ROFR notice to Cerebras — multi-layer approval",
++            {"body": "Dear Cerebras Legal, ROFR notice attached for 6,000 shares at $28.75. 30-day window; note that this transfer requires board-level approval."}),
++    ]
++
++    # D-045 Databricks — issuer acknowledged 4d ago; deadline 6d out today.
++    events += [
++        evt("D-045", "stage_transition", 20, "Entered rofr_pending"),
++        evt("D-045", "comm_outbound", 20, "ROFR notice to Databricks",
++            {"body": "Dear Databricks Legal, ROFR notice attached for 4,500 shares at $95.00. 30-day window."}),
++        evt("D-045", "comm_inbound", 14, "Databricks acknowledged — under review",
++            {"body": "Received. Reviewing internally; will respond within the window."}),
++        evt("D-045", "comm_outbound", 4, "Mid-window check-in",
++            {"body": "Hi, following up on the ROFR. Please advise on election status — 10 days remaining."}),
++    ]
++
++    # D-046 Rippling — docs sent to seller 1d ago; active blocker.
++    events += [
++        evt("D-046", "stage_transition", 1, "Entered signing"),
++        evt("D-046", "comm_outbound", 1, "Signature pages sent to seller",
++            {"body": "Hi, the Rippling signature pages are attached. Please countersign and return — we're waiting on this to move to funding."}),
++    ]
++
++    # ── Gap-filler progression events (D-047 to D-051) ──
++    # These align with the threshold math documented on each deal in build_deals.
++
++    # D-047 Anthropic — last inbound 4d ago (norm 5d, silence threshold 10d).
++    # Silence won't trigger until ~day+6; stage_aging is the leading signal on day+1.
++    events += [
++        evt("D-047", "stage_transition", 7, "Entered docs_pending"),
++        evt("D-047", "comm_outbound", 7, "Transfer docs sent to buyer",
++            {"body": "Hi, the Anthropic transfer docs are attached. Please sign and return — note this is a multi-layer ROFR deal, so downstream timing matters."}),
++        evt("D-047", "comm_inbound", 4, "Buyer: reviewing with counsel",
++            {"body": "Thanks — my attorney is reviewing. Will circle back shortly."}),
++    ]
++
++    # D-048 Groq — issuer acknowledged 4d ago (norm 7d, threshold 14d).
++    # Silence crosses threshold at day+10; deadline is leading signal until then.
++    events += [
++        evt("D-048", "stage_transition", 4, "Entered rofr_pending"),
++        evt("D-048", "comm_outbound", 4, "ROFR notice sent to Groq legal",
++            {"body": "Dear Groq Legal, ROFR notice attached for 5,000 shares at $14.20. 30-day window begins today. Please confirm receipt."}),
++        evt("D-048", "comm_inbound", 4, "Groq acknowledged receipt",
++            {"body": "Received — we will review internally and respond within the window."}),
++    ]
++
++    # D-049 SpaceX — last inbound 7d ago (norm 7d, threshold 14d).
++    # Silence crosses at day+7 alongside deadline hitting 10d — dual-dim ACT trigger.
++    events += [
++        evt("D-049", "stage_transition", 13, "Entered rofr_pending"),
++        evt("D-049", "comm_outbound", 13, "ROFR notice sent to SpaceX",
++            {"body": "Dear SpaceX Legal, ROFR notice attached for 2,000 shares at $185.50. 30-day window."}),
++        evt("D-049", "comm_inbound", 7, "SpaceX acknowledged — in review",
++            {"body": "Received. Reviewing internally and will advise on election before the window closes."}),
++    ]
++
++    # D-050 Stripe — last inbound 4d ago (norm 5d, threshold 10d).
++    # Buyer has prior_breakage=1; deadline progression is the leading signal.
++    events += [
++        evt("D-050", "stage_transition", 12, "Entered rofr_pending"),
++        evt("D-050", "comm_outbound", 12, "ROFR notice sent to Stripe",
++            {"body": "Dear Stripe Legal, ROFR notice attached for 6,000 shares at $42.00. 30-day window from today."}),
++        evt("D-050", "comm_inbound", 4, "Stripe: in legal review",
++            {"body": "Received. Our legal team is reviewing and will respond before the deadline."}),
++    ]
++
++    # D-051 Databricks — last inbound 7d ago (norm 5d, threshold 10d).
++    # Silence crosses at day+3 (leading signal), deadline 10d at day+4, both combining by day+4.
++    events += [
++        evt("D-051", "stage_transition", 16, "Entered rofr_pending"),
++        evt("D-051", "comm_outbound", 16, "ROFR notice sent to Databricks",
++            {"body": "Dear Databricks Legal, ROFR notice attached for 3,000 shares at $95.00. 30-day window."}),
++        evt("D-051", "comm_inbound", 7, "Databricks acknowledged — reviewing",
++            {"body": "Received. We are reviewing internally and will respond before the window closes."}),
++    ]
++
+     # Add stage_transition events for remaining deals that don't have them
+     stage_transitions = [
+         ("D-002", "rofr_cleared", 1),
+@@ -773,7 +1023,7 @@ def seed(reset: bool = False) -> None:
+     total_events = len(events) + len(hist_events)
+     logger.info("seed.complete", deals=total_deals, events=total_events, issuers=len(ISSUERS))
+     print(f"Seeded {total_deals} deals ({len(hist_deals)} historical), {total_events} events, {len(ISSUERS)} issuers.")
+-    assert len(deals) == 40, f"Expected 40 live deals, got {len(deals)}"
++    assert len(deals) == 51, f"Expected 51 live deals, got {len(deals)}"
+     assert len(hist_deals) == 4, f"Expected 4 historical deals, got {len(hist_deals)}"
+ 
+ 
+diff --git a/src/hiive_monitor/web/pipeline_health.py b/src/hiive_monitor/web/pipeline_health.py
+new file mode 100644
+index 0000000..7c5e276
+--- /dev/null
++++ b/src/hiive_monitor/web/pipeline_health.py
+@@ -0,0 +1,147 @@
++"""
++Deterministic health scoring for the Pipeline (book-of-deals) view.
++
++The agent's LLM-driven severity gate only surfaces deals above a confidence
++threshold. The Pipeline page needs to show EVERY active deal, including items
++that are merely drifting. We therefore replicate the numeric rules from
++`llm/prompts/severity.py` as pure Python — no LLM call — so every row has a
++health tier computed from the same thresholds the agent uses.
++
++Tiers returned (aligned with severity.Severity for continuity):
++  - "escalate"     — red    — matches agent ESCALATE rules 1-3
++  - "act"          — amber  — matches agent ACT rules 4-5
++  - "watch"        — blue   — matches agent WATCH rules 6
++  - "informational"— green  — everything else (healthy / baseline)
++"""
++
++from __future__ import annotations
++
++from datetime import datetime
++from typing import Any
++
++
++def _days_between(later: datetime, earlier: datetime) -> int:
++    return (later - earlier).days
++
++
++def compute_signals(
++    deal: dict[str, Any],
++    issuer: dict[str, Any],
++    last_inbound_at: datetime | None,
++    now: datetime,
++) -> dict[str, Any]:
++    """Compute the numeric signals feeding the health tier."""
++    stage_entered = datetime.fromisoformat(deal["stage_entered_at"])
++    days_in_stage = max(0, _days_between(now, stage_entered))
++
++    typical = issuer.get("typical_response_days") or 5
++    stage_aging_ratio = days_in_stage / typical if typical else 0.0
++
++    days_to_rofr: int | None = None
++    if deal.get("rofr_deadline"):
++        rofr_dl = datetime.fromisoformat(deal["rofr_deadline"])
++        days_to_rofr = _days_between(rofr_dl, now)
++
++    days_since_last_inbound: int | None = None
++    if last_inbound_at is not None:
++        days_since_last_inbound = max(0, _days_between(now, last_inbound_at))
++
++    risk_factors = deal.get("risk_factors_parsed") or {}
++    prior_breakage = int(risk_factors.get("prior_breakage_count") or 0)
++    is_first_time_buyer = bool(risk_factors.get("is_first_time_buyer"))
++    multi_layer_rofr = bool(risk_factors.get("multi_layer_rofr"))
++
++    blockers = deal.get("blockers_parsed") or []
++    blocker_count = len(blockers) if isinstance(blockers, list) else 0
++
++    return {
++        "days_in_stage": days_in_stage,
++        "typical_response_days": typical,
++        "stage_aging_ratio": round(stage_aging_ratio, 2),
++        "days_to_rofr": days_to_rofr,
++        "days_since_last_inbound": days_since_last_inbound,
++        "prior_breakage_count": prior_breakage,
++        "is_first_time_buyer": is_first_time_buyer,
++        "multi_layer_rofr": multi_layer_rofr,
++        "blocker_count": blocker_count,
++    }
++
++
++def compute_health(signals: dict[str, Any]) -> dict[str, Any]:
++    """
++    Apply the same decision tree as `llm/prompts/severity.py` to numeric signals.
++    Returns {"tier", "score" (0-1), "reasons": [str, ...]}.
++    """
++    reasons: list[str] = []
++    triggered_dims = 0
++
++    ratio = signals["stage_aging_ratio"]
++    typical = signals["typical_response_days"]
++    silence = signals["days_since_last_inbound"]
++    deadline = signals["days_to_rofr"]
++    blockers = signals["blocker_count"]
++    prior_breakage = signals["prior_breakage_count"]
++    first_time = signals["is_first_time_buyer"]
++    multi_layer = signals["multi_layer_rofr"]
++
++    # Dimension triggers (match severity.py thresholds)
++    stage_aging_triggered = ratio >= 1.5
++    stage_aging_act_level = ratio >= 2.0
++    if stage_aging_triggered:
++        triggered_dims += 1
++        reasons.append(f"stage aging {ratio}\u00d7 baseline ({typical}d norm)")
++
++    silence_triggered = silence is not None and silence >= 2 * typical
++    if silence_triggered:
++        triggered_dims += 1
++        reasons.append(f"{silence}d since last inbound (\u22652\u00d7 {typical}d norm)")
++
++    deadline_short = deadline is not None and deadline <= 2
++    deadline_soon = deadline is not None and deadline <= 10
++    deadline_expired = deadline is not None and deadline < 0
++    if deadline_expired:
++        triggered_dims += 1
++        reasons.append(f"ROFR expired {abs(deadline)}d ago")
++    elif deadline_soon:
++        triggered_dims += 1
++        reasons.append(f"ROFR in {deadline}d")
++
++    blockers_triggered = blockers > 0
++    if blockers_triggered:
++        triggered_dims += 1
++        reasons.append(f"{blockers} blocker{'s' if blockers != 1 else ''}")
++
++    unusual_triggered = first_time or prior_breakage >= 1 or multi_layer
++    if unusual_triggered:
++        triggered_dims += 1
++        parts = []
++        if first_time:
++            parts.append("first-time buyer")
++        if prior_breakage >= 1:
++            parts.append(f"{prior_breakage} prior breakage{'s' if prior_breakage != 1 else ''}")
++        if multi_layer:
++            parts.append("multi-layer ROFR")
++        reasons.append(", ".join(parts))
++
++    # ── ESCALATE rules (severity.py rules 1-3) ───────────────────────────────
++    if deadline_short or deadline_expired:
++        return {"tier": "escalate", "score": 1.0, "reasons": reasons}
++    if prior_breakage >= 1 and stage_aging_act_level:
++        return {"tier": "escalate", "score": 0.95, "reasons": reasons}
++    if deadline_soon and silence_triggered:
++        return {"tier": "escalate", "score": 0.9, "reasons": reasons}
++
++    # ── ACT rules (severity.py rules 4-5) ────────────────────────────────────
++    if deadline_soon and triggered_dims >= 1:
++        return {"tier": "act", "score": 0.75, "reasons": reasons}
++    if stage_aging_act_level:
++        return {"tier": "act", "score": 0.7, "reasons": reasons}
++    if silence_triggered and triggered_dims >= 2:
++        return {"tier": "act", "score": 0.65, "reasons": reasons}
++
++    # ── WATCH (severity.py rule 6) ───────────────────────────────────────────
++    if triggered_dims >= 1:
++        return {"tier": "watch", "score": 0.4, "reasons": reasons}
++
++    # ── INFORMATIONAL (baseline healthy) ─────────────────────────────────────
++    return {"tier": "informational", "score": 0.05, "reasons": reasons or ["no triggers"]}
+diff --git a/src/hiive_monitor/web/routes/__init__.py b/src/hiive_monitor/web/routes/__init__.py
+index 4ae590b..a131005 100644
+--- a/src/hiive_monitor/web/routes/__init__.py
++++ b/src/hiive_monitor/web/routes/__init__.py
+@@ -5,14 +5,14 @@ def _build_router() -> APIRouter:
+     from hiive_monitor.web.routes.deals import router as _deals_router
+     from hiive_monitor.web.routes.debug import router as _debug_router
+     from hiive_monitor.web.routes.main import router as _main_router
+-    from hiive_monitor.web.routes.queue import router as _queue_router
++    from hiive_monitor.web.routes.pipeline import router as _pipeline_router
+     from hiive_monitor.web.routes.simulation import router as _simulation_router
+ 
+     r = APIRouter()
+     r.include_router(_main_router)
+     r.include_router(_deals_router)
+     r.include_router(_debug_router)
+-    r.include_router(_queue_router)
++    r.include_router(_pipeline_router)
+     r.include_router(_simulation_router)
+     return r
+ 
+diff --git a/src/hiive_monitor/web/routes/main.py b/src/hiive_monitor/web/routes/main.py
+index f60fcd1..60e7e5f 100644
+--- a/src/hiive_monitor/web/routes/main.py
++++ b/src/hiive_monitor/web/routes/main.py
+@@ -29,6 +29,39 @@ log = get_logger(__name__)
+ _tick_dispatch_times: dict[str, float] = {}
+ 
+ 
++# Severity-decision-tree priority: the dimensions that most commonly drive the
++# verdict come first, so the analyst reads the strongest reason before the weaker one.
++_WHY_TODAY_PRIORITY = {
++    "deadline_proximity": 1,
++    "communication_silence": 2,
++    "counterparty_nonresponsiveness": 3,
++    "stage_aging": 4,
++    "missing_prerequisites": 5,
++    "unusual_characteristics": 6,
++}
++
++
++def _why_today(reasoning: dict) -> str:
++    """Compose the single sharpest line explaining why this deal is in the brief today.
++
++    Pulls up to two triggered signals in decision-tree priority order and joins
++    their evidence with a middot. Evidence is truncated so the line fits one row;
++    losing nuance is fine — the full reasoning is one click away in the expand panel.
++    """
++    signals = reasoning.get("all_signals") or []
++    triggered = [s for s in signals if s.get("triggered")]
++    if not triggered:
++        return ""
++    triggered.sort(key=lambda s: _WHY_TODAY_PRIORITY.get(s.get("dimension", ""), 99))
++
++    def _clip(text: str, limit: int = 55) -> str:
++        text = (text or "").strip().rstrip(".")
++        return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
++
++    parts = [_clip(s.get("evidence", "")) for s in triggered[:2] if s.get("evidence")]
++    return " · ".join(p for p in parts if p)
++
++
+ def _tick_polling_div(tick_id: str) -> str:
+     """Return the HTMX polling fragment for an in-flight tick (self-replaces via outerHTML swap)."""
+     short = tick_id[:8]
+@@ -69,6 +102,7 @@ async def daily_brief(request: Request, debug: str = ""):
+             "deal": deal,
+             "reasoning_summary": reasoning.get("severity_rationale", ""),
+             "dimensions_triggered": reasoning.get("dimensions_triggered", []),
++            "why_today": _why_today(reasoning),
+         })
+     portfolio_signals = []
+     if tick and tick.get("signals"):
+@@ -78,6 +112,7 @@ async def daily_brief(request: Request, debug: str = ""):
+             pass
+ 
+     handled_ivs = dao.get_handled_interventions(conn)
++    snoozed_deals = dao.get_snoozed_deals(conn)
+     conn.close()
+ 
+     return _templates().TemplateResponse(
+@@ -85,6 +120,7 @@ async def daily_brief(request: Request, debug: str = ""):
+         {
+             "items": items,
+             "handled_items": handled_ivs,
++            "snoozed_deals": snoozed_deals,
+             "tick": tick,
+             "now": clk.now().isoformat(),
+             "debug": debug == "1",
+diff --git a/src/hiive_monitor/web/routes/pipeline.py b/src/hiive_monitor/web/routes/pipeline.py
+new file mode 100644
+index 0000000..d2dbaa5
+--- /dev/null
++++ b/src/hiive_monitor/web/routes/pipeline.py
+@@ -0,0 +1,139 @@
++"""Pipeline page route — book-of-deals view with deterministic health tiers."""
++
++from __future__ import annotations
++
++import json
++from datetime import datetime
++
++from fastapi import APIRouter, Request
++
++from hiive_monitor.db import dao
++from hiive_monitor.db.connection import get_domain_conn
++from hiive_monitor.models.risk import Severity
++from hiive_monitor.web.pipeline_health import compute_health, compute_signals
++
++router = APIRouter()
++
++# Worst tier first so health-sorted rows surface escalate at the top.
++_TIER_ORDER = {s.value: i for i, s in enumerate(reversed(list(Severity)))}
++
++
++@router.get("/pipeline")
++async def pipeline(
++    request: Request,
++    tier: str = "",
++    stage: str = "",
++    issuer: str = "",
++    responsible: str = "",
++    sort: str = "health",
++):
++    """
++    Pipeline view — one row per live deal, ranked by deterministic health.
++
++    Query params:
++      tier         — filter by health tier (escalate|act|watch|informational)
++      stage        — filter by deal stage
++      issuer       — filter by issuer id
++      responsible  — filter by responsible_party
++      sort         — health | deadline | stage_age | last_comm
++    """
++    from hiive_monitor import clock as clk
++    from hiive_monitor.app import templates
++
++    now = clk.now()
++    conn = get_domain_conn()
++
++    deals = dao.get_live_deals(conn)
++
++    issuer_rows = conn.execute("SELECT * FROM issuers").fetchall()
++    issuers_by_id = {row["issuer_id"]: dict(row) for row in issuer_rows}
++
++    latest_obs_by_deal = dao.get_latest_observation_per_deal(conn)
++    last_inbound_by_deal = dao.get_latest_inbound_per_deal(conn)
++
++    open_iv_deal_ids = {iv["deal_id"] for iv in dao.get_open_interventions(conn)}
++
++    items = []
++    for deal in deals:
++        try:
++            deal["risk_factors_parsed"] = json.loads(deal.get("risk_factors") or "{}")
++        except (ValueError, TypeError):
++            deal["risk_factors_parsed"] = {}
++        try:
++            deal["blockers_parsed"] = json.loads(deal.get("blockers") or "[]")
++        except (ValueError, TypeError):
++            deal["blockers_parsed"] = []
++
++        issuer_row = issuers_by_id.get(deal["issuer_id"], {})
++
++        last_inbound_str = last_inbound_by_deal.get(deal["deal_id"])
++        last_inbound_at = datetime.fromisoformat(last_inbound_str) if last_inbound_str else None
++
++        signals = compute_signals(deal, issuer_row, last_inbound_at, now)
++        health = compute_health(signals)
++
++        items.append(
++            {
++                "deal": deal,
++                "issuer": issuer_row,
++                "signals": signals,
++                "health": health,
++                "agent_flag": (latest_obs_by_deal.get(deal["deal_id"]) or {}).get("severity"),
++                "has_open_intervention": deal["deal_id"] in open_iv_deal_ids,
++            }
++        )
++
++    conn.close()
++
++    # Book-wide tier counts — header reflects the full pipeline, not the filtered slice.
++    counts_by_tier = {s.value: 0 for s in Severity}
++    for item in items:
++        counts_by_tier[item["health"]["tier"]] += 1
++
++    # ── Sort ─────────────────────────────────────────────────────────────────
++    def sort_key(item):
++        health_rank = _TIER_ORDER.get(item["health"]["tier"], 99)
++        s = item["signals"]
++        if sort == "deadline":
++            d = s["days_to_rofr"]
++            return (10_000 if d is None else d, health_rank)
++        if sort == "stage_age":
++            return (-s["stage_aging_ratio"], health_rank)
++        if sort == "last_comm":
++            c = s["days_since_last_inbound"]
++            return (-(c if c is not None else -1), health_rank)
++        return (health_rank, -s["stage_aging_ratio"])
++
++    items.sort(key=sort_key)
++
++    all_stages = sorted({d["stage"] for d in deals})
++    all_issuers = sorted({d["issuer_id"] for d in deals})
++    all_responsible = sorted({d.get("responsible_party") or "" for d in deals} - {""})
++
++    return templates.TemplateResponse(
++        request,
++        "pipeline.html",
++        {
++            "items": items,
++            "tier": tier,
++            "stage": stage,
++            "issuer": issuer,
++            "responsible": responsible,
++            "sort": sort,
++            "all_stages": all_stages,
++            "all_issuers": all_issuers,
++            "all_responsible": all_responsible,
++            "counts_by_tier": counts_by_tier,
++            "total": len(items),
++        },
++    )
++
++
++# Back-compat redirect: old /queue links should land on /pipeline
++@router.get("/queue")
