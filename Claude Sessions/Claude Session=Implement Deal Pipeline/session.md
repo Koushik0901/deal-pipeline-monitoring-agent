@@ -1965,7 +1965,7 @@ No matches found
 <details><summary>result</summary>
 
 ```
-1	OPENROUTER_API_KEY="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"
+1	OPENROUTER_API_KEY="sk-or-v1-0000000000000000000000000000000000000000000000000000000000000000"
 2	
 3	# Clock mode: "real_time" or "simulated"
 4	CLOCK_MODE=simulated
