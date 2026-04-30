@@ -104,6 +104,8 @@ CREATE TABLE IF NOT EXISTS interventions (
     recipient_type       TEXT CHECK (recipient_type IN ('buyer', 'seller', 'issuer', 'internal', NULL)),
     draft_subject        TEXT,
     draft_body           TEXT NOT NULL,
+    suggested_next_step  TEXT,   -- internal_escalation: imperative ask (owner + action + date);
+                                 -- mirrors the body's "The ask" line for downstream tooling.
     final_text           TEXT,   -- NULL until approved/edited
     status               TEXT NOT NULL DEFAULT 'pending' CHECK (status IN (
         'pending', 'approved', 'edited', 'dismissed'

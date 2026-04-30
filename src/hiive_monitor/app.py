@@ -24,6 +24,41 @@ _STATIC_DIR = pathlib.Path(__file__).parent / "web" / "static"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 templates.env.filters["format_number"] = lambda v: f"{int(v):,}"
 
+
+def _human_stage(value: object) -> str:
+    """Map a Stage enum or its `.value` (e.g. 'rofr_pending') to the plain-English label
+    in STAGE_DISPLAY_NAMES. Falls back to the raw string with underscores replaced if the
+    value is unrecognised. Single source of truth for stage labels in user-facing copy.
+    """
+    from hiive_monitor.models.stages import STAGE_DISPLAY_NAMES, Stage
+
+    raw = value.value if hasattr(value, "value") else value
+    if not isinstance(raw, str):
+        return str(raw)
+    try:
+        return STAGE_DISPLAY_NAMES.get(Stage(raw), raw.replace("_", " "))
+    except ValueError:
+        return raw.replace("_", " ")
+
+
+def _humanize_stage_codes(text: object) -> str:
+    """Substring-replace any Stage enum value (`rofr_pending`, `docs_pending`, …) inside a
+    free-text string with its STAGE_DISPLAY_NAMES label. Used to clean LLM-produced text
+    (reasoning summaries, legacy draft bodies) at render time so the schema language never
+    leaks to a user. Sorted longest-first defensively to avoid partial-prefix collisions.
+    """
+    from hiive_monitor.models.stages import STAGE_DISPLAY_NAMES, Stage
+
+    if not isinstance(text, str):
+        return text  # type: ignore[return-value]
+    for stage in sorted(Stage, key=lambda s: -len(s.value)):
+        text = text.replace(stage.value, STAGE_DISPLAY_NAMES.get(stage, stage.value))
+    return text
+
+
+templates.env.filters["human_stage"] = _human_stage
+templates.env.filters["humanize_stage_codes"] = _humanize_stage_codes
+
 # Expose clock_mode as a global so base.html can render sim-only controls
 # without requiring every route to pass it explicitly.
 def _clock_mode_global() -> str:

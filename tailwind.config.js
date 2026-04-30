@@ -8,8 +8,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        mono: ["ui-monospace", "Consolas", "monospace"],
+        sans:      ["Barlow", "system-ui", "sans-serif"],
+        condensed: ['"Barlow Condensed"', "system-ui", "sans-serif"],
+        mono:      ['"Fira Mono"', "ui-monospace", "Consolas", "monospace"],
       },
       colors: {
         // All colors reference CSS custom properties so dark mode overrides work at runtime.
@@ -51,6 +52,10 @@ module.exports = {
         'on-tertiary-fixed':         'rgb(var(--c-on-tertiary-fixed) / <alpha-value>)',
         'tertiary-fixed':            'rgb(var(--c-tertiary-fixed) / <alpha-value>)',
         'tertiary-fixed-dim':        'rgb(var(--c-tertiary-fixed-dim) / <alpha-value>)',
+        warning:                     'rgb(var(--c-warning) / <alpha-value>)',
+        'warning-container':         'rgb(var(--c-warning-container) / <alpha-value>)',
+        info:                        'rgb(var(--c-info) / <alpha-value>)',
+        'info-container':            'rgb(var(--c-info-container) / <alpha-value>)',
         error:                       'rgb(var(--c-error) / <alpha-value>)',
         'error-container':           'rgb(var(--c-error-container) / <alpha-value>)',
         'on-error':                  'rgb(var(--c-on-error) / <alpha-value>)',

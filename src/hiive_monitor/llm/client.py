@@ -331,7 +331,7 @@ def _get_llm(model: str, timeout: float) -> ChatOpenRouter:
         settings = get_settings()
         kwargs: dict = dict(
             model=model,
-            openrouter_api_key=settings.openrouter_api_key,
+            api_key=settings.openrouter_api_key,  # `langchain_openrouter` v0.2+ accepts `api_key`, not `openrouter_api_key`
             temperature=0,  # deterministic outputs for classification/scoring
             timeout=int(timeout * 1000),  # ChatOpenRouter expects milliseconds
             max_retries=0,  # retry logic is handled by _call_with_retry

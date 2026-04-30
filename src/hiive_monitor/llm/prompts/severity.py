@@ -44,14 +44,85 @@ SEVERITY DECISION TREE (evaluate top to bottom — stop at the FIRST matching le
     • Zero dimensions triggered
     • No dimension crosses confidence ≥ 0.70
 
-REASONING REQUIREMENTS (work through these in order):
-  1. List every triggered dimension by exact name, confidence, and the key number in its evidence.
-  2. Test ESCALATE criteria explicitly — for each criterion, state "met" or "not met" with evidence.
-  3. If escalate not met, test ACT criteria the same way.
-  4. Close with exactly this format on the final line: "Verdict: ESCALATE. Primary: dim1, dim2."
-     (substitute the actual verdict and the two primary dimension names — uppercase verdict always)
-  5. Reasoning MUST cite at least one specific number (days, ratio, date) from the signals.
-  6. Keep reasoning under 600 characters.
+REASONING OUTPUT (this is what humans read — analysts AND non-technical stakeholders):
+
+  Write 2–4 sentences of plain-English prose explaining WHAT is wrong and WHY it rises to
+  the chosen severity level. Audience may not be a deep TS expert. This text is rendered as
+  the only narrative on the deal-detail page and inside the daily brief reasoning panel.
+
+  Structure:
+    Sentence 1 — Name the issuer and the concrete situation (the actual blockage), with at
+                 least one specific number (days, date, ratio).
+    Sentence 2 — Briefly explain why this matters now: the deadline, the drift from typical
+                 timing, or the prior-breakage history. Translate technical anchors:
+                   "1.5× our typical 20-day window for ROFR review" — NOT "ratio 1.5×".
+                   "communication has been silent 9 days, ~1.8× their normal reply time"
+                     — NOT "communication_silence conf=0.90, 9d".
+    Sentence 3 — One concise sentence stating which signals drove the verdict, in plain
+                 English (e.g. "deadline pressure and counterparty silence" — NOT
+                 "deadline_proximity AND communication_silence co-trigger MET").
+    Final line (required for validator) — exactly: "Verdict: <severity>." on its own short
+                 sentence. Severity lowercase. Example: "Verdict: escalate." This single
+                 marker is the only structural artefact allowed.
+
+  Reasoning MUST cite at least one specific number (days, date, ratio).
+  Reasoning is ≤ 800 characters of prose plus the verdict line.
+
+JARGON TRANSLATION (apply on first use of each term):
+  • Snake_case stage codes are FORBIDDEN. Use the plain-English `stage_display` from the input.
+    `rofr_pending` → "ROFR review"   `docs_pending` → "documents pending"
+    `issuer_notified` → "issuer-notification"   `bid_accepted` → "bid accepted"
+  • "ROFR" → on first mention add a brief gloss: "ROFR (the issuer's right to buy back
+    the shares before they transfer)". Single gloss is enough.
+  • Dimension codes (`stage_aging`, `communication_silence`, `deadline_proximity`,
+    `missing_prerequisites`, `unusual_characteristics`, `counterparty_nonresponsiveness`)
+    MUST NOT appear verbatim in the reasoning. Translate:
+      stage_aging                      → "stalled in [stage] longer than normal"
+      communication_silence            → "silence from [counterparty]"
+      deadline_proximity               → "the deadline"
+      missing_prerequisites            → "missing documents/signatures"
+      unusual_characteristics          → "first-time buyer / prior breakages / multi-layer ROFR"
+                                          (whichever applies)
+      counterparty_nonresponsiveness   → "[counterparty] hasn't replied"
+  • Confidence scores (`conf=0.85`, `confidence 0.92`) MUST NOT appear in the prose.
+    The structured `primary_dimensions` field captures which dimensions drove the call —
+    don't re-narrate them with raw scores.
+  • "Co-trigger" / "co-triggered" → "compound" or "both fire together".
+  • "Baseline" → always anchored ("our typical 20-day window for ROFR review").
+
+WORKED REASONING EXAMPLES (follow the structural pattern; do not copy the content):
+
+  ESCALATE (deadline + silence co-trigger):
+    "Databricks D-032 is sitting in ROFR review (the issuer's right to buy back the shares
+    before they transfer) with a hard deadline 0 days away — it expires today. Databricks
+    has been silent for 9 days, almost 2× their normal reply time, with no waiver or election
+    on record. The combination of an at-zero deadline and counterparty silence means this
+    cannot wait for the next monitoring cycle. Verdict: escalate."
+
+  ACT (severe stage stall, no deadline emergency):
+    "Canva D-034 has been in documents pending for 53 days, more than 17× our typical 3-day
+    window for that stage, with one open blocker and no inbound from the buyer in 46 days.
+    There is no ROFR deadline pressure, but the stall on its own is now severe enough to
+    require this-cycle outreach. Verdict: act."
+
+  WATCH (modest aging, no deadline, no compounding):
+    "Stripe D-008 is 6 days into ROFR review, ~1.3× our typical 20-day window — modest drift
+    rather than a stall. The buyer responded 4 days ago and there are no other compounding
+    signals. Worth tracking but no outreach is required this cycle. Verdict: watch."
+
+  INFORMATIONAL (clean):
+    "Anthropic D-022 is on schedule across every dimension we monitor; no signals fired with
+    meaningful confidence. Verdict: informational."
+
+PRE-RETURN CHECK — answer YES to all:
+  ✓ No snake_case stage codes anywhere.
+  ✓ No dimension codes in their raw form (stage_aging, communication_silence, etc.).
+  ✓ No bare confidence scores or `conf=` syntax in the prose.
+  ✓ Issuer name appears in the first sentence.
+  ✓ At least one specific number (days/date/ratio) appears.
+  ✓ ROFR (if mentioned) is glossed once parenthetically on first use.
+  ✓ Final sentence is exactly "Verdict: <severity>." (lowercase severity).
+  If any answer is no, rewrite before returning.
 
 CALIBRATION EXAMPLES:
   • deadline_proximity (3d, conf=0.98) + communication_silence (15d, conf=0.90) → escalate
@@ -83,11 +154,14 @@ Reply only via the required tool. Reasoning must name the issuer, not say "the d
 _HUMAN = """\
 Determine severity for deal {deal_id} ({issuer_name}):
 
-Stage: {stage}, days_in_stage: {days_in_stage}
+Stage (use this plain-English label in the reasoning): {stage_display}
+Days in this stage: {days_in_stage}
+Typical window for this stage: {stage_baseline_days} days
 ROFR deadline: {rofr_deadline} ({days_to_rofr} days)
 Risk factors: {risk_factors}
 
-Risk signals:
+Risk signals (the dimension codes here are for YOUR decision-tree logic only; do NOT
+echo them in the reasoning prose — translate per the JARGON TRANSLATION rules):
 {signals_text}
 
 Enrichment context (fetched during this investigation):
@@ -97,7 +171,9 @@ If enrichment context contains an explicit explanation for a triggered signal (e
 stated deferral, acknowledged delay), use it to calibrate confidence — it may justify a lower \
 severity band even when the raw signal is triggered.
 
-What is the overall severity, your reasoning, and the primary dimensions driving it?\
+Apply the decision tree to determine the verdict. Then write 2–4 sentences of plain-English \
+reasoning following the structure and translation rules above, ending with the "Verdict: \
+<severity>." line. Also return `severity` and `primary_dimensions`.\
 """
 
 SEVERITY_TEMPLATE = ChatPromptTemplate.from_messages([
@@ -114,6 +190,8 @@ def build_severity_prompt(
     enrichment_context: dict | None = None,
 ) -> dict:
     """Return template_vars dict for use with SEVERITY_TEMPLATE."""
+    from hiive_monitor.models.stages import DWELL_BASELINES, STAGE_DISPLAY_NAMES
+
     signals_text = "\n".join(
         f"  {s.dimension.value}: triggered={s.triggered}, confidence={s.confidence:.2f}, "
         f"evidence={s.evidence[:120]}"
@@ -123,7 +201,8 @@ def build_severity_prompt(
     return {
         "deal_id": snapshot.deal_id,
         "issuer_name": snapshot.issuer_name,
-        "stage": snapshot.stage.value,
+        "stage_display": STAGE_DISPLAY_NAMES.get(snapshot.stage, snapshot.stage.value),
+        "stage_baseline_days": DWELL_BASELINES.get(snapshot.stage, 0) or "n/a",
         "days_in_stage": snapshot.days_in_stage,
         "rofr_deadline": snapshot.rofr_deadline.strftime("%Y-%m-%d") if snapshot.rofr_deadline else "none",
         "days_to_rofr": snapshot.days_to_rofr if snapshot.days_to_rofr is not None else "N/A",

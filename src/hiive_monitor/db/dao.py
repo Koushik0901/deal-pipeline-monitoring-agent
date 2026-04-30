@@ -256,8 +256,16 @@ def insert_observation(
 
 
 def get_observations(conn: sqlite3.Connection, deal_id: str) -> list[dict]:
+    # Tie-break: rowid DESC so within a single simulated `observed_at` bucket the LATEST
+    # insertion comes first. The deal-detail template does
+    # `| sort(attribute='observed_at', reverse=True) | first` (Jinja stable sort) — when
+    # multiple ticks share the same simulated observed_at (common since ticks advance the
+    # simulated clock by whole days), the stable sort preserves DAO order within ties, so
+    # we need the newest insertion at index 0 here. Without this, `| first` returned the
+    # OLDEST observation in a tie.
     rows = conn.execute(
-        "SELECT * FROM agent_observations WHERE deal_id = ? ORDER BY observed_at",
+        "SELECT * FROM agent_observations WHERE deal_id = ? "
+        "ORDER BY observed_at ASC, rowid DESC",
         (deal_id,),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -300,6 +308,7 @@ def insert_intervention(
     draft_body: str,
     recipient_type: str | None = None,
     draft_subject: str | None = None,
+    suggested_next_step: str | None = None,
     reasoning_ref: str | None = None,
     intervention_id: str | None = None,
 ) -> str:
@@ -308,8 +317,9 @@ def insert_intervention(
     conn.execute(
         """INSERT OR IGNORE INTO interventions
            (intervention_id, deal_id, observation_id, intervention_type,
-            recipient_type, draft_subject, draft_body, reasoning_ref, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            recipient_type, draft_subject, draft_body, suggested_next_step,
+            reasoning_ref, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             iid,
             deal_id,
@@ -318,6 +328,7 @@ def insert_intervention(
             recipient_type,
             draft_subject,
             draft_body,
+            suggested_next_step,
             reasoning_ref,
             created_at,
         ),

@@ -62,6 +62,41 @@
     }
   }
 
+  /* ── Escalation pulse dot ─────────────────────────────────────────────────
+     Slow breath animation signals live urgency without being distracting.
+     Follows reduced-motion preference above (set to 0.01ms).
+  ── */
+  @keyframes hiive-escalate-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+  }
+  .escalate-dot {
+    animation: hiive-escalate-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* ── Smooth theme transition ─────────────────────────────────────────────
+     Applied for 300ms while toggleTheme() swaps the .dark class. Only color
+     properties transition — transforms/opacity are untouched so existing
+     animations aren't affected. Class is removed after the window closes.
+  ── */
+  .theme-transitioning,
+  .theme-transitioning *,
+  .theme-transitioning *::before,
+  .theme-transitioning *::after {
+    transition: background-color 250ms ease, border-color 250ms ease,
+                color 250ms ease, fill 250ms ease, stroke 250ms ease !important;
+    transition-delay: 0ms !important;
+  }
+
+  /* ── Pipeline-clear text reveal ───────────────────────────────────────────
+     Staggered text entrance after the checkmark draw completes (~470ms).
+     Tiny upward drift (4px) gives direction without drama.
+  ── */
+  @keyframes hiive-text-reveal {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
   /* ── Light mode token values ──────────────────────────────────────────────
      All values are space-separated RGB triplets so Tailwind's opacity modifier
      syntax (bg-surface/50, border-outline-variant/50, etc.) works correctly.
@@ -113,6 +148,10 @@
     --c-tertiary-fixed:             255 218 216;  /* #ffdad8 — WATCH badge bg */
     --c-tertiary-fixed-dim:         245 183 180;  /* #f5b7b4 */
     /* Error — red (ESCALATE severity) */
+    --c-warning:                    130  71   0;  /* #824700 — ACT text */
+    --c-warning-container:          255 229 166;  /* #ffe5a6 — ACT badge bg */
+    --c-info:                         0  70 160;  /* #0046a0 — WATCH text */
+    --c-info-container:             210 232 255;  /* #d2e8ff — WATCH badge bg */
     --c-error:                      186  26  26;  /* #ba1a1a */
     --c-error-container:            255 218 214;  /* #ffdad6 — ESCALATE badge bg */
     --c-on-error:                   255 255 255;  /* #ffffff */
@@ -170,6 +209,10 @@
     --c-tertiary-fixed:              58  20  20;  /* #3a1414 — WATCH badge bg (dark) */
     --c-tertiary-fixed-dim:          78  30  30;  /* #4e1e1e */
     /* Error — ESCALATE severity (light red text on dark red bg) */
+    --c-warning:                    255 185  70;  /* #ffb946 — ACT text (dark) */
+    --c-warning-container:           65  35   0;  /* #412300 — ACT badge bg (dark) */
+    --c-info:                       145 195 255;  /* #91c3ff — WATCH text (dark) */
+    --c-info-container:              14  42  80;  /* #0e2a50 — WATCH badge bg (dark) */
     --c-error:                      255 180 171;  /* #ffb4ab */
     --c-error-container:             92  15  16;  /* #5c0f10 — ESCALATE badge bg (dark) */
     --c-on-error:                    70   0   4;  /* #460004 */
@@ -205,6 +248,16 @@
     outline: none;
     border-color: rgb(var(--c-primary-container));
     box-shadow: 0 0 0 1px rgb(var(--c-primary-container) / 0.25);
+  }
+
+  /* ── Copy-success flash ────────────────────────────────────────────────────
+     Applied briefly via Alpine when clipboard write succeeds. Overrides the
+     default text-on-surface-variant color to confirm the action visually.
+  ── */
+  .copy-success {
+    color: rgb(var(--c-primary-container)) !important;
+    border-color: rgb(var(--c-primary-container) / 0.4) !important;
+    transition: color 150ms ease, border-color 150ms ease !important;
   }
 }
 

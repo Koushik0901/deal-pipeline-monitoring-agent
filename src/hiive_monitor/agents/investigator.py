@@ -456,6 +456,7 @@ def emit_observation(state: InvestigatorState) -> dict:
             draft_body=payload.get("body", payload.get("headline", "")),
             recipient_type=payload.get("recipient_type") or payload.get("escalate_to"),
             draft_subject=payload.get("subject") or payload.get("headline"),
+            suggested_next_step=payload.get("suggested_next_step"),
             reasoning_ref=oid,
         )
 

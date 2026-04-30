@@ -96,6 +96,83 @@ intervention body fields retain their limits.
 
 ---
 
+### `ChatOpenRouter` API key kwarg silently ignored (`'User not found.'` floods)
+**What blocked:** Every LLM call was failing with `'User not found.'` from OpenRouter — a
+misleading error string that suggested an account/auth-tier issue. The actual cause: the LLM
+client at `llm/client.py:_get_llm` was passing `openrouter_api_key=settings.openrouter_api_key`
+to the `ChatOpenRouter` constructor, but `langchain_openrouter` ≥ 0.2 renamed the constructor
+kwarg to `api_key` (a `SecretStr`). The Pydantic-based class silently dropped the unknown kwarg
+(`extra="ignore"`) and fell back to its default `<factory>` for `api_key`, which reads
+`os.environ["OPENROUTER_API_KEY"]`. Pydantic-Settings populates only the `Settings` model — NOT
+`os.environ` — so the factory found nothing and every request went out unauthenticated.
+
+**Resolution:** Renamed the kwarg at `llm/client.py:_get_llm` from `openrouter_api_key=` to
+`api_key=`. Verified end-to-end: a real SLM screening call now returns `'pong'` against the
+configured model. Eval and tick paths recovered immediately.
+
+**Status:** Resolved. Future-proofing note: if `langchain_openrouter` upgrades again, run
+`uv run python -c "from langchain_openrouter import ChatOpenRouter; import inspect; print(inspect.signature(ChatOpenRouter))"` to verify the kwarg name before debugging an opaque
+401-style error.
+
+---
+
+### Alpine `x-data` JSON-attribute quoting + getter syntax broke "All open" tab
+**What blocked:** The `_all_open_list.html` tab silently rendered zero rows even though the tab
+counter showed the right number. Two stacked bugs: (1) Alpine's expression parser does NOT support
+object-literal getter syntax (`get noResults() { ... }`) — it threw `SyntaxError: Unexpected
+token '}'` and broke every dependent `x-show`/`:class` binding; (2) Jinja's `|tojson` emits JSON
+with `"` quotes that prematurely terminated the surrounding `x-data="..."` attribute, so the rest
+of the JS bled out as malformed sibling attributes.
+
+**Resolution:** Replaced the getter with a regular method (`noResults() { ... }`) and switched
+the outer attribute delimiter to single-quotes so JSON's `"` is safe inside; switched JS string
+literals to `"` to avoid colliding with the new attribute delimiter. Console errors went 31 → 0
+on `/brief`.
+
+**Status:** Resolved. Pattern documented in CLAUDE.md gotchas.
+
+---
+
+### DAO `get_observations` ordering surfaced stale severity rationale
+**What blocked:** After running multiple ticks (each ticks the simulated clock by one whole day,
+so multiple ticks share the same `observed_at` timestamp), the deal-detail page kept showing the
+OLDEST tick's severity rationale instead of the latest. The template's
+`| sort(attribute='observed_at', reverse=True) | first` is a stable Jinja sort — when keys tie,
+it preserves DAO insertion order, which had been ASC-by-rowid. So `| first` after reverse-sorting
+returned the oldest insertion in a tied bucket.
+
+**Resolution:** Changed `dao.get_observations()` from `ORDER BY observed_at` to
+`ORDER BY observed_at ASC, rowid DESC`. Within a tied `observed_at` bucket, the newest insertion
+now comes first; combined with the template's stable reverse-sort, `| first` correctly returns
+the latest tick's observation.
+
+**Status:** Resolved. CLAUDE.md notes the contract (don't change ordering without updating the
+template).
+
+---
+
+### Watch-tier deals never reached the LLM-derived brief
+**What blocked:** The pipeline page showed N watch-tier deals (deterministic from
+`pipeline_health.py`), but the brief showed zero — the analyst's natural mental model expects
+the brief to be a complete picture of the day, including watch-tier monitoring. Root cause is
+data-shape: the SLM screening rubric scores "mild concern" deals at 0.21–0.50 (midpoint ~0.355),
+the `attention_threshold` filter excludes them at 0.45, and even when threshold is dropped to
+0.20 the cap of 12 investigations per tick is saturated by escalate/act candidates. The LLM
+investigator simply never sees most watch-tier deals, and even when it does, the seed data's
+signals are strong enough that classifications come back as act/escalate.
+
+**Resolution (Path C — bridge):** `/brief` and `/api/brief-stats` now compute a `watch_list` by
+calling `pipeline_health.compute_signals` + `compute_health` on every live deal, filtering to
+`tier == 'watch' AND deal_id NOT IN open_iv_deal_ids` (no duplication with the intervention path).
+Rendered as a collapsed `<details>` panel at the BOTTOM of the brief's main column (visual
+hierarchy: act → monitor). Sidebar `WATCH` count sums LLM-classified + deterministic.
+
+**Status:** Resolved as a UI bridge. The underlying tension between LLM-budgeted investigation
+and book-wide coverage remains — but the brief now shows a complete picture without forcing the
+analyst to switch to the pipeline tab.
+
+---
+
 ## Open limitations
 
 ### Tool Correctness metric — partially resolved

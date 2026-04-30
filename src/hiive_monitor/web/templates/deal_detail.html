@@ -13,20 +13,20 @@
 </div>
 
 <!-- Page header -->
-<div class="flex flex-wrap items-start justify-between gap-y-2 pb-4 border-b-[0.5px] border-outline-variant/50 mb-6">
+<div class="flex flex-wrap items-start justify-between gap-y-2 pb-4 border-b-[0.5px] border-outline-variant/50 mb-6{% if latest_obs %} {% if latest_obs.severity == 'escalate' %}bg-error/[0.03]{% elif latest_obs.severity == 'act' %}bg-warning/[0.03]{% elif latest_obs.severity == 'watch' %}bg-info/[0.03]{% endif %}{% endif %} -mx-6 px-6 pt-1 rounded-t-[4px]">
   <div class="min-w-0">
     <h1 class="text-[1.1875rem] font-semibold text-on-surface tracking-tight leading-snug">
       <span style="view-transition-name: dealid-{{ deal.deal_id }}">{{ deal.deal_id }}</span>{% if issuer %}<span class="text-on-surface-variant font-normal"> · {{ issuer.name }}</span>{% endif %}
     </h1>
     <div class="flex items-center flex-wrap gap-2 mt-2">
-      <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium text-on-surface bg-surface-container-low border-[0.5px] border-outline-variant/50 uppercase tracking-widest">{{ deal.stage | replace('_', ' ') }}</span>
+      <span class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-medium text-on-surface bg-surface-container-low border-[0.5px] border-outline-variant/50 uppercase tracking-widest">{{ deal.stage | human_stage }}</span>
       {% if latest_obs %}
         {% if latest_obs.severity == 'escalate' %}
           <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
         {% elif latest_obs.severity == 'act' %}
-          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-warning-container text-warning border-[0.5px] border-warning/10">ACT</span>
         {% elif latest_obs.severity == 'watch' %}
-          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+          <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-info-container text-info border-[0.5px] border-info/10">WATCH</span>
         {% elif latest_obs.severity == 'info' %}
           <span style="view-transition-name: sev-{{ deal.deal_id }}" class="px-2 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
         {% endif %}
@@ -159,7 +159,7 @@
                 {% else %}text-on-surface-variant{% endif %}
               ">{{ iv.status }}</span>
             </div>
-            <p class="text-[0.8125rem] text-on-surface-variant leading-snug">{{ iv.draft_subject or iv.draft_body[:80] }}</p>
+            <p class="text-[0.8125rem] text-on-surface-variant leading-snug">{{ (iv.draft_subject or iv.draft_body[:80]) | humanize_stage_codes }}</p>
           </div>
           {% endfor %}
         </div>
@@ -198,18 +198,13 @@
               <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest block mb-2">Severity Rationale</span>
               <p class="text-[0.8125rem] text-on-surface leading-relaxed px-3 py-2.5 rounded-[4px] border-[0.5px]
                 {% if sev == 'escalate' %}bg-error-container/40 border-error/20
-                {% elif sev == 'act' %}bg-primary-fixed/60 border-primary-container/20
-                {% elif sev == 'watch' %}bg-tertiary-fixed/40 border-tertiary/20
+                {% elif sev == 'act' %}bg-warning-container/30 border-warning/20
+                {% elif sev == 'watch' %}bg-info-container/40 border-info/20
                 {% else %}bg-surface-container border-outline-variant/50{% endif %}
-              ">{{ latest_obs.reasoning_parsed.get('severity_rationale') }}</p>
+              ">{{ latest_obs.reasoning_parsed.get('severity_rationale') | humanize_stage_codes }}</p>
             </div>
             {% endif %}
 
-            <!-- Risk dimensions — rendered as a data-dump of the raw agent output.
-                 Monospace, numeric, log-styled. Every dimension shown every tick:
-                 `true` rows surface the triggers driving severity; `false` rows prove the
-                 agent considered and ruled them out. Confidence bar uses unicode blocks so
-                 it stays aligned in the monospace column. -->
             {% set all_signals = latest_obs.reasoning_parsed.get('all_signals', []) %}
             {% if all_signals %}
             {% set _dim_index = {} %}
@@ -217,29 +212,41 @@
             {% set triggered_count = all_signals | selectattr('triggered') | list | length %}
             <div>
               <div class="flex items-baseline justify-between mb-2">
-                <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest"
-                      title="Raw output from the agent's combined AllRiskSignals call. Each line is {dimension, triggered, confidence, evidence} as emitted by the LLM.">Risk Dimensions · raw</span>
-                <span class="text-[0.625rem] text-outline-variant tabular-nums font-mono">{{ triggered_count }}/6 triggered</span>
+                <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Risk Signals</span>
+                <span class="text-[0.625rem] text-outline-variant tabular-nums">{{ triggered_count }}/6 flagged</span>
               </div>
-              <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface-container/40 px-3 py-2 overflow-x-auto">
-                <pre class="text-[0.6875rem] leading-[1.4] text-on-surface-variant font-mono"><span class="text-outline-variant">dimension                         triggered   conf   evidence</span>
-<span class="text-outline-variant">────────────────────────────────  ─────────  ─────  ──────────────────────────────────────────</span>
-{%- for key, _ in [
-  ('deadline_proximity', 0),
-  ('communication_silence', 0),
-  ('counterparty_nonresponsiveness', 0),
-  ('stage_aging', 0),
-  ('missing_prerequisites', 0),
-  ('unusual_characteristics', 0),
-] %}
-{%- set sig = _dim_index.get(key) %}
-{%- set t = sig and sig.triggered %}
-{%- set conf = (sig.confidence if sig else 0) or 0 %}
-{%- set full = conf | round(2) %}
-{%- set filled = (conf * 5) | round(0, 'floor') | int %}
-{%- set bar = '█' * filled ~ '░' * (5 - filled) %}
-<span class="{% if t %}text-on-surface{% else %}text-outline-variant{% endif %}">{{ '%-32s' | format(key) }}  {% if sig is none %}<span class="text-outline-variant/60">—       </span>{% elif t %}<span class="text-primary-container">true    </span>{% else %}<span class="text-outline-variant">false   </span>{% endif %} <span class="tabular-nums {% if t %}text-on-surface{% else %}text-outline-variant{% endif %}">{{ '%4.2f' | format(full) }}</span> <span class="{% if t %}text-primary-container{% else %}text-outline-variant/60{% endif %}">{{ bar }}</span>  <span class="{% if t %}text-on-surface-variant{% else %}text-outline-variant/70{% endif %}">{{ (sig.evidence if sig and sig.evidence else ('—' if sig else 'not evaluated'))[:60] }}</span></span>
-{%- endfor %}</pre>
+              <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 overflow-hidden divide-y divide-outline-variant/50">
+                {%- for key, label in [
+                  ('deadline_proximity',            'Deadline Pressure'),
+                  ('communication_silence',         'Communication Silence'),
+                  ('counterparty_nonresponsiveness','Counterparty Unresponsive'),
+                  ('stage_aging',                   'Stage Stall'),
+                  ('missing_prerequisites',         'Missing Documents'),
+                  ('unusual_characteristics',       'Unusual Characteristics'),
+                ] %}
+                {%- set sig = _dim_index.get(key) %}
+                {%- set t = sig and sig.triggered %}
+                {%- set conf = (sig.confidence if sig else 0) or 0 %}
+                <div class="flex items-start gap-3 px-3 py-2.5 {{ 'bg-surface-container-lowest' if t else 'bg-surface-container-lowest/60' }}">
+                  <div class="mt-[0.3125rem] shrink-0 w-1.5 h-1.5 rounded-full {{ ('bg-error' if sev == 'escalate' else 'bg-warning' if sev == 'act' else 'bg-info' if sev == 'watch' else 'bg-on-surface') if t else 'border-[1.5px] border-outline-variant' }}"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-3 mb-1">
+                      <span class="text-[0.8125rem] font-medium {{ 'text-on-surface' if t else 'text-outline-variant' }}">{{ label }}</span>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-[0.625rem] tabular-nums {{ 'text-on-surface-variant' if t else 'text-outline-variant/40' }}">{{ (conf * 100) | int ~ '%' if t else '—' }}</span>
+                        <div class="w-14 h-1 rounded-full overflow-hidden bg-outline-variant/20">
+                          <div class="h-full rounded-full {{ ('bg-error/60' if sev == 'escalate' else 'bg-warning/60' if sev == 'act' else 'bg-info/60' if sev == 'watch' else 'bg-on-surface/60') if t else 'bg-outline-variant/30' }}" style="width: {{ (conf * 100) | int }}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    {%- if sig and sig.evidence %}
+                    <p class="text-[0.6875rem] leading-snug {{ 'text-on-surface-variant' if t else 'text-outline-variant' }}">{{ sig.evidence | humanize_stage_codes }}</p>
+                    {%- elif not sig %}
+                    <p class="text-[0.6875rem] text-outline-variant italic">Not evaluated this cycle.</p>
+                    {%- endif %}
+                  </div>
+                </div>
+                {%- endfor %}
               </div>
             </div>
             {% endif %}
@@ -255,7 +262,7 @@
                 aria-controls="enrichment-chain"
                 class="flex items-center gap-1.5 py-1.5 text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors mb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
               >
-                <span x-text="showChain ? '↑' : '↓'" class="font-mono" aria-hidden="true"></span>
+                <svg :class="showChain ? 'rotate-180' : ''" class="w-3.5 h-3.5 shrink-0 transition-transform duration-150" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
                 <span class="uppercase tracking-widest font-medium" title="Information-gathering steps the agent ran to build context before making its risk assessment">Enrichment steps ({{ chain|length }})</span>
               </button>
               <div id="enrichment-chain" x-show="showChain" x-cloak class="flex flex-col gap-1.5">
@@ -294,7 +301,7 @@
           class="w-full px-4 py-3 flex items-center justify-between hover:bg-surface-container-low transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container"
         >
           <span class="text-[0.8125rem] font-medium text-on-surface-variant">Older observations ({{ sorted_obs | length - 1 }})</span>
-          <span x-text="expanded ? '↑' : '↓'" class="text-[0.6875rem] font-mono text-on-surface-variant" aria-hidden="true"></span>
+          <svg :class="expanded ? 'rotate-180' : ''" class="w-3.5 h-3.5 shrink-0 transition-transform duration-150 text-on-surface-variant" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
         </button>
         <div id="older-observations" x-show="expanded" x-cloak>
           {% for obs in sorted_obs[1:] %}
@@ -305,9 +312,9 @@
                 {% if obs.severity == 'escalate' %}
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
                 {% elif obs.severity == 'act' %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-warning-container text-warning border-[0.5px] border-warning/10">ACT</span>
                 {% elif obs.severity == 'watch' %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-info-container text-info border-[0.5px] border-info/10">WATCH</span>
                 {% elif obs.severity == 'info' %}
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-surface-container text-on-surface-variant border-[0.5px] border-outline-variant/50">INFO</span>
                 {% endif %}
@@ -322,13 +329,13 @@
                 aria-controls="obs-detail-{{ loop.index }}"
                 :aria-label="show ? 'Collapse observation detail' : 'Expand observation detail'"
                 class="py-2 px-2 text-[0.6875rem] text-on-surface-variant hover:text-on-surface transition-colors shrink-0 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
-              ><span x-text="show ? '↑' : 'Detail'" aria-hidden="true"></span></button>
+              ><svg :class="show ? 'rotate-180' : ''" class="w-3.5 h-3.5 shrink-0 transition-transform duration-150" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
             </div>
             <div id="obs-detail-{{ loop.index }}" x-show="show" x-cloak class="mt-3 space-y-2">
               {% if obs.reasoning_parsed.get('error') %}
                 <div class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-error-container/40 px-3 py-2 text-[0.6875rem] text-error">LLM error: {{ obs.reasoning_parsed.get('error') }}</div>
               {% else %}
-                <p class="text-[0.8125rem] text-on-surface-variant leading-relaxed">{{ obs.reasoning_parsed.get('severity_rationale', '') }}</p>
+                <p class="text-[0.8125rem] text-on-surface-variant leading-relaxed">{{ obs.reasoning_parsed.get('severity_rationale', '') | humanize_stage_codes }}</p>
               {% endif %}
               {% if debug %}
                 <pre class="rounded-[4px] bg-surface-container border-[0.5px] border-outline-variant/50 px-3 py-2 text-[0.6875rem] text-on-surface-variant overflow-auto max-h-48">{{ obs.reasoning_parsed | tojson(indent=2) }}</pre>
@@ -371,7 +378,7 @@
                   {% else %}bg-outline-variant{% endif %}
                 "></div>
                 <span class="text-[0.625rem] text-on-surface-variant block">{{ ev.occurred_at[:10] }}</span>
-                <p class="text-[0.8125rem] font-medium text-on-surface mt-0.5 leading-snug">{{ ev.summary }}</p>
+                <p class="text-[0.8125rem] font-medium text-on-surface mt-0.5 leading-snug">{{ ev.summary | humanize_stage_codes }}</p>
                 <span class="text-[0.625rem] text-on-surface-variant mt-0.5 block">{{ ev.event_type | replace('_', ' ') }}</span>
               </div>
               {% endfor %}

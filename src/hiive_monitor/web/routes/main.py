@@ -84,8 +84,11 @@ async def root():
 
 @router.get("/brief")
 async def daily_brief(request: Request, debug: str = ""):
+    from datetime import datetime
+
     from hiive_monitor import clock as clk
     from hiive_monitor.config import get_settings
+    from hiive_monitor.web.pipeline_health import compute_health, compute_signals
 
     conn = get_domain_conn()
     tick = dao.get_last_completed_tick(conn)
@@ -113,6 +116,40 @@ async def daily_brief(request: Request, debug: str = ""):
         except (ValueError, TypeError):
             pass
 
+    # ── Watch list ───────────────────────────────────────────────────────────
+    # Bridge deterministic-watch deals (computed by pipeline_health.py from the same
+    # numeric thresholds the agent uses) into the brief, but ONLY for deals not already
+    # covered by an open intervention. The LLM investigator's queue prioritises high-
+    # severity deals, so mild-drift deals — analyst-relevant but not yet actionable —
+    # never reach an observation row. Surfacing them here without a drafted intervention
+    # gives the analyst a single-pane "today's whole picture" without duplicating the
+    # priority list.
+    open_iv_deal_ids = {iv["deal_id"] for iv in open_ivs}
+    issuers_by_id = {row["issuer_id"]: dict(row) for row in conn.execute("SELECT * FROM issuers").fetchall()}
+    last_inbound_by_deal = dao.get_latest_inbound_per_deal(conn)
+    now_dt = clk.now()
+    watch_list: list[dict] = []
+    for deal_id, deal in deals_by_id.items():
+        if deal_id in open_iv_deal_ids:
+            continue  # don't duplicate — already a brief item
+        try:
+            deal["risk_factors_parsed"] = json.loads(deal.get("risk_factors") or "{}")
+        except (ValueError, TypeError):
+            deal["risk_factors_parsed"] = {}
+        try:
+            deal["blockers_parsed"] = json.loads(deal.get("blockers") or "[]")
+        except (ValueError, TypeError):
+            deal["blockers_parsed"] = []
+        issuer_row = issuers_by_id.get(deal["issuer_id"], {})
+        last_inbound_str = last_inbound_by_deal.get(deal_id)
+        last_inbound_at = datetime.fromisoformat(last_inbound_str) if last_inbound_str else None
+        signals = compute_signals(deal, issuer_row, last_inbound_at, now_dt)
+        health = compute_health(signals)
+        if health["tier"] == "watch":
+            watch_list.append({"deal": deal, "issuer": issuer_row, "signals": signals, "health": health})
+    # Sort: highest stage-aging-ratio first (most-drifted deals at the top)
+    watch_list.sort(key=lambda x: -x["signals"]["stage_aging_ratio"])
+
     handled_ivs = dao.get_handled_interventions(conn)
     snoozed_deals = dao.get_snoozed_deals(conn)
     conn.close()
@@ -123,6 +160,7 @@ async def daily_brief(request: Request, debug: str = ""):
             "items": items,
             "handled_items": handled_ivs,
             "snoozed_deals": snoozed_deals,
+            "watch_list": watch_list,
             "tick": tick,
             "now": clk.now().isoformat(),
             "debug": debug == "1",
@@ -446,13 +484,45 @@ async def tick_status(tick_id: str):
 
 @router.get("/api/brief-stats")
 async def brief_stats(request: Request):
+    from datetime import datetime
+
+    from hiive_monitor import clock as clk
+    from hiive_monitor.web.pipeline_health import compute_health, compute_signals
+
     conn = get_domain_conn()
     tick = dao.get_last_completed_tick(conn)
     open_ivs = dao.get_open_interventions(conn)
-    conn.close()
     items = [{"severity": iv["severity"]} for iv in open_ivs]
+
+    # Mirror /brief's watch_list computation so the sidebar's WATCH count stays consistent
+    # after auto-refreshes (the brief renders watch_list in the main panel; the stats
+    # partial counts it in the badge — same number, two surfaces).
+    open_iv_deal_ids = {iv["deal_id"] for iv in open_ivs}
+    issuers_by_id = {row["issuer_id"]: dict(row) for row in conn.execute("SELECT * FROM issuers").fetchall()}
+    last_inbound_by_deal = dao.get_latest_inbound_per_deal(conn)
+    now_dt = clk.now()
+    watch_list: list[dict] = []
+    for deal in dao.get_live_deals(conn):
+        if deal["deal_id"] in open_iv_deal_ids:
+            continue
+        try:
+            deal["risk_factors_parsed"] = json.loads(deal.get("risk_factors") or "{}")
+        except (ValueError, TypeError):
+            deal["risk_factors_parsed"] = {}
+        try:
+            deal["blockers_parsed"] = json.loads(deal.get("blockers") or "[]")
+        except (ValueError, TypeError):
+            deal["blockers_parsed"] = []
+        issuer_row = issuers_by_id.get(deal["issuer_id"], {})
+        last_inbound_str = last_inbound_by_deal.get(deal["deal_id"])
+        last_inbound_at = datetime.fromisoformat(last_inbound_str) if last_inbound_str else None
+        signals = compute_signals(deal, issuer_row, last_inbound_at, now_dt)
+        if compute_health(signals)["tier"] == "watch":
+            watch_list.append({})  # only length is consumed by the partial
+
+    conn.close()
     return _templates().TemplateResponse(
-        request, "_brief_stats.html", {"items": items, "tick": tick}
+        request, "_brief_stats.html", {"items": items, "tick": tick, "watch_list": watch_list}
     )
 
 

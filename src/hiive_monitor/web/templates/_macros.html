@@ -26,10 +26,25 @@
 
 
 {% macro intervention_row(item) %}
+{# clipboardText() merges the structured ask into the body only when missing — handles
+   legacy drafts (pre-prompt-rewrite) and user edits that strip the "The ask" section. #}
 <div id="iv-{{ item.intervention_id }}"
      data-brief-row
-     x-data='{ expanded: {{ "true" if item.severity == "escalate" else "false" }}, editing: false, editText: {{ item.draft_body | tojson }}, snoozing: false, snoozeHours: 48, snoozeReason: "" }'
-     class="border-b-[0.5px] border-outline-variant/50 last:border-b-0">
+     x-data='{
+       expanded: {{ "true" if item.severity == "escalate" else "false" }},
+       editing: false,
+       editText: {{ item.draft_body | humanize_stage_codes | tojson }},
+       suggestedNextStep: {{ (item.suggested_next_step or "") | tojson }},
+       snoozing: false,
+       snoozeHours: 48,
+       snoozeReason: "",
+       clipboardText() {
+         if (!this.suggestedNextStep) return this.editText;
+         if (this.editText.includes(this.suggestedNextStep)) return this.editText;
+         return this.editText.replace(/\s+$/, "") + "\n\nSuggested next step: " + this.suggestedNextStep;
+       }
+     }'
+     class="border-b-[0.5px] border-outline-variant/50 last:border-b-0 {{ 'bg-error/[0.04]' if item.severity == 'escalate' else '' }}">
 
   <!-- Compact summary row — click navigates to deal, ↑/↓ button toggles inline expand -->
   <div
@@ -41,16 +56,17 @@
     <!-- Status badge -->
     <div class="col-span-2">
       {% if item.severity == 'escalate' %}
-        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-error-container text-error border-[0.5px] border-error/20 whitespace-nowrap">ESCALATE</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[0.75rem] font-bold tracking-wide bg-error-container text-error border-[0.5px] border-error/30 whitespace-nowrap">
+          <span class="escalate-dot shrink-0 w-1.5 h-1.5 rounded-full bg-error" aria-hidden="true"></span>ESCALATE</span>
       {% elif item.severity == 'act' %}
-        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/20 whitespace-nowrap">ACT</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-warning-container text-warning border-[0.5px] border-warning/20 whitespace-nowrap">ACT</span>
       {% else %}
-        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/20 whitespace-nowrap">WATCH</span>
+        <span style="view-transition-name: sev-{{ item.deal_id }}" class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-info-container text-info border-[0.5px] border-info/20 whitespace-nowrap">WATCH</span>
       {% endif %}
     </div>
 
     <!-- Deal ID (plain text — whole row is the link) -->
-    <div style="view-transition-name: dealid-{{ item.deal_id }}" class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-primary-container">
+    <div style="view-transition-name: dealid-{{ item.deal_id }}" class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono {% if item.severity == 'escalate' %}text-error{% elif item.severity == 'act' %}text-warning{% else %}text-primary-container{% endif %}">
       {{ item.deal_id }}
     </div>
 
@@ -58,24 +74,55 @@
     <div class="col-span-5 sm:col-span-3 min-w-0">
       {% if item.deal %}
         <div class="text-[0.8125rem] font-semibold text-on-surface truncate">{{ item.deal.issuer_id | upper }}</div>
-        <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ item.deal.stage | replace('_', ' ') }}</div>
+        <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ item.deal.stage | human_stage }}</div>
       {% else %}
         <div class="text-[0.8125rem] font-semibold text-on-surface">{{ item.deal_id }}</div>
       {% endif %}
     </div>
 
-    <!-- Why today — the sharpest reason this deal is in the brief.
-         Primary line: triggered-signal evidence (what needs the analyst's attention).
-         Secondary line: draft-readiness hint (the work is already done). -->
-    <div class="col-span-4 min-w-0">
+    {# Why today — the sharpest reason this deal is in the brief. Primary line:
+       triggered-signal evidence; secondary line: draft-readiness hint. The cell uses
+       a Tailwind named group (`group/summary`) so a hover-tooltip below can reveal
+       the full untruncated content (why_today, subject, draft preview, suggested ask)
+       without forcing the analyst to expand the row. Tooltip has pointer-events-none
+       so it never blocks the row's click-to-deal-detail handler. Suppressed when the
+       row is already expanded (Alpine `expanded` state) to avoid redundancy.
+       `relative` on the cell anchors the tooltip's `absolute` positioning to it. #}
+    <div class="col-span-4 min-w-0 group/summary relative">
       {% if item.why_today %}
-      <p class="text-[0.8125rem] font-medium text-on-surface truncate">{{ item.why_today }}</p>
+      <p class="text-[0.8125rem] font-medium text-on-surface truncate">{{ item.why_today | humanize_stage_codes }}</p>
       <p class="text-[0.6875rem] text-on-surface-variant truncate mt-0.5">
-        <span class="text-outline-variant">Draft ready</span> · {{ item.draft_subject or item.draft_body[:80] }}
+        <span class="text-outline-variant">Draft ready</span> · {{ (item.draft_subject or item.draft_body[:80]) | humanize_stage_codes }}
       </p>
       {% else %}
-      <p class="text-[0.8125rem] text-on-surface truncate">{{ item.draft_subject or item.draft_body[:100] }}</p>
+      <p class="text-[0.8125rem] text-on-surface truncate">{{ (item.draft_subject or item.draft_body[:100]) | humanize_stage_codes }}</p>
       {% endif %}
+
+      {# Hover preview — appears below the cell on hover, gated by !expanded.
+         `top-full left-0` anchors it just under the cell aligned to its left edge.
+         `w-[26rem]` overflows the cell (~290px) into the chevron column to the right;
+         `max-w-[calc(100vw-2rem)]` prevents off-screen overflow on narrow viewports. #}
+      <div x-show="!expanded" x-cloak
+           class="invisible opacity-0 group-hover/summary:visible group-hover/summary:opacity-100 transition-opacity duration-150 pointer-events-none absolute top-full left-0 z-30 mt-1.5 w-[26rem] max-w-[calc(100vw-2rem)] rounded-[6px] border-[0.5px] border-outline-variant/50 bg-surface-container-lowest shadow-lg px-3.5 py-3 space-y-2">
+        {% if item.why_today %}
+        <p class="text-[0.75rem] font-medium text-on-surface leading-snug">{{ item.why_today | humanize_stage_codes }}</p>
+        {% endif %}
+        {% if item.draft_subject %}
+        <div class="pt-1.5 border-t-[0.5px] border-outline-variant/40">
+          <span class="text-[0.5625rem] font-medium text-on-surface-variant uppercase tracking-widest">{{ item.intervention_type | replace('_', ' ') }}</span>
+          <p class="text-[0.6875rem] text-on-surface mt-0.5 leading-snug">{{ item.draft_subject | humanize_stage_codes }}</p>
+        </div>
+        {% endif %}
+        {% if item.draft_body %}
+        <p class="text-[0.6875rem] text-on-surface-variant leading-relaxed line-clamp-4">{{ (item.draft_body[:280] ~ ('…' if item.draft_body|length > 280 else '')) | humanize_stage_codes }}</p>
+        {% endif %}
+        {% if item.suggested_next_step %}
+        <div class="pt-1.5 border-t-[0.5px] border-outline-variant/40">
+          <span class="text-[0.5625rem] font-bold text-primary-container uppercase tracking-widest">Suggested next step</span>
+          <p class="text-[0.6875rem] text-on-surface mt-0.5 leading-snug">{{ item.suggested_next_step }}</p>
+        </div>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Expand toggle — stops propagation so it doesn't navigate -->
@@ -135,7 +182,8 @@
            x-transition:enter="transition ease-[cubic-bezier(0.16,1,0.3,1)] duration-100"
            x-transition:enter-start="opacity-0"
            x-transition:enter-end="opacity-100"
-           class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.6875rem] font-mono text-on-surface whitespace-pre-wrap leading-relaxed">{{ item.draft_body }}</div>
+           x-html="window._hfb(editText)"
+           class="rounded-[4px] border-[0.5px] border-outline-variant/50 bg-surface px-3 py-2.5 text-[0.8125rem] text-on-surface leading-relaxed"></div>
 
       <div x-show="editing"
            x-cloak
@@ -150,6 +198,19 @@
       </div>
     </div>
 
+    {# Suggested next step — directly under the body, primary-tinted so the reader's eye lands
+       on the imperative action after reading the situation. The body's own "The ask" section
+       still ends the prose so the clipboard message stays self-contained; this callout is the
+       UI's quick-skim affordance. Internal escalations only (other types omit the field). #}
+    {% if item.suggested_next_step %}
+    <div class="rounded-[4px] border-[0.5px] border-primary-container/30 bg-primary-fixed/40 px-3 py-2 -mt-1">
+      <div class="flex items-baseline gap-2">
+        <span class="text-[0.625rem] font-bold text-primary-container uppercase tracking-widest shrink-0">Suggested next step</span>
+        <p class="text-[0.8125rem] text-on-surface leading-snug">{{ item.suggested_next_step }}</p>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Reasoning (collapsed by default; preference persisted per-analyst) -->
     {% if item.reasoning_summary %}
     <div x-data="{ showReasoning: localStorage.getItem('showReasoning') === 'true' }"
@@ -162,9 +223,9 @@
         class="flex items-center gap-1.5 text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary-container focus-visible:rounded-[2px]"
       >
         <span>Agent reasoning</span>
-        <span class="font-mono normal-case tracking-normal" aria-hidden="true" x-text="showReasoning ? '↑' : '↓'"></span>
+        <svg :class="showReasoning ? 'rotate-180' : ''" class="w-3.5 h-3.5 shrink-0 transition-transform duration-150" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
       </button>
-      <p id="reasoning-{{ item.intervention_id }}" x-show="showReasoning" x-cloak class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary }}</p>
+      <p id="reasoning-{{ item.intervention_id }}" x-show="showReasoning" x-cloak class="mt-1.5 text-[0.6875rem] text-on-surface-variant leading-relaxed">{{ item.reasoning_summary | humanize_stage_codes }}</p>
     </div>
     {% endif %}
 
@@ -174,27 +235,29 @@
       <div x-show="!editing">
         <button
           type="button"
-          x-on:click.stop="navigator.clipboard.writeText(editText)"
+          x-on:click.stop="navigator.clipboard.writeText(clipboardText()).catch(function(){})"
           hx-post="/interventions/{{ item.intervention_id }}/approve"
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
-          hx-confirm="Send this intervention draft?"
+          hx-disabled-elt="this"
+          hx-confirm="Mark this draft approved and copy to clipboard? Nothing is sent automatically — paste it into your email/Slack to deliver."
           hx-on::after-request="if(event.detail.successful) announceAction('Approved — draft copied to clipboard.')"
-          class="approve-btn rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
-        >Approve &amp; send</button>
+          class="approve-btn rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Approve &amp; copy</button>
       </div>
 
       <div x-show="editing" x-cloak>
         <button
           type="button"
-          x-on:click.stop="navigator.clipboard.writeText(editText)"
+          x-on:click.stop="navigator.clipboard.writeText(clipboardText()).catch(function(){})"
           hx-post="/interventions/{{ item.intervention_id }}/confirm-edit"
           hx-vals='js:{"final_text": editText}'
           hx-target="#iv-{{ item.intervention_id }}"
           hx-swap="outerHTML"
+          hx-disabled-elt="this"
           hx-on::after-request="if(event.detail.successful) announceAction('Edited draft copied to clipboard.')"
-          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
-        >Confirm edit &amp; send</button>
+          class="rounded-[4px] bg-primary-container px-4 py-1.5 text-[0.8125rem] font-medium text-on-primary hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        >Confirm edit &amp; copy</button>
       </div>
 
       <button
@@ -202,9 +265,10 @@
         hx-post="/interventions/{{ item.intervention_id }}/dismiss"
         hx-target="#iv-{{ item.intervention_id }}"
         hx-swap="outerHTML"
+        hx-disabled-elt="this"
         hx-confirm="Dismiss this intervention?"
         hx-on::after-request="if(event.detail.successful) announceAction('Intervention dismissed.')"
-        class="dismiss-btn rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+        class="dismiss-btn rounded-[4px] border-[0.5px] border-outline-variant px-4 py-1.5 text-[0.8125rem] font-medium text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
       >Dismiss</button>
 
       <button
@@ -216,7 +280,7 @@
 
       <button
         type="button"
-        x-on:click.stop="navigator.clipboard.writeText(editText); $el.textContent = 'Copied!'; setTimeout(() => $el.textContent = 'Copy', 1500)"
+        x-on:click.stop="copyToClipboard(clipboardText(), $el)"
         class="ml-auto rounded-[4px] border-[0.5px] border-outline-variant px-3 py-1.5 text-[0.8125rem] text-on-surface-variant hover:text-on-surface transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
       >Copy</button>
 
@@ -247,6 +311,7 @@
           x-model="snoozeReason"
           placeholder="reason (required)"
           aria-label="Snooze reason"
+          maxlength="500"
           class="flex-1 min-w-[10rem] rounded-[4px] border-[0.5px] border-outline-variant px-2 py-1 text-[0.75rem] text-on-surface bg-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container transition-colors"
         />
         <button

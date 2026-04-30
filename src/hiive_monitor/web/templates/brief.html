@@ -8,7 +8,7 @@
 {% set act_count = items|selectattr('severity', 'equalto', 'act')|list|length %}
 {% set watch_count = items|selectattr('severity', 'equalto', 'watch')|list|length %}
 
-<div class="flex flex-col gap-4 items-start lg:flex-row lg:gap-6">
+<div class="flex flex-col gap-4 items-start lg:flex-row lg:gap-6 pb-32">
 
   <!-- ── Left: main intervention list ── -->
   <div class="flex-1 min-w-0">
@@ -21,7 +21,7 @@
           <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Portfolio signals</span>
           <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-tertiary-fixed text-tertiary text-[0.5625rem] font-bold">{{ portfolio_signals | length }}</span>
         </div>
-        <span class="text-[0.6875rem] text-on-surface-variant font-mono group-open:rotate-180 transition-transform" aria-hidden="true">↓</span>
+        <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
       </summary>
       <div class="divide-y-[0.5px] divide-outline-variant/50">
         {% for sig in portfolio_signals %}
@@ -29,7 +29,7 @@
           <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-[4px] text-[0.5625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10 whitespace-nowrap tabular-nums">{{ sig.ratio }}×</span>
           <div class="min-w-0">
             <span class="text-[0.8125rem] font-semibold text-on-surface">{{ sig.issuer_id | upper }}</span>
-            <span class="ml-2 text-[0.6875rem] text-on-surface-variant">{{ sig.stage | replace('_', ' ') }}</span>
+            <span class="ml-2 text-[0.6875rem] text-on-surface-variant">{{ sig.stage | human_stage }}</span>
           </div>
           <span class="ml-auto text-[0.6875rem] text-on-surface-variant tabular-nums whitespace-nowrap">{{ sig.current_count }} deals (avg {{ sig.rolling_avg }})</span>
         </div>
@@ -129,8 +129,8 @@
                           stroke-linecap="round" stroke-linejoin="round"
                           style="stroke-dasharray: 24; stroke-dashoffset: 24; animation: hiive-check-draw 350ms cubic-bezier(0.16,1,0.3,1) 120ms forwards"/>
               </svg>
-              <p class="text-[0.8125rem] font-medium text-primary-container">Pipeline is clear.</p>
-              <p class="mt-1 text-[0.6875rem] text-on-surface-variant">No escalations or actions required.</p>
+              <p class="text-[0.8125rem] font-medium text-primary-container" style="opacity:0;animation:hiive-text-reveal 300ms cubic-bezier(0.16,1,0.3,1) 500ms forwards">Pipeline is clear.</p>
+              <p class="mt-1 text-[0.6875rem] text-on-surface-variant" style="opacity:0;animation:hiive-text-reveal 300ms cubic-bezier(0.16,1,0.3,1) 650ms forwards">No escalations or actions required.</p>
               {% else %}
               <p class="text-[0.8125rem] text-on-surface-variant">No tick run yet.</p>
               <p class="mt-1 text-[0.6875rem] text-on-surface-variant">Advance the simulation to run a tick.</p>
@@ -173,7 +173,7 @@
               <!-- Issuer + Stage -->
               <div class="col-span-5 sm:col-span-3 min-w-0">
                 <div class="text-[0.8125rem] font-medium text-on-surface-variant truncate">{{ item.issuer_id | upper }}</div>
-                <div class="text-[0.6875rem] text-on-surface-variant/70 truncate">{{ item.stage | replace('_', ' ') }}</div>
+                <div class="text-[0.6875rem] text-on-surface-variant/70 truncate">{{ item.stage | human_stage }}</div>
               </div>
               <!-- Draft preview -->
               <div class="col-span-4 min-w-0">
@@ -206,7 +206,7 @@
             </div>
             <div class="col-span-5 sm:col-span-3 min-w-0">
               <div class="text-[0.8125rem] font-medium text-on-surface truncate">{{ deal.issuer_id | upper }}</div>
-              <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ deal.stage | replace('_', ' ') }}</div>
+              <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ deal.stage | human_stage }}</div>
             </div>
             <div class="col-span-4 min-w-0">
               <p class="text-[0.8125rem] text-on-surface-variant truncate">{{ deal.snooze_reason or '—' }}</p>
@@ -221,6 +221,57 @@
       </div>
     </div>
     </div><!-- /#brief-list -->
+
+    {# ── Watch list ──────────────────────────────────────────────────────────
+       Deterministic-watch deals (drifting, but not yet escalated by the LLM
+       investigator). Lives BELOW the priority tabs — visual hierarchy reads
+       "act on these → keep an eye on these," not the other way around. Closed
+       by default. Compact rows: tier badge + deal id + issuer/stage + drift
+       ratio + reasons. Click navigates to deal-detail. Excluded: any deal
+       already covered by an open intervention (no duplication).
+    #}
+    {% if watch_list %}
+    <details class="mt-6 group border-[0.5px] border-outline-variant/50 rounded-lg bg-surface-container-lowest overflow-hidden">
+      <summary class="flex items-center justify-between px-4 py-2 bg-surface-container-low border-b-[0.5px] border-outline-variant/50 cursor-pointer select-none list-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-container">
+        <div class="flex items-center gap-2">
+          <span class="text-[0.625rem] font-medium text-on-surface-variant uppercase tracking-widest">Watch list — drifting deals</span>
+          <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-info-container text-info text-[0.5625rem] font-bold">{{ watch_list | length }}</span>
+          <span class="text-[0.625rem] text-on-surface-variant/70 ml-1 font-normal normal-case tracking-normal">no action needed today</span>
+        </div>
+        <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-150 group-open:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+      </summary>
+      <div class="divide-y-[0.5px] divide-outline-variant/50">
+        {% for w in watch_list %}
+        <a href="/deals/{{ w.deal.deal_id }}"
+           class="grid grid-cols-12 gap-3 px-3 py-2 items-center hover:bg-surface-container-low transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-primary-container">
+          <!-- Tier badge -->
+          <div class="col-span-2">
+            <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] text-[0.6875rem] font-bold tracking-wide bg-info-container text-info border-[0.5px] border-info/20 whitespace-nowrap">WATCH</span>
+          </div>
+          <!-- Deal ID -->
+          <div class="hidden sm:block sm:col-span-2 text-[0.6875rem] font-medium font-mono text-primary-container">{{ w.deal.deal_id }}</div>
+          <!-- Issuer + stage -->
+          <div class="col-span-5 sm:col-span-3 min-w-0">
+            <div class="text-[0.8125rem] font-semibold text-on-surface truncate">{{ (w.issuer.name or w.deal.issuer_id) | title }}</div>
+            <div class="text-[0.6875rem] text-on-surface-variant truncate">{{ w.deal.stage | human_stage }}</div>
+          </div>
+          <!-- Drift ratio + reasons -->
+          <div class="col-span-4 min-w-0">
+            <p class="text-[0.8125rem] text-on-surface tabular-nums">
+              {{ w.signals.days_in_stage }}d in stage · {{ w.signals.stage_aging_ratio }}× typical
+            </p>
+            {% if w.health.reasons %}
+            <p class="text-[0.6875rem] text-on-surface-variant truncate mt-0.5">{{ w.health.reasons | join('; ') }}</p>
+            {% endif %}
+          </div>
+          <!-- Chevron -->
+          <div class="col-span-1 text-right text-[0.6875rem] text-on-surface-variant/50">→</div>
+        </a>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+
   </div>
 
   <!-- ── Right: sidebar ── -->
@@ -261,6 +312,17 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+window._hfb = function(text) {
+  var heads = {"What's blocked":1,"How long it's been stuck":1,"Prior outreach":1,"Why this matters":1,"The ask":1};
+  function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  return (text || "").split("\n").map(function(line) {
+    if (heads[line.trim()]) return '<span class="block text-[0.625rem] font-semibold text-on-surface-variant uppercase tracking-widest mt-3 first:mt-0">' + esc(line) + '</span>';
+    if (!line.trim()) return '<div class="h-1"></div>';
+    return '<span class="block">' + esc(line) + '</span>';
+  }).join("");
+};
+</script>
 {% if priority_items or items %}
 <script>
 (function(){

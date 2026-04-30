@@ -6,9 +6,9 @@
   {% if tier == 'escalate' %}
   <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-error-container text-error border-[0.5px] border-error/10">ESCALATE</span>
   {% elif tier == 'act' %}
-  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-primary-fixed text-primary-container border-[0.5px] border-primary-container/10">ACT</span>
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-warning-container text-warning border-[0.5px] border-warning/10">ACT</span>
   {% elif tier == 'watch' %}
-  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-tertiary-fixed text-tertiary border-[0.5px] border-tertiary/10">WATCH</span>
+  <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-bold bg-info-container text-info border-[0.5px] border-info/10">WATCH</span>
   {% else %}
   <span {% if vtname %}style="view-transition-name: {{ vtname }}"{% endif %} class="inline-flex items-center px-1.5 py-0.5 rounded-[4px] text-[0.625rem] font-medium bg-surface-container text-on-surface-variant border-[0.5px] border-on-surface-variant/10">INFO</span>
   {% endif %}
@@ -43,11 +43,11 @@
           <span>escalate</span>
         </span>
         <span class="flex items-baseline gap-1.5">
-          <span class="tabular-nums text-primary-container font-medium">{{ counts_by_tier.act }}</span>
+          <span class="tabular-nums text-warning font-medium">{{ counts_by_tier.act }}</span>
           <span>act</span>
         </span>
         <span class="flex items-baseline gap-1.5">
-          <span class="tabular-nums text-tertiary font-medium">{{ counts_by_tier.watch }}</span>
+          <span class="tabular-nums text-info font-medium">{{ counts_by_tier.watch }}</span>
           <span>watch</span>
         </span>
         <span class="flex items-baseline gap-1.5">
@@ -90,7 +90,7 @@
                 class="pf-select h-7 pl-2 text-[0.8125rem] text-on-surface bg-surface-container border-[0.5px] border-outline-variant/40 rounded-[4px] cursor-pointer">
           <option value="">All stages</option>
           {% for s in all_stages %}
-          <option value="{{ s }}">{{ s | replace('_', ' ') | title }}</option>
+          <option value="{{ s }}">{{ s | human_stage }}</option>
           {% endfor %}
         </select>
 
@@ -171,7 +171,7 @@
        data-rofr="{{ s.days_to_rofr if s.days_to_rofr is not none else '9999' }}"
        data-comm="{{ s.days_since_last_inbound if s.days_since_last_inbound is not none else '-1' }}"
        href="/deals/{{ d.deal_id }}"
-       class="flex flex-col gap-1.5 px-3 py-3 md:grid md:grid-cols-[minmax(180px,1.4fr)_1fr_0.7fr_0.7fr_1.1fr_0.8fr_2fr_0.4fr] md:gap-3 md:py-2 md:items-center border-b-[0.5px] border-outline-variant/50 last:border-b-0 hover:bg-surface-container-low transition-colors{% if initial_hidden %} hidden{% endif %}">
+       class="flex flex-col gap-1.5 px-3 py-3 md:grid md:grid-cols-[minmax(180px,1.4fr)_1fr_0.7fr_0.7fr_1.1fr_0.8fr_2fr_0.4fr] md:gap-3 md:py-2 md:items-center border-b-[0.5px] border-outline-variant/50 last:border-b-0 hover:bg-surface-container-low transition-colors{{ ' bg-error/[0.04]' if item.health.tier == 'escalate' else '' }}{% if initial_hidden %} hidden{% endif %}">
 
       <!-- ══ MOBILE CARD ══ (< md) ════════════════════════════════════════════════ -->
       <!-- Top row: issuer + deal id  /  health + flag -->
@@ -190,7 +190,7 @@
 
       <!-- Middle row: compact status summary — flex-wrap chips separated by · -->
       <div class="md:hidden flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[0.75rem] tabular-nums">
-        <span class="text-on-surface">{{ d.stage | replace('_', ' ') | title }}</span>
+        <span class="text-on-surface">{{ d.stage | human_stage }}</span>
         <span class="text-outline-variant">·</span>
         <span class="text-on-surface-variant">
           {{ s.days_in_stage }}d
@@ -231,7 +231,7 @@
 
         <!-- Stage + age ratio -->
         <div role="cell" class="flex flex-col min-w-0">
-          <span class="text-[0.8125rem] text-on-surface truncate">{{ d.stage | replace('_', ' ') | title }}</span>
+          <span class="text-[0.8125rem] text-on-surface truncate">{{ d.stage | human_stage }}</span>
           <span class="text-[0.6875rem] text-on-surface-variant tabular-nums">
             {{ s.days_in_stage }}d
             {%- if s.stage_aging_ratio >= 1.5 %}

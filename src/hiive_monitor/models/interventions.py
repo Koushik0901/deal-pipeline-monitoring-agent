@@ -13,7 +13,10 @@ class OutboundNudge(BaseModel):
     recipient_type: Literal["buyer", "seller", "issuer"]
     recipient_name: str
     subject: str = Field(max_length=120)
-    body: str = Field(max_length=1200)
+    # Cap raised from 1200 → 1600 chars: the new prompt requires 2–3 paragraph breaks for
+    # visual rhythm in inboxes (a wall-of-text email gets skimmed and lost). Three paragraphs
+    # of 2–3 sentences each comfortably exceed the old 1200 cap; 1600 is a sane email length.
+    body: str = Field(max_length=1600)
     referenced_deadline: str | None = None  # ISO8601 date when deadline-driven
 
 
@@ -22,8 +25,16 @@ class InternalEscalation(BaseModel):
 
     escalate_to: Literal["ts_lead", "legal", "ops"]
     headline: str = Field(max_length=120)
-    body: str = Field(max_length=800)
-    suggested_next_step: str = Field(max_length=200)
+    # No max_length on body: the five-section labelled format (What's blocked / How long /
+    # What we tried / Why this matters / The ask) routinely exceeds static limits, especially
+    # when the LLM glosses jargon parenthetically. Per CLAUDE.md guidance: "Fields like
+    # evidence, reasoning, rationale, reason must have no max_length — CoT prompting
+    # routinely exceeds static limits and raises Pydantic ValidationError at runtime."
+    body: str
+    # 400-char cap accommodates multi-step asks ("X to do Y by date; if unreachable, escalate
+    # to Z by deadline"). 240 was too tight in practice — caused parse failures on legitimate
+    # well-formed asks. The UI wraps this text so length isn't a visual concern.
+    suggested_next_step: str = Field(max_length=400)
 
 
 class BriefEntry(BaseModel):

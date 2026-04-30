@@ -138,10 +138,12 @@ The demo opens the Daily Brief at <http://localhost:8000/brief> with engineered-
 
 ## 🖥️ UX
 
-- **Daily Brief** (`/brief`) — top 5–7 ranked items with drafted interventions and in-place approve / edit / dismiss.
+- **Daily Brief** (`/brief`) — top 5–7 ranked items with drafted interventions and in-place approve / copy / dismiss. Each escalation shows a five-section labelled body (*What's blocked / How long it's been stuck / What we've already tried / Why this matters / The ask*) and a primary-tinted "Suggested next step" callout below it. Outbound nudges render as 2–3 short paragraphs (Situation / The ask / Door open). Hovering a row's summary reveals the full untruncated content as a floating preview; collapsed-by-default "Watch list — drifting deals" panel at the bottom surfaces deterministic-watch deals from the pipeline-health computation that the LLM investigator's queue doesn't have budget for.
 - **Pipeline** (`/pipeline`) — book-of-deals table with deterministic health tiers; filters, sort, and free-text search run client-side against `data-*` attributes — retriage is keystroke-latency.
-- **Deal detail** (`/deals/{id}`) — cross-document View Transitions: severity badge and deal ID morph into the detail header (Chrome / Safari). Firefox falls back to plain navigation.
+- **Deal detail** (`/deals/{id}`) — cross-document View Transitions: severity badge and deal ID morph into the detail header (Chrome / Safari). Firefox falls back to plain navigation. The "Severity Rationale" panel renders the agent's reasoning as a 2–4-sentence narrative in plain English (no dimension codes, no `conf=`/`baseline` jargon, ROFR glossed parenthetically); the "Risk Dimensions · raw" section is a separate transparency view for power users.
 - **Simulation controls** (`/sim`) — advance the clock manually, autoplay ticks, or inspect tick status.
+- **Stage labels** are humanized everywhere user-facing — `STAGE_DISPLAY_NAMES` is the source of truth (`rofr_pending` → "ROFR review", `docs_pending` → "documents pending", etc.); two Jinja filters (`human_stage`, `humanize_stage_codes`) clean both direct stage values and free-text fields.
+- **Keyboard shortcuts** (Brief: `j`/`k` navigate, `Enter` expand, `a` approve, `d` dismiss, `Esc` deselect; Pipeline: same plus `/` to focus search). Form-element guard prevents shortcuts from hijacking typing; modifier-key guard preserves browser shortcuts.
 
 ### Screens
 

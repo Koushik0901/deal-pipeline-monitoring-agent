@@ -32,6 +32,21 @@ DWELL_BASELINES: dict[Stage, int] = {
     Stage.BROKEN: 0,
 }
 
+# Plain-English labels for user-facing copy (drafts, escalations, brief entries).
+# Snake_case stage codes (`rofr_pending`, `docs_pending`) leak schema language into outputs
+# read by non-engineers — use these in any LLM prompt or template aimed at humans.
+STAGE_DISPLAY_NAMES: dict[Stage, str] = {
+    Stage.BID_ACCEPTED: "bid accepted",
+    Stage.DOCS_PENDING: "documents pending",
+    Stage.ISSUER_NOTIFIED: "issuer-notification",
+    Stage.ROFR_PENDING: "ROFR review",
+    Stage.ROFR_CLEARED: "ROFR cleared",
+    Stage.SIGNING: "signing",
+    Stage.FUNDING: "funding",
+    Stage.SETTLED: "settled",
+    Stage.BROKEN: "broken",
+}
+
 # Documents required from the buyer/seller before each stage can progress.
 # Values are canonical filenames; `documents_received` on the deal row is a JSON list of these.
 REQUIRED_DOCUMENTS_BY_STAGE: dict[Stage, list[str]] = {

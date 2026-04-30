@@ -49,4 +49,13 @@ def stretch_migrations() -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists — idempotent
 
+    # Core (always-on): persist the structured ask for internal_escalations so it can
+    # render as a prominent callout in the brief and feed downstream tooling.
+    try:
+        conn.execute("ALTER TABLE interventions ADD COLUMN suggested_next_step TEXT")
+        conn.commit()
+        log.info("migration.suggested_next_step.applied")
+    except sqlite3.OperationalError:
+        pass  # column already exists — idempotent
+
     conn.close()

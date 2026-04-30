@@ -1,12 +1,17 @@
 {% from "_macros.html" import intervention_row %}
 {% set watch_count = items | selectattr('severity', 'equalto', 'watch') | list | length %}
-<div x-data="{
-  severity: '',
-  severities: {{ items | map(attribute='severity') | list | tojson }},
-  get noResults() {
-    return this.severities.length &gt; 0 && !this.severities.some(s =&gt; this.severity === '' || s === this.severity);
+{# Two bugs were stacked here. (1) Alpine's expression parser chokes on the object-literal
+   getter syntax (`get noResults() { … }`) — replaced with a regular method.
+   (2) Jinja's `|tojson` emits JSON with `"` quotes, which terminates the surrounding
+   `x-data="..."` attribute prematurely. Outer delimiter is single-quoted so JSON's `"` is
+   safe inside; JS string literals use `"` to avoid colliding with the single-quoted attr. #}
+<div x-data='{
+  severity: "",
+  severities: {{ items | map(attribute="severity") | list | tojson }},
+  noResults() {
+    return this.severities.length > 0 && !this.severities.some(s => this.severity === "" || s === this.severity);
   }
-}">
+}'>
 
   <!-- Filter chips + batch action -->
   <div class="flex items-center gap-1.5 px-3 py-2 border-b-[0.5px] border-outline-variant/50 bg-surface-container-low/60 flex-wrap">
@@ -45,7 +50,7 @@
     </div>
     {% endfor %}
     <!-- Empty-filter state -->
-    <div x-show="noResults" x-cloak class="px-4 py-8 text-center">
+    <div x-show="noResults()" x-cloak class="px-4 py-8 text-center">
       <p class="text-[0.8125rem] text-on-surface-variant">No items match this filter.</p>
     </div>
   {% else %}
